@@ -1,0 +1,4 @@
+FPS-KNN comparison (vanilla vs adaptive) on ModelNet40 train
+  FPS index IoU: 0.9998 ± 0.0009
+  KNN index IoU: 0.9453 ± 0.0139
+  Samples: 50

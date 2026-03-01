@@ -1,0 +1,123 @@
+{
+  "layers": [
+    {
+      "name": "LFP_blocks_list.0.operation1.0.act1",
+      "x_min": -2.0,
+      "x_max": 2.0,
+      "n_bins": 256,
+      "x_range_source": "default"
+    },
+    {
+      "name": "LFP_blocks_list.0.operation1.0.act2",
+      "x_min": -2.0,
+      "x_max": 2.0,
+      "n_bins": 256,
+      "x_range_source": "default"
+    },
+    {
+      "name": "LFP_blocks_list.0.operation2.0.act1",
+      "x_min": -2.0,
+      "x_max": 2.0,
+      "n_bins": 256,
+      "x_range_source": "default"
+    },
+    {
+      "name": "LFP_blocks_list.0.operation2.0.act2",
+      "x_min": -2.0,
+      "x_max": 2.0,
+      "n_bins": 256,
+      "x_range_source": "default"
+    },
+    {
+      "name": "LFP_blocks_list.1.operation1.0.act1",
+      "x_min": -2.0,
+      "x_max": 2.0,
+      "n_bins": 256,
+      "x_range_source": "default"
+    },
+    {
+      "name": "LFP_blocks_list.1.operation1.0.act2",
+      "x_min": -2.0,
+      "x_max": 2.0,
+      "n_bins": 256,
+      "x_range_source": "default"
+    },
+    {
+      "name": "LFP_blocks_list.1.operation2.0.act1",
+      "x_min": -2.0,
+      "x_max": 2.0,
+      "n_bins": 256,
+      "x_range_source": "default"
+    },
+    {
+      "name": "LFP_blocks_list.1.operation2.0.act2",
+      "x_min": -2.0,
+      "x_max": 2.0,
+      "n_bins": 256,
+      "x_range_source": "default"
+    },
+    {
+      "name": "LFP_blocks_list.2.operation1.0.act1",
+      "x_min": -2.0,
+      "x_max": 2.0,
+      "n_bins": 256,
+      "x_range_source": "default"
+    },
+    {
+      "name": "LFP_blocks_list.2.operation1.0.act2",
+      "x_min": -2.0,
+      "x_max": 2.0,
+      "n_bins": 256,
+      "x_range_source": "default"
+    },
+    {
+      "name": "LFP_blocks_list.2.operation2.0.act1",
+      "x_min": -2.0,
+      "x_max": 2.0,
+      "n_bins": 256,
+      "x_range_source": "default"
+    },
+    {
+      "name": "LFP_blocks_list.2.operation2.0.act2",
+      "x_min": -2.0,
+      "x_max": 2.0,
+      "n_bins": 256,
+      "x_range_source": "default"
+    },
+    {
+      "name": "LFP_blocks_list.3.operation1.0.act1",
+      "x_min": -2.0,
+      "x_max": 2.0,
+      "n_bins": 256,
+      "x_range_source": "default"
+    },
+    {
+      "name": "LFP_blocks_list.3.operation1.0.act2",
+      "x_min": -2.0,
+      "x_max": 2.0,
+      "n_bins": 256,
+      "x_range_source": "default"
+    },
+    {
+      "name": "LFP_blocks_list.3.operation2.0.act1",
+      "x_min": -2.0,
+      "x_max": 2.0,
+      "n_bins": 256,
+      "x_range_source": "default"
+    },
+    {
+      "name": "LFP_blocks_list.3.operation2.0.act2",
+      "x_min": -2.0,
+      "x_max": 2.0,
+      "n_bins": 256,
+      "x_range_source": "default"
+    }
+  ],
+  "n_bins": 256,
+  "quantize_bits": 2,
+  "vanilla_quantize_bits": 2,
+  "base_offset_quantize_bits": 2,
+  "base_table_quantize_bits": 2,
+  "offset_table_quantize_bits": 2,
+  "base_kind": "mean"
+}

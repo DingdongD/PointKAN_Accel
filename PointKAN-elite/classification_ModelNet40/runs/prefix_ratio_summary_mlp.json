@@ -1,0 +1,30 @@
+{
+  "base_dir": "./runs",
+  "pattern": "fps_radii_mlp_K512_pr*",
+  "runs": [
+    {
+      "save_dir": "./runs/fps_radii_mlp_K512_pr0.05",
+      "prefix_ratio": 0.05,
+      "fps_steps": 512,
+      "best_test_mse": 5.5052616139700276e-05
+    },
+    {
+      "save_dir": "./runs/fps_radii_mlp_K512_pr0.10",
+      "prefix_ratio": 0.1,
+      "fps_steps": 512,
+      "best_test_mse": 2.782085481877333e-05
+    },
+    {
+      "save_dir": "./runs/fps_radii_mlp_K512_pr0.15",
+      "prefix_ratio": 0.15,
+      "fps_steps": 512,
+      "best_test_mse": 1.656935652619363e-05
+    },
+    {
+      "save_dir": "./runs/fps_radii_mlp_K512_pr0.20",
+      "prefix_ratio": 0.2,
+      "fps_steps": 512,
+      "best_test_mse": 1.164109091414252e-05
+    }
+  ]
+}

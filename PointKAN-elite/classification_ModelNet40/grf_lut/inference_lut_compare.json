@@ -1,0 +1,20 @@
+{
+  "checkpoint": "/workspace/PointKAN-pytorch/PointKAN-elite/classification_ModelNet40/checkpoints/pointKANElite-pointkan_elite_exp-42/best_checkpoint.pth",
+  "lut_dir": "/workspace/PointKAN-pytorch/PointKAN-elite/classification_ModelNet40/grf_lut",
+  "lut_mode": "vanilla",
+  "use_quantized": true,
+  "vanilla": {
+    "loss": 1.4473517827498608,
+    "acc": 92.38249594813614,
+    "acc_avg": 88.72383720930233,
+    "num_samples": 2468
+  },
+  "lut": {
+    "loss": 1.4504240246919484,
+    "acc": 92.22042139384116,
+    "acc_avg": 88.91976744186046,
+    "num_samples": 2468
+  },
+  "acc_diff": -0.16207455429497486,
+  "acc_avg_diff": 0.19593023255812625
+}

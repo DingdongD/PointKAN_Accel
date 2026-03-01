@@ -1,0 +1,75 @@
+{
+  "checkpoint": "/workspace/PointKAN-pytorch/PointKAN-elite/classification_ModelNet40/checkpoints/pointKANElite-pointkan_elite_exp-42/best_checkpoint.pth",
+  "results": [
+    {
+      "mode": "vanilla",
+      "bits": "float",
+      "acc": 92.22042139384116,
+      "acc_avg": 88.91976744186046,
+      "loss": 1.4503429516767845
+    },
+    {
+      "mode": "vanilla",
+      "bits": "2bit",
+      "acc": 6.3209076175040515,
+      "acc_avg": 9.3,
+      "loss": 3.816866926657848
+    },
+    {
+      "mode": "vanilla",
+      "bits": "4bit",
+      "acc": 91.9773095623987,
+      "acc_avg": 88.87848837209302,
+      "loss": 1.4575561101620014
+    },
+    {
+      "mode": "vanilla",
+      "bits": "6bit",
+      "acc": 92.30145867098865,
+      "acc_avg": 88.87383720930234,
+      "loss": 1.4496018825433192
+    },
+    {
+      "mode": "vanilla",
+      "bits": "8bit",
+      "acc": 92.22042139384116,
+      "acc_avg": 88.91976744186046,
+      "loss": 1.4504240246919484
+    },
+    {
+      "mode": "base_offset",
+      "bits": "float",
+      "acc": 92.22042139384116,
+      "acc_avg": 88.91976744186046,
+      "loss": 1.4503345489501953
+    },
+    {
+      "mode": "base_offset",
+      "bits": "2bit",
+      "acc": 6.523500810372772,
+      "acc_avg": 9.424999999999999,
+      "loss": 3.8143680034539638
+    },
+    {
+      "mode": "base_offset",
+      "bits": "4bit",
+      "acc": 91.77471636952998,
+      "acc_avg": 88.51162790697676,
+      "loss": 1.4603726007999518
+    },
+    {
+      "mode": "base_offset",
+      "bits": "6bit",
+      "acc": 92.30145867098865,
+      "acc_avg": 89.06976744186046,
+      "loss": 1.449957855236836
+    },
+    {
+      "mode": "base_offset",
+      "bits": "8bit",
+      "acc": 92.26094003241491,
+      "acc_avg": 88.94476744186045,
+      "loss": 1.4501378062443855
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+2026-03-01 12:39:38 [INFO] save_dir=./runs/fps_radii_kan_K512_pr0.05 radii_dir=./runs/radii_cache_K512 fps_steps=512 prefix_ratio=0.05 model_type=kan
+2026-03-01 13:08:22 [INFO] [Save] ./runs/radii_cache_K512/radii_train_K512.npy  shape=(9840, 512)
+2026-03-01 13:15:10 [INFO] [Save] ./runs/radii_cache_K512/radii_test_K512.npy  shape=(2468, 512)
+2026-03-01 13:15:12 [INFO] ========== Model structure ==========
+2026-03-01 13:15:12 [INFO] Efficient_KAN(
+2026-03-01 13:15:12 [INFO]   (fc1): Linear(in_features=32, out_features=256, bias=True)
+2026-03-01 13:15:12 [INFO]   (act1): KAT_Group(num_groups=8, order=(5, 4))
+2026-03-01 13:15:12 [INFO]   (drop1): Dropout(p=0.0, inplace=False)
+2026-03-01 13:15:12 [INFO]   (norm): Identity()
+2026-03-01 13:15:12 [INFO]   (act2): KAT_Group(num_groups=8, order=(5, 4))
+2026-03-01 13:15:12 [INFO]   (fc2): Linear(in_features=256, out_features=64, bias=True)
+2026-03-01 13:15:12 [INFO]   (drop2): Dropout(p=0.0, inplace=False)
+2026-03-01 13:15:12 [INFO] )
+2026-03-01 13:15:12 [INFO] =====================================
+2026-03-01 13:15:16 [INFO]   -> new best, saved to ./runs/fps_radii_kan_K512_pr0.05/best.pt
+2026-03-01 13:15:16 [INFO] Epoch 001 | train_mse=3.271272e-03 | test_mse=3.344322e-04 | best=3.344322e-04
+2026-03-01 13:15:18 [INFO]   -> new best, saved to ./runs/fps_radii_kan_K512_pr0.05/best.pt
+2026-03-01 13:15:18 [INFO] Epoch 002 | train_mse=2.772218e-04 | test_mse=1.506742e-04 | best=1.506742e-04
+2026-03-01 13:15:20 [INFO]   -> new best, saved to ./runs/fps_radii_kan_K512_pr0.05/best.pt
+2026-03-01 13:15:20 [INFO] Epoch 003 | train_mse=1.793600e-04 | test_mse=1.223243e-04 | best=1.223243e-04
+2026-03-01 13:15:23 [INFO]   -> new best, saved to ./runs/fps_radii_kan_K512_pr0.05/best.pt
+2026-03-01 13:15:23 [INFO] Epoch 004 | train_mse=1.492117e-04 | test_mse=1.048320e-04 | best=1.048320e-04
+2026-03-01 13:15:26 [INFO]   -> new best, saved to ./runs/fps_radii_kan_K512_pr0.05/best.pt
+2026-03-01 13:15:26 [INFO] Epoch 005 | train_mse=1.320339e-04 | test_mse=9.534926e-05 | best=9.534926e-05
+2026-03-01 13:15:28 [INFO]   -> new best, saved to ./runs/fps_radii_kan_K512_pr0.05/best.pt
+2026-03-01 13:15:28 [INFO] Epoch 006 | train_mse=1.195818e-04 | test_mse=8.544194e-05 | best=8.544194e-05
+2026-03-01 13:15:30 [INFO]   -> new best, saved to ./runs/fps_radii_kan_K512_pr0.05/best.pt
+2026-03-01 13:15:30 [INFO] Epoch 007 | train_mse=1.105452e-04 | test_mse=7.867429e-05 | best=7.867429e-05
+2026-03-01 13:15:33 [INFO]   -> new best, saved to ./runs/fps_radii_kan_K512_pr0.05/best.pt
+2026-03-01 13:15:33 [INFO] Epoch 008 | train_mse=1.047154e-04 | test_mse=7.641578e-05 | best=7.641578e-05
+2026-03-01 13:15:35 [INFO]   -> new best, saved to ./runs/fps_radii_kan_K512_pr0.05/best.pt
+2026-03-01 13:15:35 [INFO] Epoch 009 | train_mse=9.934653e-05 | test_mse=7.336384e-05 | best=7.336384e-05
+2026-03-01 13:15:38 [INFO]   -> new best, saved to ./runs/fps_radii_kan_K512_pr0.05/best.pt
+2026-03-01 13:15:38 [INFO] Epoch 010 | train_mse=9.606519e-05 | test_mse=6.945933e-05 | best=6.945933e-05
+2026-03-01 13:15:40 [INFO]   -> new best, saved to ./runs/fps_radii_kan_K512_pr0.05/best.pt
+2026-03-01 13:15:40 [INFO] Epoch 011 | train_mse=9.269999e-05 | test_mse=6.701874e-05 | best=6.701874e-05
+2026-03-01 13:15:42 [INFO]   -> new best, saved to ./runs/fps_radii_kan_K512_pr0.05/best.pt
+2026-03-01 13:15:42 [INFO] Epoch 012 | train_mse=8.991915e-05 | test_mse=6.679468e-05 | best=6.679468e-05
+2026-03-01 13:15:44 [INFO]   -> new best, saved to ./runs/fps_radii_kan_K512_pr0.05/best.pt
+2026-03-01 13:15:44 [INFO] Epoch 013 | train_mse=8.880993e-05 | test_mse=6.586101e-05 | best=6.586101e-05
+2026-03-01 13:15:46 [INFO]   -> new best, saved to ./runs/fps_radii_kan_K512_pr0.05/best.pt
+2026-03-01 13:15:46 [INFO] Epoch 014 | train_mse=8.755036e-05 | test_mse=6.372140e-05 | best=6.372140e-05
+2026-03-01 13:15:48 [INFO]   -> new best, saved to ./runs/fps_radii_kan_K512_pr0.05/best.pt
+2026-03-01 13:15:48 [INFO] Epoch 015 | train_mse=8.613970e-05 | test_mse=6.289956e-05 | best=6.289956e-05
+2026-03-01 13:15:51 [INFO]   -> new best, saved to ./runs/fps_radii_kan_K512_pr0.05/best.pt
+2026-03-01 13:15:51 [INFO] Epoch 016 | train_mse=8.452482e-05 | test_mse=6.255484e-05 | best=6.255484e-05
+2026-03-01 13:15:53 [INFO] Epoch 017 | train_mse=8.311478e-05 | test_mse=6.774882e-05 | best=6.255484e-05
+2026-03-01 13:15:55 [INFO] Epoch 018 | train_mse=8.394839e-05 | test_mse=6.374978e-05 | best=6.255484e-05
+2026-03-01 13:15:58 [INFO]   -> new best, saved to ./runs/fps_radii_kan_K512_pr0.05/best.pt
+2026-03-01 13:15:58 [INFO] Epoch 019 | train_mse=8.225787e-05 | test_mse=6.134269e-05 | best=6.134269e-05
+2026-03-01 13:16:00 [INFO] Epoch 020 | train_mse=8.231742e-05 | test_mse=6.243560e-05 | best=6.134269e-05
+2026-03-01 13:16:03 [INFO]   -> new best, saved to ./runs/fps_radii_kan_K512_pr0.05/best.pt
+2026-03-01 13:16:03 [INFO] Epoch 021 | train_mse=8.119826e-05 | test_mse=6.057114e-05 | best=6.057114e-05
+2026-03-01 13:16:05 [INFO] Epoch 022 | train_mse=8.139832e-05 | test_mse=6.128887e-05 | best=6.057114e-05
+2026-03-01 13:16:08 [INFO] Epoch 023 | train_mse=8.222151e-05 | test_mse=6.229688e-05 | best=6.057114e-05
+2026-03-01 13:16:10 [INFO] Epoch 024 | train_mse=7.938106e-05 | test_mse=7.250803e-05 | best=6.057114e-05
+2026-03-01 13:16:13 [INFO] Epoch 025 | train_mse=8.268274e-05 | test_mse=6.318801e-05 | best=6.057114e-05
+2026-03-01 13:16:16 [INFO] Epoch 026 | train_mse=7.826971e-05 | test_mse=6.285646e-05 | best=6.057114e-05
+2026-03-01 13:16:18 [INFO]   -> new best, saved to ./runs/fps_radii_kan_K512_pr0.05/best.pt
+2026-03-01 13:16:18 [INFO] Epoch 027 | train_mse=7.888889e-05 | test_mse=5.988872e-05 | best=5.988872e-05
+2026-03-01 13:16:20 [INFO] Epoch 028 | train_mse=8.724767e-05 | test_mse=8.019685e-05 | best=5.988872e-05
+2026-03-01 13:16:23 [INFO]   -> new best, saved to ./runs/fps_radii_kan_K512_pr0.05/best.pt
+2026-03-01 13:16:23 [INFO] Epoch 029 | train_mse=8.192496e-05 | test_mse=5.895049e-05 | best=5.895049e-05
+2026-03-01 13:16:25 [INFO] Epoch 030 | train_mse=7.892198e-05 | test_mse=6.500909e-05 | best=5.895049e-05
+2026-03-01 13:16:27 [INFO] Epoch 031 | train_mse=7.740748e-05 | test_mse=5.903811e-05 | best=5.895049e-05
+2026-03-01 13:16:30 [INFO] Epoch 032 | train_mse=7.711967e-05 | test_mse=6.425138e-05 | best=5.895049e-05
+2026-03-01 13:16:32 [INFO] Epoch 033 | train_mse=8.275160e-05 | test_mse=5.958987e-05 | best=5.895049e-05
+2026-03-01 13:16:35 [INFO] Epoch 034 | train_mse=7.808722e-05 | test_mse=5.895344e-05 | best=5.895049e-05
+2026-03-01 13:16:37 [INFO] Epoch 035 | train_mse=7.749413e-05 | test_mse=5.942903e-05 | best=5.895049e-05
+2026-03-01 13:16:40 [INFO] Epoch 036 | train_mse=7.786063e-05 | test_mse=6.037721e-05 | best=5.895049e-05
+2026-03-01 13:16:42 [INFO] Epoch 037 | train_mse=7.813677e-05 | test_mse=7.236934e-05 | best=5.895049e-05
+2026-03-01 13:16:44 [INFO] Epoch 038 | train_mse=8.310540e-05 | test_mse=7.060539e-05 | best=5.895049e-05
+2026-03-01 13:16:47 [INFO] Epoch 039 | train_mse=7.959312e-05 | test_mse=5.902031e-05 | best=5.895049e-05
+2026-03-01 13:16:49 [INFO] Epoch 040 | train_mse=7.672151e-05 | test_mse=5.938069e-05 | best=5.895049e-05
+2026-03-01 13:16:51 [INFO]   -> new best, saved to ./runs/fps_radii_kan_K512_pr0.05/best.pt
+2026-03-01 13:16:51 [INFO] Epoch 041 | train_mse=7.609815e-05 | test_mse=5.854598e-05 | best=5.854598e-05
+2026-03-01 13:16:54 [INFO] Epoch 042 | train_mse=7.698712e-05 | test_mse=5.953402e-05 | best=5.854598e-05
+2026-03-01 13:16:56 [INFO] Epoch 043 | train_mse=7.589492e-05 | test_mse=6.989342e-05 | best=5.854598e-05
+2026-03-01 13:16:59 [INFO] Epoch 044 | train_mse=7.909386e-05 | test_mse=6.239595e-05 | best=5.854598e-05
+2026-03-01 13:17:02 [INFO] Epoch 045 | train_mse=7.518268e-05 | test_mse=6.032713e-05 | best=5.854598e-05
+2026-03-01 13:17:04 [INFO] Epoch 046 | train_mse=7.836059e-05 | test_mse=6.731543e-05 | best=5.854598e-05
+2026-03-01 13:17:06 [INFO] Epoch 047 | train_mse=7.797674e-05 | test_mse=6.199385e-05 | best=5.854598e-05
+2026-03-01 13:17:09 [INFO] Epoch 048 | train_mse=7.688543e-05 | test_mse=5.924841e-05 | best=5.854598e-05
+2026-03-01 13:17:11 [INFO]   -> new best, saved to ./runs/fps_radii_kan_K512_pr0.05/best.pt
+2026-03-01 13:17:11 [INFO] Epoch 049 | train_mse=7.581151e-05 | test_mse=5.808848e-05 | best=5.808848e-05
+2026-03-01 13:17:14 [INFO] Epoch 050 | train_mse=7.499382e-05 | test_mse=6.071282e-05 | best=5.808848e-05
+2026-03-01 13:17:14 [INFO] [Done] best checkpoint: ./runs/fps_radii_kan_K512_pr0.05/best.pt (best_test_mse=5.808848e-05)
+2026-03-01 13:17:14 [INFO] [Done] last checkpoint: ./runs/fps_radii_kan_K512_pr0.05/last.pt
+2026-03-01 13:17:14 [INFO] [Done] log: ./runs/fps_radii_kan_K512_pr0.05/log.json
+2026-03-01 13:17:14 [INFO] [Done] results: ./runs/fps_radii_kan_K512_pr0.05/results.json

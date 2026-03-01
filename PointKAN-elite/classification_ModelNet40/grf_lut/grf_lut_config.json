@@ -1,0 +1,123 @@
+{
+  "layers": [
+    {
+      "name": "LFP_blocks_list.0.operation1.0.act1",
+      "x_min": -0.8298330038785935,
+      "x_max": 2.076713594794273,
+      "n_bins": 256,
+      "x_range_source": "calibration"
+    },
+    {
+      "name": "LFP_blocks_list.0.operation1.0.act2",
+      "x_min": -2.6442894518375395,
+      "x_max": 2.0200324833393095,
+      "n_bins": 256,
+      "x_range_source": "calibration"
+    },
+    {
+      "name": "LFP_blocks_list.0.operation2.0.act1",
+      "x_min": -0.2914356656372547,
+      "x_max": 1.9029129661619664,
+      "n_bins": 256,
+      "x_range_source": "calibration"
+    },
+    {
+      "name": "LFP_blocks_list.0.operation2.0.act2",
+      "x_min": -0.10831536501646041,
+      "x_max": 0.16163818687200546,
+      "n_bins": 256,
+      "x_range_source": "calibration"
+    },
+    {
+      "name": "LFP_blocks_list.1.operation1.0.act1",
+      "x_min": -0.5497849330306053,
+      "x_max": 3.5293969556689264,
+      "n_bins": 256,
+      "x_range_source": "calibration"
+    },
+    {
+      "name": "LFP_blocks_list.1.operation1.0.act2",
+      "x_min": -1.2524224758148192,
+      "x_max": 2.032639169692993,
+      "n_bins": 256,
+      "x_range_source": "calibration"
+    },
+    {
+      "name": "LFP_blocks_list.1.operation2.0.act1",
+      "x_min": -0.19400295391678812,
+      "x_max": 1.1926456220448016,
+      "n_bins": 256,
+      "x_range_source": "calibration"
+    },
+    {
+      "name": "LFP_blocks_list.1.operation2.0.act2",
+      "x_min": -0.016302828770130874,
+      "x_max": 0.022110316064208747,
+      "n_bins": 256,
+      "x_range_source": "calibration"
+    },
+    {
+      "name": "LFP_blocks_list.2.operation1.0.act1",
+      "x_min": -0.3115316398441792,
+      "x_max": 2.904487273842096,
+      "n_bins": 256,
+      "x_range_source": "calibration"
+    },
+    {
+      "name": "LFP_blocks_list.2.operation1.0.act2",
+      "x_min": -0.25677138939499855,
+      "x_max": 0.6260415799915791,
+      "n_bins": 256,
+      "x_range_source": "calibration"
+    },
+    {
+      "name": "LFP_blocks_list.2.operation2.0.act1",
+      "x_min": -0.33871239572763445,
+      "x_max": 2.5893998458981513,
+      "n_bins": 256,
+      "x_range_source": "calibration"
+    },
+    {
+      "name": "LFP_blocks_list.2.operation2.0.act2",
+      "x_min": -1.68676860332489,
+      "x_max": 2.1649156332015993,
+      "n_bins": 256,
+      "x_range_source": "calibration"
+    },
+    {
+      "name": "LFP_blocks_list.3.operation1.0.act1",
+      "x_min": -0.30175923332571986,
+      "x_max": 2.4379104427993297,
+      "n_bins": 256,
+      "x_range_source": "calibration"
+    },
+    {
+      "name": "LFP_blocks_list.3.operation1.0.act2",
+      "x_min": -0.3793859988451004,
+      "x_max": 1.5492088705301286,
+      "n_bins": 256,
+      "x_range_source": "calibration"
+    },
+    {
+      "name": "LFP_blocks_list.3.operation2.0.act1",
+      "x_min": -0.37484745383262635,
+      "x_max": 2.921470803022385,
+      "n_bins": 256,
+      "x_range_source": "calibration"
+    },
+    {
+      "name": "LFP_blocks_list.3.operation2.0.act2",
+      "x_min": -2.8261462450027466,
+      "x_max": 3.955633282661438,
+      "n_bins": 256,
+      "x_range_source": "calibration"
+    }
+  ],
+  "n_bins": 256,
+  "quantize_bits": 0,
+  "vanilla_quantize_bits": 0,
+  "base_offset_quantize_bits": 0,
+  "base_table_quantize_bits": 8,
+  "offset_table_quantize_bits": 2,
+  "base_kind": "mean"
+}

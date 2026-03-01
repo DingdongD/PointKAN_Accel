@@ -1,0 +1,4 @@
+# ninja log v7
+1	1176	1772120048909240294	/workspace/PointKAN-pytorch/rational_kat_cu/build/temp.linux-x86_64-3.8/src/rational_kernel.o	47adbfd21aaade14
+0	18828	1772120048909240294	/workspace/PointKAN-pytorch/rational_kat_cu/build/temp.linux-x86_64-3.8/src/rational.o	f04ce05a265ada94
+2	47671	1772120048913240307	/workspace/PointKAN-pytorch/rational_kat_cu/build/temp.linux-x86_64-3.8/src/rational_kernel_group.o	b69d5098ba367fff

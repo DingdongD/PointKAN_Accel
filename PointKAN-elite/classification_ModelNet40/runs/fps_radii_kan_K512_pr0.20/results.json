@@ -1,0 +1,6 @@
+{
+  "prefix_ratio": 0.2,
+  "fps_steps": 512,
+  "best_test_mse": 1.2021397600696472e-05,
+  "epochs": 50
+}
