@@ -58,7 +58,7 @@ def plot_sample(
     title: str = "GT vs Pred",
     prefix_len: int = 0,
 ):
-    """绘制 GT vs 预测曲线，并用竖线与背景区分输入段(prefix)与预测段(suffix)。"""
+    """Full curve + zoom subplot on predicted (suffix) segment to show GT vs Pred difference."""
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -67,25 +67,43 @@ def plot_sample(
         print("未安装 matplotlib，跳过保存图片。")
         return
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
-    fig, ax = plt.subplots(figsize=(8, 4))
+    fig, axes = plt.subplots(2, 1, figsize=(8, 6), gridspec_kw={"height_ratios": [1, 1]})
+    ax_full, ax_zoom = axes
     K = len(gt)
     x_axis = np.arange(K)
-    ax.plot(x_axis, gt, "b-", label="GT", alpha=0.9, linewidth=1.5)
-    ax.plot(x_axis, pred, "r--", label="Pred", alpha=0.9, linewidth=1.5)
 
-    # 区分输入段与预测段：竖线 + 背景色
+    # Top: full curve with input / predicted regions
+    ax_full.plot(x_axis, gt, "b-", label="GT", alpha=0.9, linewidth=1.5)
+    ax_full.plot(x_axis, pred, "r--", label="Pred", alpha=0.9, linewidth=1.5)
     if prefix_len > 0 and prefix_len < K:
-        ax.axvline(x=prefix_len - 0.5, color="gray", linestyle="-", linewidth=1.2, alpha=0.8)
-        ax.axvspan(0, prefix_len - 0.5, alpha=0.12, color="blue", label="输入段 (prefix)")
-        ax.axvspan(prefix_len - 0.5, K, alpha=0.12, color="red", label="预测段 (suffix)")
-        ax.legend(loc="best", fontsize=8)
+        ax_full.axvline(x=prefix_len - 0.5, color="gray", linestyle="-", linewidth=1.2, alpha=0.8)
+        ax_full.axvspan(0, prefix_len - 0.5, alpha=0.12, color="blue", label="Input (prefix)")
+        ax_full.axvspan(prefix_len - 0.5, K, alpha=0.12, color="red", label="Predicted (suffix)")
+        ax_full.legend(loc="best", fontsize=8)
     else:
-        ax.legend(loc="best")
+        ax_full.legend(loc="best")
+    ax_full.set_ylabel("radius")
+    ax_full.set_title("%s (full)" % title)
+    ax_full.grid(True, alpha=0.3)
 
-    ax.set_xlabel("FPS step")
-    ax.set_ylabel("radius")
-    ax.set_title(title)
-    ax.grid(True, alpha=0.3)
+    # Bottom: zoom on suffix only so GT vs Pred magnitude is visible
+    if prefix_len < K:
+        x_suffix = np.arange(prefix_len, K)
+        gt_suffix = gt[prefix_len:]
+        pred_suffix = pred[prefix_len:]
+        ax_zoom.plot(x_suffix, gt_suffix, "b-", label="GT", alpha=0.9, linewidth=1.5)
+        ax_zoom.plot(x_suffix, pred_suffix, "r--", label="Pred", alpha=0.9, linewidth=1.5)
+        ax_zoom.set_xlabel("FPS step")
+        ax_zoom.set_ylabel("radius")
+        ax_zoom.set_title("Zoom: predicted segment (suffix)")
+        ax_zoom.legend(loc="best", fontsize=8)
+        ax_zoom.grid(True, alpha=0.3)
+    else:
+        ax_zoom.set_xlabel("FPS step")
+        ax_zoom.set_ylabel("radius")
+        ax_zoom.set_title("Zoom: N/A (no suffix)")
+
+    plt.tight_layout()
     fig.savefig(out_path, dpi=120, bbox_inches="tight")
     plt.close(fig)
 
