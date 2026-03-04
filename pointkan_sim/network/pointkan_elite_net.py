@@ -1,0 +1,397 @@
+"""
+PointKAN-Elite Network Definition
+===================================
+
+Manual definition of PointKAN-Elite network layers for CIM hardware mapping.
+Defines the complete forward-pass layer sequence with per-layer operator lists.
+
+Architecture overview (PointKAN-Elite classification, ModelNet40):
+    Input [B, 3, 1024]
+     → Embedding: Conv1d(3→32) + BN + ReLU
+     → Stage 0~3 (x4, each: points halved, channels doubled):
+         ├ GAM: FPS → KNN → S-Pool                    (same as PointKAN)
+         ├ LFP: Conv1d+BN+ReLU → LayerNorm → Efficient_KAN (Pre-Norm)
+         │      (x2 paths, local + center) → Add
+         └ GFP: ConvBNReLURes1D                        (same as PointKAN)
+     → Global MaxPool
+     → Classifier: Linear→BN1d→ReLU (x2) → Linear
+
+Key differences from standard PointKAN:
+  1. LFP uses Pre-Norm residual: x = x + Efficient_KAN(LayerNorm(x))
+     (vs PointKAN Post-Norm: LayerNorm(KANLayer(x)))
+  2. LFP uses Efficient_KAN (KAT_Group rational activation + Linear)
+     instead of KANLayer (B-spline KAN + DWConv)
+  3. No DWConv inside KAN
+
+"""
+
+from dataclasses import dataclass, field
+from typing import Dict, Any, List, Optional
+
+from .pointkan_net import (
+    OperatorRef,
+    LayerDef,
+    _build_gam_operators,
+    _build_gfp_operators,
+)
+
+
+# ---------------------------------------------------------------------------
+# PointKAN-Elite configuration
+# ---------------------------------------------------------------------------
+
+@dataclass
+class PointKANEliteConfig:
+    """
+    PointKAN-Elite network configuration.
+
+    Attributes:
+        name: Network name
+        task: Task type
+        input_points: Number of input points
+        num_classes: Number of output classes
+        embed_dim: Initial embedding dimension
+        num_stages: Number of feature extraction stages
+        dim_expansion: Channel expansion factor per stage
+        reducers: Point reduction factor per stage
+        k_neighbors: Number of KNN neighbors per stage
+    """
+    name: str = "PointKAN-Elite"
+    task: str = "classification"
+    input_points: int = 1024
+    num_classes: int = 40
+    embed_dim: int = 32
+    num_stages: int = 4
+    dim_expansion: List[int] = field(default_factory=lambda: [2, 2, 2, 2])
+    reducers: List[int] = field(default_factory=lambda: [2, 2, 2, 2])
+    k_neighbors: List[int] = field(default_factory=lambda: [24, 24, 24, 24])
+    coord_dims: int = 3
+
+
+# ---------------------------------------------------------------------------
+# LFP operator builder (Elite-specific: Pre-Norm)
+# ---------------------------------------------------------------------------
+
+def _build_lfp_operators_elite(channels: int) -> List[OperatorRef]:
+    """
+    Build operator list for a PointKAN-Elite LFP layer.
+
+    Key difference from standard PointKAN:
+      - Pre-Norm residual: x = x + Efficient_KAN(LayerNorm(x))
+      - Operator order: Conv1d+BN+ReLU → LayerNorm → KAN (not KAN → LayerNorm)
+      - KAN variant is "elite" (Efficient_KAN with rational activation)
+
+    PointKAN-Elite LFP structure (per stage):
+      Local path:  transfer1(Conv1d+BN+ReLU) → LayerNorm → Efficient_KAN → Add
+                   → MaxPool(K) → Reshape
+      Center path: transfer2(Conv1d+BN+ReLU) → LayerNorm → Efficient_KAN → Add
+      Fusion:      local + center (element-wise add, ignored)
+
+    MaxPool and Add are not in the allowed operator set and are omitted.
+    """
+    ops = []
+
+    # --- Local path ---
+    # transfer1: Conv1d + BN + ReLU
+    ops.append(OperatorRef(
+        op_type="conv1d",
+        params={"in_channels": channels, "out_channels": channels, "kernel_size": 1},
+        description=f"LFP transfer1: Conv1d({channels}→{channels}, k=1)",
+    ))
+    ops.append(OperatorRef(
+        op_type="bn",
+        params={"num_features": channels},
+        description=f"LFP transfer1: BN({channels})",
+    ))
+    ops.append(OperatorRef(
+        op_type="relu",
+        params={"num_features": channels},
+        description="LFP transfer1: ReLU",
+    ))
+    # Pre-Norm: LayerNorm BEFORE Efficient_KAN
+    ops.append(OperatorRef(
+        op_type="layernorm",
+        params={"normalized_shape": channels},
+        description=f"LFP local LayerNorm({channels}) [Pre-Norm]",
+    ))
+    # Efficient_KAN (black-box, elite variant with rational activation)
+    ops.append(OperatorRef(
+        op_type="kan",
+        params={"in_features": channels, "out_features": channels, "variant": "elite"},
+        description=f"LFP local Efficient_KAN({channels}→{channels})",
+    ))
+
+    # --- Center path ---
+    # transfer2: Conv1d + BN + ReLU
+    ops.append(OperatorRef(
+        op_type="conv1d",
+        params={"in_channels": channels, "out_channels": channels, "kernel_size": 1},
+        description=f"LFP transfer2: Conv1d({channels}→{channels}, k=1)",
+    ))
+    ops.append(OperatorRef(
+        op_type="bn",
+        params={"num_features": channels},
+        description=f"LFP transfer2: BN({channels})",
+    ))
+    ops.append(OperatorRef(
+        op_type="relu",
+        params={"num_features": channels},
+        description="LFP transfer2: ReLU",
+    ))
+    # Pre-Norm: LayerNorm BEFORE Efficient_KAN
+    ops.append(OperatorRef(
+        op_type="layernorm",
+        params={"normalized_shape": channels},
+        description=f"LFP center LayerNorm({channels}) [Pre-Norm]",
+    ))
+    # Efficient_KAN (black-box, elite variant)
+    ops.append(OperatorRef(
+        op_type="kan",
+        params={"in_features": channels, "out_features": channels, "variant": "elite"},
+        description=f"LFP center Efficient_KAN({channels}→{channels})",
+    ))
+
+    return ops
+
+
+# ---------------------------------------------------------------------------
+# Network creation function
+# ---------------------------------------------------------------------------
+
+def create_pointkan_elite_classification(
+    input_points: int = 1024,
+    num_classes: int = 40,
+    embed_dim: int = 32,
+    dim_expansion: Optional[List[int]] = None,
+    reducers: Optional[List[int]] = None,
+    k_neighbors: Optional[List[int]] = None,
+) -> List[LayerDef]:
+    """
+    Create PointKAN-Elite classification network layer sequence.
+
+    Default configuration (pointKANElite factory function):
+        input: [B, 3, 1024], 40 classes (ModelNet40)
+        embed_dim=32, 4 stages, dim_expansion=[2,2,2,2],
+        reducers=[2,2,2,2], k_neighbors=[24,24,24,24]
+
+    Args:
+        input_points: Number of input points
+        num_classes: Number of output classes
+        embed_dim: Initial embedding dimension
+        dim_expansion: Per-stage channel expansion factors
+        reducers: Per-stage point reduction factors
+        k_neighbors: Per-stage KNN neighbor counts
+
+    Returns:
+        Ordered list of LayerDef defining the complete forward pass.
+    """
+    if dim_expansion is None:
+        dim_expansion = [2, 2, 2, 2]
+    if reducers is None:
+        reducers = [2, 2, 2, 2]
+    if k_neighbors is None:
+        k_neighbors = [24, 24, 24, 24]
+
+    num_stages = len(dim_expansion)
+    layers: List[LayerDef] = []
+
+    # ------------------------------------------------------------------
+    # 1. Embedding: Conv1d(3→embed_dim) + BN + ReLU
+    #    (identical to standard PointKAN)
+    # ------------------------------------------------------------------
+    layers.append(LayerDef(
+        name="embedding",
+        layer_type="embedding",
+        operators=[
+            OperatorRef(
+                op_type="conv1d",
+                params={"in_channels": 3, "out_channels": embed_dim,
+                        "kernel_size": 1, "num_points": input_points},
+                description=f"Embedding Conv1d(3→{embed_dim}, k=1)",
+            ),
+            OperatorRef(
+                op_type="bn",
+                params={"num_features": embed_dim, "num_points": input_points},
+                description=f"Embedding BN({embed_dim})",
+            ),
+            OperatorRef(
+                op_type="relu",
+                params={"num_features": embed_dim, "num_points": input_points},
+                description="Embedding ReLU",
+            ),
+        ],
+        description=f"Input embedding: [B,3,{input_points}] → [B,{embed_dim},{input_points}]",
+    ))
+
+    # ------------------------------------------------------------------
+    # 2-13. Stages 0-3: GAM + LFP + GFP (stage)
+    # ------------------------------------------------------------------
+    current_points = input_points
+    current_channels = embed_dim
+
+    for s in range(num_stages):
+        out_points = current_points // reducers[s]
+        out_channels = current_channels * dim_expansion[s]
+        k = k_neighbors[s]
+
+        # --- GAM (identical to standard PointKAN) ---
+        gam_ops = _build_gam_operators(
+            input_points=current_points,
+            output_points=out_points,
+            ref_points=current_points,
+            k=k,
+            out_channels=out_channels,
+        )
+        layers.append(LayerDef(
+            name=f"GAM-stage{s}",
+            layer_type="GAM",
+            operators=gam_ops,
+            description=(
+                f"GAM stage {s}: {current_points}→{out_points} points, "
+                f"ch={current_channels}→{out_channels}, K={k}"
+            ),
+        ))
+
+        # --- LFP (Elite-specific: Pre-Norm with Efficient_KAN) ---
+        lfp_ops = _build_lfp_operators_elite(channels=out_channels)
+        layers.append(LayerDef(
+            name=f"LFP-stage{s}",
+            layer_type="LFP",
+            operators=lfp_ops,
+            description=(
+                f"LFP stage {s}: local + center paths, "
+                f"Efficient_KAN({out_channels}→{out_channels}), "
+                f"Pre-Norm residual: x + KAN(LayerNorm(x))"
+            ),
+        ))
+
+        # --- GFP (stage-n, identical to standard PointKAN) ---
+        gfp_ops = _build_gfp_operators(channels=out_channels)
+        layers.append(LayerDef(
+            name=f"stage-{s}",
+            layer_type="stage",
+            operators=gfp_ops,
+            description=(
+                f"GFP stage {s}: ConvBNReLURes1D({out_channels}→{out_channels}), "
+                f"{out_points} points"
+            ),
+        ))
+
+        current_points = out_points
+        current_channels = out_channels
+
+    # ------------------------------------------------------------------
+    # 14. Global MaxPool (identical to standard PointKAN)
+    # ------------------------------------------------------------------
+    layers.append(LayerDef(
+        name="global_maxpool",
+        layer_type="global_maxpool",
+        operators=[],
+        description=(
+            f"Global MaxPool: [B,{current_channels},{current_points}] → "
+            f"[B,{current_channels}] (no CIM-mappable operators)"
+        ),
+    ))
+
+    # ------------------------------------------------------------------
+    # 15. Classifier (identical to standard PointKAN)
+    # ------------------------------------------------------------------
+    fc_dim = current_channels  # 512
+    mid_dim = fc_dim // 2       # 256
+    classifier_ops = [
+        OperatorRef(
+            op_type="linear",
+            params={"in_features": fc_dim, "out_features": fc_dim},
+            description=f"Classifier FC1: Linear({fc_dim}→{fc_dim})",
+        ),
+        OperatorRef(
+            op_type="batchnorm1d",
+            params={"num_features": fc_dim},
+            description=f"Classifier BN1d({fc_dim})",
+        ),
+        OperatorRef(
+            op_type="relu",
+            params={"num_features": fc_dim},
+            description="Classifier ReLU [1]",
+        ),
+        # Dropout(0.5) — ignored (inference no-op)
+        OperatorRef(
+            op_type="linear",
+            params={"in_features": fc_dim, "out_features": mid_dim},
+            description=f"Classifier FC2: Linear({fc_dim}→{mid_dim})",
+        ),
+        OperatorRef(
+            op_type="batchnorm1d",
+            params={"num_features": mid_dim},
+            description=f"Classifier BN1d({mid_dim})",
+        ),
+        OperatorRef(
+            op_type="relu",
+            params={"num_features": mid_dim},
+            description="Classifier ReLU [2]",
+        ),
+        # Dropout(0.5) — ignored (inference no-op)
+        OperatorRef(
+            op_type="linear",
+            params={"in_features": mid_dim, "out_features": num_classes},
+            description=f"Classifier FC3: Linear({mid_dim}→{num_classes})",
+        ),
+    ]
+    layers.append(LayerDef(
+        name="classifier",
+        layer_type="classifier",
+        operators=classifier_ops,
+        description=(
+            f"Classification head: "
+            f"FC({fc_dim}→{fc_dim})→BN→ReLU→"
+            f"FC({fc_dim}→{mid_dim})→BN→ReLU→"
+            f"FC({mid_dim}→{num_classes})"
+        ),
+    ))
+
+    return layers
+
+
+# ---------------------------------------------------------------------------
+# Convenience accessor
+# ---------------------------------------------------------------------------
+
+def get_pointkan_elite_info() -> Dict[str, Any]:
+    """
+    Get information about PointKAN-Elite network configuration.
+
+    Returns:
+        Dictionary with configuration information.
+    """
+    return {
+        "name": "PointKAN-Elite",
+        "task": "classification",
+        "dataset": "ModelNet40",
+        "input_shape": "[B, 3, 1024]",
+        "num_classes": 40,
+        "embed_dim": 32,
+        "stages": 4,
+        "dim_expansion": [2, 2, 2, 2],
+        "reducers": [2, 2, 2, 2],
+        "k_neighbors": [24, 24, 24, 24],
+        "kan_variant": "elite (Efficient_KAN with KAT_Group rational activation)",
+        "lfp_norm_order": "Pre-Norm (LayerNorm → Efficient_KAN)",
+        "differences_from_pointkan": [
+            "LFP uses Pre-Norm: x = x + KAN(LayerNorm(x))",
+            "LFP uses Efficient_KAN (KAT_Group + Linear) instead of KANLayer (B-spline + DWConv)",
+            "No DWConv inside KAN module",
+            "Rational activation P(x)/Q(x) instead of B-spline basis functions",
+        ],
+        "operators_used": [
+            "conv1d", "bn", "relu", "fps", "knn", "s-pool",
+            "layernorm", "kan", "linear", "batchnorm1d",
+        ],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Default instance for quick access
+# ---------------------------------------------------------------------------
+
+POINTKAN_ELITE_LAYERS = create_pointkan_elite_classification()
+"""Default PointKAN-Elite classification layer sequence (1024 points, 40 classes)."""
