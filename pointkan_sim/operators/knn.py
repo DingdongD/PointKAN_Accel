@@ -15,14 +15,16 @@ Execution flow:
     For each query q = 0 .. query_points - 1:
         batches = ceil(input_points / cim_parallelism)   (constant per query)
         For each batch:
-            Stage 1: k^2             (k2_width / bit_slice cycles)
-            Stage 2: -2qk            (two_qk_width / bit_slice cycles)
+            Stage 1: k^2             (dist_compute_cycles)
+            Stage 2: -2qk            (dist_compute_cycles)
             Stage 3: accumulate      (1 cycle)
             Stage 4: SRAM write      (1 cycle)
         Stage 5: bitonic sort        (fixed cycles, after all batches)
 
+    dist_compute_cycles = points_per_axis_quant_width / bit_slice
+
 Cycle formula:
-    per_batch = k2_width / bit_slice + two_qk_width / bit_slice + 1 + 1
+    per_batch = 2 * dist_compute_cycles + 1 + 1
     batches = ceil(input_points / cim_parallelism)        (constant per query)
     per_query = batches * per_batch + bitonic_sort_cycles
     total = query_points * per_query
@@ -58,8 +60,7 @@ class KNNParams(OperatorParams):
             in typical PointNet++ usage)
         cim_parallelism: CIM array parallelism per batch (default 128)
         bit_slice: Bit-slice width for bit-serial computation (default 2)
-        k2_width: Bit width for k^2 computation (fixed constant)
-        two_qk_width: Bit width for -2qk computation (fixed constant)
+        points_per_axis_quant_width: Quantization bit width per coordinate axis
         bitonic_sort_cycles: Fixed cycle count for bitonic sort stage
     """
     query_points: int = 512
@@ -67,8 +68,7 @@ class KNNParams(OperatorParams):
     sampled_points_num: int = 512
     cim_parallelism: int = 128
     bit_slice: int = 2
-    k2_width: int = 28
-    two_qk_width: int = 28
+    points_per_axis_quant_width: int = 28
     bitonic_sort_cycles: int = 17
 
 
@@ -84,12 +84,12 @@ class KNNOperator(BaseOperator):
 
     1. k^2 computation
        SRAM-CIM array read + shift-and-add, bit-serial.
-       Duration = k2_width / bit_slice cycles.
+       Duration = points_per_axis_quant_width / bit_slice cycles.
        Circuit modules: SRAM_CIM_ARRAY, SHIFT_ADD
 
     2. -2qk cross-term
        SRAM-CIM array MAC + shift-and-add, bit-serial.
-       Duration = two_qk_width / bit_slice cycles.
+       Duration = points_per_axis_quant_width / bit_slice cycles.
        Circuit modules: SRAM_CIM_ARRAY, SHIFT_ADD
 
     3. Distance accumulation
@@ -122,19 +122,14 @@ class KNNOperator(BaseOperator):
 
     # --- Derived parameter helpers ---
 
-    def _get_k2_cycles(self) -> int:
-        """Cycles for k^2 stage per batch."""
+    def _get_dist_compute_cycles(self) -> int:
+        """Cycles for distance computation (k^2 or -2qk) per batch."""
         p = self.knn_params
-        return p.k2_width // p.bit_slice
-
-    def _get_two_qk_cycles(self) -> int:
-        """Cycles for -2qk stage per batch."""
-        p = self.knn_params
-        return p.two_qk_width // p.bit_slice
+        return p.points_per_axis_quant_width // p.bit_slice
 
     def _get_per_batch_cycles(self) -> int:
         """Total cycles per batch (stages 1-4)."""
-        return self._get_k2_cycles() + self._get_two_qk_cycles() + 1 + 1
+        return 2 * self._get_dist_compute_cycles() + 1 + 1
 
     # --- Stage definition ---
 
@@ -283,8 +278,7 @@ class KNNOperator(BaseOperator):
         sort_power = hw.sorting_circuit.comp_bitonic_1024_min32.power
         clock_period = hw.clock_period
 
-        k2_cycles = self._get_k2_cycles()
-        tqk_cycles = self._get_two_qk_cycles()
+        dist_cycles = self._get_dist_compute_cycles()
         batches = math.ceil(p.input_points / p.cim_parallelism)
 
         events: List[Event] = []
@@ -303,12 +297,12 @@ class KNNOperator(BaseOperator):
                     circuit_module="sram_cim_array",
                     operation="k2_bit_serial",
                     power=cim_power,
-                    duration=k2_cycles,
+                    duration=dist_cycles,
                     clock_period_ns=clock_period,
                     metadata={"query": q, "batch": b},
                 ))
                 event_id += 1
-                cycle += k2_cycles
+                cycle += dist_cycles
 
                 # Stage 2: -2qk
                 events.append(Event(
@@ -320,12 +314,12 @@ class KNNOperator(BaseOperator):
                     circuit_module="sram_cim_array",
                     operation="two_qk_bit_serial",
                     power=cim_power,
-                    duration=tqk_cycles,
+                    duration=dist_cycles,
                     clock_period_ns=clock_period,
                     metadata={"query": q, "batch": b},
                 ))
                 event_id += 1
-                cycle += tqk_cycles
+                cycle += dist_cycles
 
                 # Stage 3: accumulate
                 events.append(Event(
@@ -390,8 +384,7 @@ class KNNOperator(BaseOperator):
             Dictionary with per-batch, per-query, and total cycle info.
         """
         p = self.knn_params
-        k2_c = self._get_k2_cycles()
-        tqk_c = self._get_two_qk_cycles()
+        dist_c = self._get_dist_compute_cycles()
         per_batch = self._get_per_batch_cycles()
 
         batches = math.ceil(p.input_points / p.cim_parallelism)
@@ -407,13 +400,11 @@ class KNNOperator(BaseOperator):
                 'sampled_points_num': p.sampled_points_num,
                 'cim_parallelism': p.cim_parallelism,
                 'bit_slice': p.bit_slice,
-                'k2_width': p.k2_width,
-                'two_qk_width': p.two_qk_width,
+                'points_per_axis_quant_width': p.points_per_axis_quant_width,
                 'bitonic_sort_cycles': p.bitonic_sort_cycles,
             },
             'per_batch': {
-                'k2_cycles': k2_c,
-                'two_qk_cycles': tqk_c,
+                'dist_compute_cycles': dist_c,
                 'accumulate_cycles': 1,
                 'sram_write_cycles': 1,
                 'total': per_batch,
