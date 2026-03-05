@@ -206,6 +206,12 @@ class Scheduler:
                 result.status = SchedulerStatus.COMPLETED
                 return result
 
+            # 增量改造：在进入事件驱动仿真前，先做一次“共享资源互斥”时序修正。
+            # 约定：event.metadata 中可携带
+            #   - resource_id: 资源名（如 bitonic_shared）
+            #   - exclusive: 是否互斥占用（True 时同资源不可重叠）
+            self._apply_exclusive_resource_constraints(events)
+
             # Determine end cycle
             last_event_cycle = self.event_queue.get_last_cycle()
             if max_cycles is not None:
@@ -224,6 +230,35 @@ class Scheduler:
 
         self.status = result.status
         return result
+
+    def _apply_exclusive_resource_constraints(self, events: List[Event]) -> None:
+        """
+        对带 resource_id+exclusive 的事件做互斥仲裁。
+
+        调度规则（简单确定性策略）：
+        1) 先按原始起始 cycle/event_id 排序；
+        2) 对同一 resource_id，若新事件与上一个占用区间重叠，则顺延到资源空闲周期；
+        3) 仅修改事件 cycle，不改变 duration/power。
+
+        该实现用于把 baseline 的“共享 bitonic 比较器不能并行”显式化。
+        """
+        if not events:
+            return
+
+        # resource_id -> 下一可用 cycle
+        next_free_cycle: Dict[str, int] = {}
+
+        for e in sorted(events, key=lambda x: (x.cycle, x.event_id)):
+            meta = e.metadata or {}
+            rid = meta.get("resource_id")
+            exclusive = bool(meta.get("exclusive", False))
+            if not rid or not exclusive:
+                continue
+
+            avail = int(next_free_cycle.get(str(rid), 0))
+            if e.cycle < avail:
+                e.cycle = avail
+            next_free_cycle[str(rid)] = e.cycle + e.duration
 
     def _run_event_driven_simulation(
         self,
@@ -425,6 +460,9 @@ class Scheduler:
                 result.total_cycles = 0
                 result.status = SchedulerStatus.COMPLETED
                 return result
+
+            # 与 run_simulation 保持一致：先做互斥资源时序修正
+            self._apply_exclusive_resource_constraints(events)
 
             # Calculate totals directly from events
             last_cycle = max(e.end_cycle for e in events)
