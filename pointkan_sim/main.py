@@ -312,6 +312,10 @@ def simulate_network(
     clock_ns = hw_config.clock_period
     use_buffer = enable_layer_buffer and activation_shapes is not None and len(activation_shapes) == len(layers)
 
+    # 硬件算子顺序来源：按「层」顺序遍历，每层内按「算子」顺序派发。
+    # 顺序 = 层顺序（由 network 定义，如 pointkan_elite_net：embedding → GAM-stage0 → LFP-stage0 → stage-0 → …）
+    #       + 每层内： [buffer读/首层DRAM加载] → dispatch_layer(layer.operators) → [buffer写]
+    # 因此 GAM 的 FPS/KNN 会紧接在 embedding 之后出现，因为第 2 层是 GAM-stage0，且 GAM 的 operators 定义为 [FPS, KNN, AffineNorm, S-Pool]。
     for i, layer in enumerate(layers):
         shape_info = activation_shapes[i] if (activation_shapes and i < len(activation_shapes)) else None
 
@@ -413,6 +417,33 @@ def simulate_network(
     latency_ms = latency_ns / 1e6
     avg_power = (total_energy / latency_ns * 1e3) if latency_ns > 0 else 0.0
 
+    # 按算子类型聚合 cycles 与 energy，供端到端 PPA breakdown（含 FPS/KNN/BN/Conv/Linear 等）
+    operator_breakdown: Dict[str, Dict[str, float]] = {}
+    for e in sim_result.events:
+        op_name = (e.operator or e.operation or "other").strip() or "other"
+        if op_name not in operator_breakdown:
+            operator_breakdown[op_name] = {"cycles": 0.0, "energy_nj": 0.0}
+        operator_breakdown[op_name]["cycles"] += e.duration
+        operator_breakdown[op_name]["energy_nj"] += e.energy
+
+    # 按执行顺序的完整硬件算子序列（按 cycle 排序）
+    events_sorted = sorted(sim_result.events, key=lambda e: (e.cycle, getattr(e, "event_id", 0)))
+    operator_sequence: List[Dict[str, Any]] = []
+    for idx, e in enumerate(events_sorted):
+        meta = getattr(e, "metadata", None) or {}
+        operator_sequence.append({
+            "idx": idx,
+            "cycle": e.cycle,
+            "end_cycle": e.cycle + e.duration - 1,
+            "duration": e.duration,
+            "operator": (e.operator or "").strip() or "other",
+            "stage": (e.stage or "").strip(),
+            "operation": (e.operation or "").strip(),
+            "circuit_module": (e.circuit_module or "").strip(),
+            "layer_name": meta.get("layer_name", ""),
+            "energy_nj": round(e.energy, 4),
+        })
+
     out: Dict[str, Any] = {
         "total_cycles": total_cycles,
         "total_energy_nJ": total_energy,
@@ -423,6 +454,8 @@ def simulate_network(
         "total_events": len(sim_result.events),
         "layer_results": layer_results,
         "sim_result": sim_result,
+        "operator_breakdown": operator_breakdown,
+        "operator_sequence": operator_sequence,
     }
     if activation_shapes is not None:
         out["activation_shapes"] = [s.to_dict() for s in activation_shapes]
@@ -627,6 +660,18 @@ def run_network_simulation(args: argparse.Namespace) -> Dict[str, Any]:
     )
     log_info(f"CIM 并行度: {hw_config.cim_parallelism}")
     log_info(f"Bit-serial 周期: {hw_config.bit_serial_cycles}")
+    # 层间 buffer 与量化：来自 hw_config（非 load_network 的 layers）
+    buf = getattr(hw_config, "inter_layer_buffer", None)
+    if buf is not None:
+        log_info(
+            f"层间 buffer: size={buf.size_bytes} B, bandwidth={buf.bandwidth_bytes_per_cycle} B/cycle, "
+            f"spill_to_dram={getattr(buf, 'spill_to_dram', False)}"
+        )
+    else:
+        log_info("层间 buffer: 未配置（inter_layer_buffer 为空）")
+    log_info(
+        f"层间量化/反量化: {'启用 (FP32↔INT8 计入 cycle/功耗)' if getattr(hw_config, 'enable_w8a8_quant_dequant', False) else '未启用 (默认，假定 W8A8 已就绪)'}"
+    )
     log_info("")
 
     # 为 conv1d/linear 启用 MNSIM 全 NetStruct（Tile/NoC 级）延迟与能耗

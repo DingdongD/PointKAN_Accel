@@ -255,23 +255,43 @@ class KNNOperator(BaseOperator):
 
     # --- Event generation ---
 
+    def generate_single_bitonic_event(self, params: Optional[KNNParams] = None) -> Event:
+        """返回单次 KNN 查询的 bitonic top-k 事件（cycle=0），供 Phase2 与 KNN 引擎交错时使用。"""
+        if params is not None:
+            self.knn_params = params
+        p = self.knn_params
+        hw = self.hw_config
+        sort_power = hw.sorting_circuit.comp_bitonic_1024_min32.power
+        return Event(
+            event_id=0,
+            cycle=0,
+            operator="KNN",
+            stage="bitonic_sort",
+            sub_stage="bitonic_sort_1024_to_k",
+            circuit_module="comp_bitonic_1024_min32",
+            operation="bitonic_sort_min_k",
+            power=sort_power,
+            duration=p.bitonic_sort_cycles,
+            clock_period_ns=hw.clock_period,
+            metadata={"phase": "knn_engine_bitonic_only"},
+        )
+
     def generate_events(self, params: Optional[KNNParams] = None) -> List[Event]:
         """
         Generate cycle-level events for KNN.
 
-        Produces one Event per stage per batch, plus one sort Event per query.
-        Events have relative cycles starting from 0.
-
-        Returns:
-            List of Event objects.
+        当 hw_config.distance_in_phase2=True 时，仅返回 bitonic 事件（stage5），
+        距离计算（stage1-4）由 Phase2 在 dispatcher 中统一插入。
         """
         if params is not None:
             self.knn_params = params
 
         p = self.knn_params
-
-        # Resolve power values from hw_config
         hw = self.hw_config
+        if getattr(hw, "distance_in_phase2", False):
+            return [self.generate_single_bitonic_event() for _ in range(p.query_points)]
+
+        # 完整 5 阶段
         cim_power = hw.sram_cim_macro.array.cim_power
         shift_add_power = hw.sram_cim_macro.shift_add.power
         write_power = hw.sram_cim_macro.buffer.power

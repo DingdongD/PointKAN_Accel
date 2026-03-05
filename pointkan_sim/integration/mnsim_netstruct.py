@@ -12,6 +12,13 @@ Conv/Linear 与 MNSIM 的映射（W8A8、矩阵乘形式）：
 - Linear：映射为 MNSIM fc，Infeature×Outfeature 矩阵乘，同样 8bit 输入/权/输出，Tile/NoC 仿真。
 若需在仿真中显式计入量化和反量化（FP32↔INT8）的 cycle/功耗，请启用 hw_config.enable_w8a8_quant_dequant，
 并在 logic_circuit.quant_dequant 中配置 power/cycles。
+
+real_indata_bytes / real_rdata_bytes（可选，按层传入）：
+- indata：该层输入激活数据量（字节）。Conv1d 对应输入 [B,C_in,L] 的 numel×inputbit/8；
+  Linear 对应输入 [B,in_f] 或 [B,T,in_f] 的 numel×inputbit/8。符合「读入 iReg 的输入数据量」。
+- rdata：该层权重量（字节）。Conv1d 对应 [C_out,C_in,K]；Linear 对应 [out_f,in_f]。符合矩阵乘的权重复用/读取量。
+- 在 MNSIM 中仅用于 Model_latency 的 buffer 读/写延迟（update_tile_latency）；Crossbar 的计算延迟与功耗
+  仍由结构（read_row/read_column）决定，与数据分布无关。遵循 MNSIM-2.0 main.py 的推理仿真原则，不做任何后处理缩放。
 """
 
 from __future__ import annotations
@@ -35,6 +42,8 @@ class MNSIMFullResult:
     conv_linear_order: List[Tuple[str, int]] = field(default_factory=list)  # (layer_name, op_index)
     success: bool = False
     error: Optional[str] = None
+    # RRAM 阵列 / PE / Tile 统计（来自 TCG），仅当 success 且运行过 MNSIM 时非空
+    rram_tile_stats: Optional[Dict[str, Any]] = None
 
 
 def _mnsim_path() -> str:
@@ -112,9 +121,13 @@ def _layer_dict_fc(
 
 def build_netstruct_from_layers(
     layers: List["LayerDef"],
+    real_data_overrides: Optional[List[Dict[str, float]]] = None,
 ) -> Tuple[List[Any], List[Tuple[str, int]]]:
     """
     Build MNSIM NetStruct and ordered list of (layer_name, op_index) for conv1d/linear only.
+
+    real_data_overrides: 可选，与 conv/linear 顺序一致的列表，每项为
+        {"real_indata_bytes": float, "real_rdata_bytes": float}，用于按层真实权重/激活数据量驱动 MNSIM。
 
     Returns:
         NetStruct: list of [(layer_dict, None)] for each conv1d and linear in order.
@@ -123,6 +136,7 @@ def build_netstruct_from_layers(
     netstruct: List[Any] = []
     conv_linear_order: List[Tuple[str, int]] = []
     layer_index = 0
+    overrides = real_data_overrides or []
 
     for layer in layers:
         if not layer.operators:
@@ -151,6 +165,11 @@ def build_netstruct_from_layers(
                     input_index=-1,  # 同上
                     output_index=1,
                 )
+            if layer_index < len(overrides) and isinstance(overrides[layer_index], dict):
+                o = overrides[layer_index]
+                if "real_indata_bytes" in o and "real_rdata_bytes" in o:
+                    ld["real_indata_bytes"] = float(o["real_indata_bytes"])
+                    ld["real_rdata_bytes"] = float(o["real_rdata_bytes"])
             netstruct.append([(ld, None)])
             conv_linear_order.append((layer.name, op_idx))
             layer_index += 1
@@ -192,6 +211,49 @@ def run_mnsim_full(
 
     try:
         tcg = TCG(netstruct, simconfig_path)
+        # 统计 RRAM 阵列 / PE / Tile 数量与尺寸（仅 conv/fc 使用 crossbar）
+        rram_tile_stats: Optional[Dict[str, Any]] = None
+        try:
+            total_tiles = 0
+            total_PE = 0
+            pe_per_tile = int(getattr(tcg.tile, "tile_PE_total_num", 0)) or 1
+            xbar_row = int(getattr(tcg.tile, "xbar_row", 0))
+            xbar_column = int(getattr(tcg.tile, "xbar_column", 0))
+            if hasattr(tcg.tile, "xbar_size") and not (xbar_row and xbar_column):
+                xs = tcg.tile.xbar_size
+                if isinstance(xs, (list, tuple)) and len(xs) >= 2:
+                    xbar_row, xbar_column = int(xs[0]), int(xs[1])
+            per_layer: List[Dict[str, Any]] = []
+            for i in range(len(tcg.layer_tileinfo)):
+                info = tcg.layer_tileinfo[i]
+                layer_type = info.get("type", "")
+                if layer_type not in ("conv", "fc"):
+                    per_layer.append({"layer_index": i, "layer_type": layer_type, "tilenum": 0, "PE_count": 0, "max_row": 0, "max_column": 0})
+                    continue
+                tilenum = int(info.get("tilenum", 0))
+                PEnum = int(info.get("PEnum", 0))
+                max_row = int(info.get("max_row", 0))
+                max_column = int(info.get("max_column", 0))
+                total_tiles += tilenum
+                total_PE += PEnum
+                per_layer.append({
+                    "layer_index": i,
+                    "layer_type": layer_type,
+                    "tilenum": tilenum,
+                    "PE_count": PEnum,
+                    "max_row": max_row,
+                    "max_column": max_column,
+                })
+            rram_tile_stats = {
+                "total_tile_count": total_tiles,
+                "total_PE_count": total_PE,
+                "xbar_size": {"row": xbar_row, "column": xbar_column},
+                "pe_per_tile": pe_per_tile,
+                "per_layer": per_layer,
+            }
+        except Exception:  # 不因统计失败影响主流程
+            rram_tile_stats = None
+
         model_latency = Model_latency(
             netstruct,
             simconfig_path,
@@ -250,6 +312,7 @@ def run_mnsim_full(
             layer_energy_nj=energy_nj,
             conv_linear_order=conv_linear_order or [],
             success=True,
+            rram_tile_stats=rram_tile_stats,
         )
     except Exception as e:
         return MNSIMFullResult(success=False, error=str(e))

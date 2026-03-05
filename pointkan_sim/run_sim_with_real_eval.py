@@ -42,7 +42,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--checkpoint",
         type=str,
-        default="/workspace/PointKAN-pytorch/PointKAN-elite/classification_ModelNet40/checkpoints/pointKANElite-pointkan_elite_exp-42",
+        default=None,
         help=f"检查点目录或 .pth 路径；默认相对 classification_ModelNet40 的 {DEFAULT_CKPT}",
     )
     parser.add_argument(
@@ -95,6 +95,40 @@ def _parse_args() -> argparse.Namespace:
         "--no_vis",
         action="store_true",
         help="真实推理时禁用可视化（与 inference_and_kan_analysis 一致）",
+    )
+    parser.add_argument(
+        "--use_real_data",
+        action="store_true",
+        help="用 ModelNet40 真实样本与 checkpoint 权重：加载模型与数据集，从真实前向收集 conv/linear 维度驱动 MNSIM，按批调度仿真并汇总准确率与 PPA",
+    )
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=32,
+        help="--use_real_data 时测试集 batch size",
+    )
+    parser.add_argument(
+        "--max_batches",
+        type=int,
+        default=None,
+        help="--use_real_data 时最多跑多少 batch（默认全量测试集）",
+    )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="cuda",
+        help="--use_real_data 时运行设备（真实前向含 FPS 等需 GPU，无 GPU 时可改用 --use_real_data 不加或先跑仿真）",
+    )
+    parser.add_argument(
+        "--show_shapes",
+        action="store_true",
+        help="--use_real_data 时打印 LayerDef 与真实前向的每层 conv/linear 的输入激活与权重 shape（及 indata/rdata 字节）",
+    )
+    parser.add_argument(
+        "--sim_results_dir",
+        type=str,
+        default="sim_results",
+        help="--use_real_data 时 PPA 报告 JSON 与 breakdown 图表输出目录，默认 sim_results",
     )
     return parser.parse_args()
 
@@ -168,6 +202,226 @@ def main() -> int:
     sim_log_path = _ensure_sim_log(args.sim_log_dir)
     checkpoint_path = resolve_checkpoint_path(args.checkpoint)
 
+    os.chdir(PROJECT_ROOT)
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+    from datetime import datetime
+    from pointkan_sim.utils.logger import setup_logger, LogLevel
+    log_path = sim_log_path / f"simulation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    setup_logger(level=LogLevel.INFO, log_file=str(log_path))
+
+    from pointkan_sim.main import (
+        load_network,
+        get_accelerator_config,
+        compute_activation_shapes,
+        _write_report_to_file,
+        log_info,
+        log_section,
+        log_separator,
+    )
+
+    # -------------------------------------------------------------------------
+    # 模式：用 ModelNet40 真实样本 + 真实权重 调度仿真，MNSIM 由真实前向得到的层维度驱动
+    # -------------------------------------------------------------------------
+    if args.use_real_data:
+        from pointkan_sim.integration.real_data_eval import (
+            load_model_and_dataset,
+            collect_conv_linear_from_forward,
+            real_data_overrides_from_conv_linear_list,
+            log_conv_linear_shapes,
+            run_real_inference_and_sim_over_dataset,
+            RealEvalResult,
+        )
+        from pointkan_sim.integration.mnsim_netstruct import run_mnsim_full
+        import math
+
+        log_section("真实数据评估：ModelNet40 样本 + checkpoint 权重 + MNSIM 对应层 PPA")
+        log_info(f"Checkpoint: {checkpoint_path}")
+        log_info(f"num_points={args.num_points}, num_classes={args.num_classes}, batch_size={args.batch_size}")
+
+        try:
+            net, test_loader, criterion = load_model_and_dataset(
+                checkpoint_path,
+                num_points=args.num_points,
+                num_classes=args.num_classes,
+                batch_size=args.batch_size,
+                workers=0,
+                device=args.device,
+            )
+        except Exception as e:
+            log_info(f"加载模型/数据集失败: {e}")
+            return 1
+
+        # 层定义（与后续 MNSIM、仿真共用）
+        hw_config = get_accelerator_config(args.accelerator)
+        layers = load_network("pointkan-elite", args.num_points, args.num_classes)
+
+        # 打印加速器与层间 buffer/量化配置（与 main.run_network_simulation 一致，便于对照）
+        at = getattr(hw_config, "accelerator_type", None)
+        at_name = getattr(at, "name", str(at)) if at is not None else "N/A"
+        log_info(f"加速器: {hw_config.accelerator_name} ({at_name})")
+        log_info(f"CIM 并行度: {getattr(hw_config, 'cim_parallelism', 'N/A')}")
+        log_info(f"Bit-serial 周期: {getattr(hw_config, 'bit_serial_cycles', 'N/A')}")
+        buf = getattr(hw_config, "inter_layer_buffer", None)
+        if buf is not None:
+            log_info(f"层间 buffer: size={buf.size_bytes} B, bandwidth={buf.bandwidth_bytes_per_cycle} B/cycle, spill_to_dram={getattr(buf, 'spill_to_dram', False)}")
+        else:
+            log_info("层间 buffer: 未配置（inter_layer_buffer 为空）")
+        qd = getattr(hw_config, "enable_w8a8_quant_dequant", False)
+        log_info(f"层间量化/反量化: {'启用 (FP32↔INT8 计入 cycle/功耗)' if qd else '未启用 (默认，假定 W8A8 已就绪)'}")
+        log_info("")
+
+        # 先做一次真实前向，收集 conv/linear 顺序与真实 indata/rdata 字节数，用于 MNSIM 按层矩阵乘适配
+        conv_linear_list = collect_conv_linear_from_forward(
+            net, args.device, args.num_points, batch_size=min(2, args.batch_size)
+        )
+        real_data_overrides = real_data_overrides_from_conv_linear_list(conv_linear_list)
+
+        if args.show_shapes:
+            log_conv_linear_shapes(
+                layers,
+                conv_linear_list,
+                real_data_overrides=real_data_overrides,
+                log_info_fn=log_info,
+            )
+
+        # MNSIM：用 LayerDef 构建 NetStruct，可选传入真实数据量驱动 conv/linear 的 indata/rdata
+        activation_shapes = compute_activation_shapes(layers, args.num_points, input_channels=3)
+
+        from pointkan_sim.integration.mnsim_netstruct import build_netstruct_from_layers, run_mnsim_full
+        mnsim_context = None
+        netstruct, conv_linear_order, mnsim_result = None, None, None
+        if args.mnsim_full:
+            netstruct, conv_linear_order = build_netstruct_from_layers(
+                layers, real_data_overrides=real_data_overrides
+            )
+            if netstruct:
+                mnsim_result = run_mnsim_full(netstruct, conv_linear_order=conv_linear_order)
+                if mnsim_result.success:
+                    mnsim_context = {
+                        "mnsim_latency_ns": mnsim_result.layer_latency_ns,
+                        "mnsim_energy_nj": mnsim_result.layer_energy_nj,
+                        "mnsim_index": 0,
+                    }
+                    log_info("已用与 checkpoint 一致的层结构 + 真实按层 indata/rdata 驱动 MNSIM 全 NetStruct（Tile/NoC）")
+                    clock_ns = hw_config.clock_period
+                    from pointkan_sim.integration.real_data_eval import format_activation_weight_shapes
+                    for idx, (lat_ns, en_nj) in enumerate(zip(mnsim_result.layer_latency_ns, mnsim_result.layer_energy_nj)):
+                        name = conv_linear_order[idx][0] if idx < len(conv_linear_order) else f"layer_{idx}"
+                        cyc = max(1, int(math.ceil(lat_ns / clock_ns)))
+                        act_s, w_s = format_activation_weight_shapes(conv_linear_list[idx]) if idx < len(conv_linear_list) else ("?", "?")
+                        log_info(f"  MNSIM [{name}] activation={act_s}, weight={w_s}  latency={lat_ns:.1f} ns, cycles={cyc}, energy={en_nj:.2f} nJ")
+                else:
+                    log_info(f"MNSIM 未启用: {mnsim_result.error}")
+
+        n_mnsim = len(mnsim_context["mnsim_latency_ns"]) if mnsim_context else 0
+        log_info(f"真实前向共 {len(conv_linear_list)} 个 conv/linear；MNSIM 使用与 LayerDef 一致的 {n_mnsim} 层（含真实 indata/rdata）")
+        if len(conv_linear_list) != n_mnsim:
+            log_info(f"  注意：真实前向层数({len(conv_linear_list)})与 LayerDef 层数({n_mnsim})不一致；overrides 按索引取前 {n_mnsim} 条对应到 MNSIM。建议使用 --show_shapes 核对。")
+
+        # 按 ModelNet40 批次调度：每批一次真实前向（准确率）+ 一次 PPA 仿真（累加）
+        eval_result = run_real_inference_and_sim_over_dataset(
+            net,
+            test_loader,
+            criterion,
+            args.device,
+            layers,
+            hw_config,
+            mnsim_context,
+            enable_layer_buffer=True,
+            activation_shapes=activation_shapes,
+            max_batches=args.max_batches,
+        )
+
+        if not eval_result.success:
+            log_info(f"真实数据评估失败: {eval_result.error}")
+            return 1
+
+        log_separator()
+        log_info("真实数据评估结果 (ModelNet40 测试集 + 对应层 MNSIM PPA)")
+        log_separator()
+        log_info(f"  样本数:        {eval_result.num_samples}")
+        log_info(f"  准确率:        {eval_result.accuracy:.2f}%")
+        log_info(f"  平衡准确率:    {eval_result.balanced_accuracy:.2f}%")
+        log_info(f"  Test Loss:     {eval_result.test_loss:.4f}")
+        clock_ns = hw_config.clock_period
+        latency_ns = eval_result.cycles_per_sample * clock_ns
+        log_info(f"  总周期:        {eval_result.total_cycles:,} cycles")
+        log_info(f"  总能耗:        {eval_result.total_energy_nj:.2f} nJ")
+        log_info(f"  端到端延迟:    {latency_ns/1e6:.4f} ms (每样本)")
+        log_info(f"  每样本周期:    {eval_result.cycles_per_sample:.1f} cycles")
+        log_info(f"  每样本能耗:    {eval_result.energy_per_sample_nj:.2f} nJ")
+        log_separator()
+
+        # 单次仿真获取全算子 breakdown（FPS/KNN/BN/Conv/Linear 等），用于饼图与报告
+        from pointkan_sim.main import simulate_network
+        mnsim_ctx = dict(mnsim_context) if mnsim_context else None
+        if mnsim_ctx is not None:
+            mnsim_ctx["mnsim_index"] = 0
+        sim_once = simulate_network(
+            layers,
+            hw_config,
+            show_layers=False,
+            mnsim_context=mnsim_ctx,
+            activation_shapes=activation_shapes,
+            enable_layer_buffer=True,
+            show_shapes=False,
+        )
+        full_operator_breakdown = sim_once.get("operator_breakdown") or {}
+        operator_sequence = sim_once.get("operator_sequence") or []
+
+        # 端到端 latency/energy 与按层、按算子类型 PPA breakdown，写入 sim_results 并绘图
+        from pointkan_sim.integration.ppa_report import build_ppa_report, write_ppa_report_and_plots
+        mnsim_lat = mnsim_context["mnsim_latency_ns"] if mnsim_context else None
+        mnsim_en = mnsim_context["mnsim_energy_nj"] if mnsim_context else None
+        ppa_report = build_ppa_report(
+            eval_result,
+            clock_ns,
+            netstruct=netstruct,
+            conv_linear_order=conv_linear_order,
+            mnsim_latency_ns=mnsim_lat,
+            mnsim_energy_nj=mnsim_en,
+            full_operator_breakdown=full_operator_breakdown,
+            checkpoint=checkpoint_path,
+            mnsim_full=args.mnsim_full,
+            rram_tile_stats=getattr(mnsim_result, "rram_tile_stats", None) if mnsim_result else None,
+            operator_sequence=operator_sequence,
+        )
+        sim_results_dir = Path(args.sim_results_dir)
+        sim_results_dir.mkdir(parents=True, exist_ok=True)
+        report_filename = os.path.basename(args.output) if args.output else "report.json"
+        write_ppa_report_and_plots(
+            ppa_report,
+            sim_results_dir,
+            report_filename=report_filename,
+            log_info_fn=log_info,
+        )
+        # 按执行顺序输出完整硬件算子序列到 operator_sequence.txt
+        if operator_sequence:
+            seq_path = sim_results_dir / "operator_sequence.txt"
+            with open(seq_path, "w", encoding="utf-8") as f:
+                f.write("# 硬件算子执行顺序（按 cycle 排序）\n")
+                f.write("# idx\tcycle\tend_cycle\tduration\toperator\tstage\toperation\tlayer_name\tenergy_nj\n")
+                for item in operator_sequence:
+                    f.write(
+                        "{idx}\t{cycle}\t{end_cycle}\t{duration}\t{operator}\t{stage}\t{operation}\t{layer_name}\t{energy_nj}\n".format(
+                            idx=item.get("idx", ""),
+                            cycle=item.get("cycle", ""),
+                            end_cycle=item.get("end_cycle", ""),
+                            duration=item.get("duration", ""),
+                            operator=item.get("operator", ""),
+                            stage=item.get("stage", ""),
+                            operation=item.get("operation", ""),
+                            layer_name=item.get("layer_name", ""),
+                            energy_nj=item.get("energy_nj", ""),
+                        )
+                    )
+            log_info(f"完整硬件算子序列已写入: {seq_path}（共 {len(operator_sequence)} 条）")
+        return 0
+
+    # -------------------------------------------------------------------------
+    # 模式：仅跑仿真（可选先跑 inference 脚本）
+    # -------------------------------------------------------------------------
     if args.run_real_inference:
         print("[run_sim_with_real_eval] 运行真实推理 (ModelNet40)...")
         run_real_inference(
@@ -179,26 +433,8 @@ def main() -> int:
         )
         print()
 
-    # 构建与 main 一致的仿真参数，并统一输出到 sim_log
-    os.chdir(PROJECT_ROOT)
-    sys.path.insert(0, str(PROJECT_ROOT))
+    from pointkan_sim.main import run_network_simulation
 
-    # 导入 main 模块并构造 args，然后调用 run_network_simulation
-    from pointkan_sim.main import (
-        run_network_simulation,
-        get_accelerator_config,
-        _write_report_to_file,
-        log_info,
-        log_section,
-    )
-    from pointkan_sim.utils.logger import setup_logger, LogLevel
-
-    # 初始化日志到 sim_log
-    from datetime import datetime
-    log_path = sim_log_path / f"simulation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-    setup_logger(level=LogLevel.INFO, log_file=str(log_path))
-
-    # 构造与 run_network_simulation 兼容的 args 命名空间
     class SimArgs:
         network = "pointkan-elite"
         accelerator = args.accelerator

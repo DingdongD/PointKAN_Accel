@@ -1,0 +1,32 @@
+[2026-03-05 11:26:41] INFO     | Logger initialized: pointcloud_ppa_sim
+[2026-03-05 11:26:41] INFO     | Log level: INFO
+[2026-03-05 11:26:41] INFO     | Log file: sim_log/simulation_20260305_112641.log
+[2026-03-05 11:26:41] INFO     | ============================================================
+[2026-03-05 11:26:41] INFO     |  真实数据评估：ModelNet40 样本 + checkpoint 权重 + MNSIM 对应层 PPA
+[2026-03-05 11:26:41] INFO     | ============================================================
+[2026-03-05 11:26:41] INFO     | Checkpoint: /workspace/PointKAN-pytorch/PointKAN-elite/classification_ModelNet40/checkpoints/pointKANElite-pointkan_elite_exp-42
+[2026-03-05 11:26:41] INFO     | num_points=1024, num_classes=40, batch_size=1
+[2026-03-05 11:26:48] INFO     | 已用与 checkpoint 一致的层结构 + 真实按层 indata/rdata 驱动 MNSIM 全 NetStruct（Tile/NoC）
+[2026-03-05 11:26:48] INFO     |   MNSIM [embedding] latency=9336299.0 ns, cycles=9336300, energy=154817.04 nJ
+[2026-03-05 11:26:48] INFO     |   MNSIM [LFP-stage0] latency=1978554.7 ns, cycles=1978555, energy=32882.61 nJ
+[2026-03-05 11:26:48] INFO     |   MNSIM [LFP-stage0] latency=1978554.7 ns, cycles=1978555, energy=32882.61 nJ
+[2026-03-05 11:26:48] INFO     |   MNSIM [stage-0] latency=1978554.7 ns, cycles=1978555, energy=32882.61 nJ
+[2026-03-05 11:26:48] INFO     |   MNSIM [stage-0] latency=94394.7 ns, cycles=94395, energy=1544.64 nJ
+[2026-03-05 11:26:48] INFO     |   MNSIM [LFP-stage1] latency=96469.1 ns, cycles=96470, energy=1585.01 nJ
+[2026-03-05 11:26:48] INFO     |   MNSIM [LFP-stage1] latency=96469.1 ns, cycles=96470, energy=1585.01 nJ
+[2026-03-05 11:26:48] INFO     |   MNSIM [stage-1] latency=96469.1 ns, cycles=96470, energy=1585.01 nJ
+[2026-03-05 11:26:48] INFO     |   MNSIM [stage-1] latency=96469.1 ns, cycles=96470, energy=1585.01 nJ
+[2026-03-05 11:26:48] INFO     |   MNSIM [LFP-stage2] latency=2015956.7 ns, cycles=2015957, energy=33678.92 nJ
+[2026-03-05 11:26:48] INFO     |   MNSIM [LFP-stage2] latency=2015956.7 ns, cycles=2015957, energy=33678.92 nJ
+[2026-03-05 11:26:48] INFO     |   MNSIM [stage-2] latency=2015956.7 ns, cycles=2015957, energy=33678.92 nJ
+[2026-03-05 11:26:48] INFO     |   MNSIM [stage-2] latency=132206.3 ns, cycles=132207, energy=2340.95 nJ
+[2026-03-05 11:26:48] INFO     |   MNSIM [LFP-stage3] latency=133848.7 ns, cycles=133849, energy=8193.31 nJ
+[2026-03-05 11:26:48] INFO     |   MNSIM [LFP-stage3] latency=133848.7 ns, cycles=133849, energy=8193.31 nJ
+[2026-03-05 11:26:48] INFO     |   MNSIM [stage-3] latency=134264.3 ns, cycles=134265, energy=8193.31 nJ
+[2026-03-05 11:26:48] INFO     |   MNSIM [stage-3] latency=134258.3 ns, cycles=134259, energy=8193.31 nJ
+[2026-03-05 11:26:48] INFO     |   MNSIM [classifier] latency=2141509.1 ns, cycles=2141510, energy=123832.40 nJ
+[2026-03-05 11:26:48] INFO     |   MNSIM [classifier] latency=2139248.3 ns, cycles=2139249, energy=70761.37 nJ
+[2026-03-05 11:26:48] INFO     |   MNSIM [classifier] latency=2131497.1 ns, cycles=2131498, energy=35007.93 nJ
+[2026-03-05 11:26:48] INFO     | 真实前向共 36 个 conv/linear；MNSIM 使用与 LayerDef 一致的 20 层（含真实 indata/rdata）
+[2026-03-05 11:26:49] INFO     | 
+运行仿真: 42050 个事件, 约 29,278,619 周期...

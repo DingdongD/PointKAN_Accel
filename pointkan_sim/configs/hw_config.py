@@ -319,6 +319,39 @@ class LogicCircuitConfig:
 
 
 # =============================================================================
+# DRAM (外部内存，Roofline + CACTI 功耗)
+# =============================================================================
+
+@dataclass
+class DRAMConfig:
+    """
+    外部 DRAM：点云加载、查询点读取、结果写回等。
+    Roofline: cycles = bytes / bandwidth_bytes_per_cycle；能耗 = cycles * clock * power_mw。
+    功耗可由 CACTI 或 datasheet 获取。
+    """
+    bandwidth_bytes_per_cycle: int = 32
+    read_power_mw: float = 50.0
+    write_power_mw: float = 50.0
+
+
+# =============================================================================
+# SRAM-II（距离计算专用，128 行激活，2bit 距离）
+# =============================================================================
+
+@dataclass
+class SRAM_IIConfig:
+    """
+    用于距离计算的 SRAM-II：存储 key 点云，每次激活 128 行，2bit 距离计算。
+    每查询点周期数 = (bits_per_axis / bit_slice) * ceil(N / active_rows)。
+    例如 12bit 轴、2bit slice、N=1024、128 行 → 6 * 8 = 48 cycles/query。
+    """
+    active_rows: int = 128
+    bits_per_axis: int = 12
+    bit_slice: int = 2
+    power_mw: float = 0.0  # 距离计算阶段功耗，TODO 填 CACTI/实测
+
+
+# =============================================================================
 # Inter-Layer Buffer (层间激活缓存)
 # =============================================================================
 
@@ -398,6 +431,15 @@ class HardwareConfig:
     inter_layer_buffer: InterLayerBufferConfig = field(
         default_factory=InterLayerBufferConfig
     )
+    # DRAM：点云/激活加载与写回，roofline + 功耗（可接 CACTI）
+    dram: Optional[DRAMConfig] = None
+    # SRAM-II：距离计算专用，128 行激活、2bit 距离
+    sram_ii: Optional[SRAM_IIConfig] = None
+    # 架构开关
+    # distance_in_phase2=True：FPS/KNN 的距离计算(stage1-4)归入 Phase2，引擎只做 bitonic/排序
+    distance_in_phase2: bool = True
+    # bn_fuse_with_conv_linear=True：推理时 BN 紧跟 Conv/Linear 则融合，不计 BN cycle/能耗
+    bn_fuse_with_conv_linear: bool = True
     # W8A8：Conv/Linear 前插入量化(FP32→INT8)、后插入反量化(INT8→FP32)，供 BN/ReLU 等浮点非线性使用
     enable_w8a8_quant_dequant: bool = False
 
@@ -573,6 +615,7 @@ def _build_baseline() -> HardwareConfig:
             quant_dequant=QuantDequantConfig(power=0.0, cycles=0), # TODO
             interpolation=None,                 # baseline: no interpolation
         ),
+        
         inter_layer_buffer=InterLayerBufferConfig(
             size_bytes=65536,                   # 64 KB
             bandwidth_bytes_per_cycle=256,
@@ -583,6 +626,19 @@ def _build_baseline() -> HardwareConfig:
             dram_read_power_mw=50.0,
             dram_write_power_mw=50.0,
         ),
+        dram=DRAMConfig(
+            bandwidth_bytes_per_cycle=32,
+            read_power_mw=50.0,
+            write_power_mw=50.0,
+        ),
+        sram_ii=SRAM_IIConfig(
+            active_rows=128,
+            bits_per_axis=12,
+            bit_slice=2,
+            power_mw=0.0,
+        ),
+        distance_in_phase2=True,
+        bn_fuse_with_conv_linear=True,
     )
 
 
@@ -686,6 +742,10 @@ def _build_acc() -> HardwareConfig:
             dram_read_power_mw=50.0,
             dram_write_power_mw=50.0,
         ),
+        dram=DRAMConfig(bandwidth_bytes_per_cycle=32, read_power_mw=50.0, write_power_mw=50.0),
+        sram_ii=SRAM_IIConfig(active_rows=128, bits_per_axis=12, bit_slice=2, power_mw=0.0),
+        distance_in_phase2=True,
+        bn_fuse_with_conv_linear=True,
     )
 
 

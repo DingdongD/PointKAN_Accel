@@ -192,15 +192,53 @@ def _gen_fps(
     hw_config: 'HardwareConfig',
     context: Optional[Dict[str, Any]] = None,
 ) -> List[Event]:
-    """FPS → FPSOperator.generate_events()."""
+    """
+    FPS：当 distance_in_phase2 时，先插入 Phase2 距离计算（每查询 12/2*ceil(N/128) 周期），
+    再插入 FPS 引擎 bitonic；baseline 下与 KNN 串行（共享 bitonic 比较器）。
+    """
     from .fps import FPSOperator, FPSParams
+    from .layer_buffer_ops import gen_phase2_distance_events
 
     params = op_ref.params
+    input_points = int(params.get('input_points', 1024))
+    sampled_points_num = int(params.get('output_points', 512))
     fps_params = FPSParams(
-        input_points=params.get('input_points', 1024),
-        sampled_points_num=params.get('output_points', 512),
+        input_points=input_points,
+        sampled_points_num=sampled_points_num,
     )
-    return FPSOperator(params=fps_params, hw_config=hw_config).generate_events()
+    fps_op = FPSOperator(params=fps_params, hw_config=hw_config)
+    if not getattr(hw_config, "distance_in_phase2", False):
+        return fps_op.generate_events()
+
+    # Phase2 + FPS 引擎交错：每迭代 [距离计算] -> [bitonic]
+    clock_ns = getattr(hw_config, "clock_period", 1.0)
+    per_query_cycles = _phase2_distance_cycles_per_query(input_points, hw_config)
+    all_events: List[Event] = []
+    current_cycle = 0
+    for i in range(sampled_points_num):
+        evs_d = gen_phase2_distance_events(1, input_points, hw_config, "FPS", clock_ns)
+        for e in evs_d:
+            e.cycle += current_cycle
+        all_events.extend(evs_d)
+        current_cycle += per_query_cycles
+        one_bitonic = fps_op.generate_single_bitonic_event()
+        one_bitonic.cycle = current_cycle
+        all_events.append(one_bitonic)
+        current_cycle += one_bitonic.duration
+    return all_events
+
+
+def _phase2_distance_cycles_per_query(num_keys: int, hw_config: 'HardwareConfig') -> int:
+    """Phase2 单查询距离计算周期数：(bits/bit_slice) * ceil(N/active_rows)。"""
+    import math
+    sram_ii = getattr(hw_config, "sram_ii", None)
+    if sram_ii is not None:
+        active = max(1, getattr(sram_ii, "active_rows", 128))
+        bits = max(1, getattr(sram_ii, "bits_per_axis", 12))
+        slice_bits = max(1, getattr(sram_ii, "bit_slice", 2))
+    else:
+        active, bits, slice_bits = 128, 12, 2
+    return (bits // slice_bits) * max(1, int(math.ceil(num_keys / active)))
 
 
 def _gen_knn(
@@ -208,16 +246,41 @@ def _gen_knn(
     hw_config: 'HardwareConfig',
     context: Optional[Dict[str, Any]] = None,
 ) -> List[Event]:
-    """KNN → KNNOperator.generate_events()."""
+    """
+    KNN：当 distance_in_phase2 时，先插入 Phase2 距离计算，再插入 KNN 引擎 bitonic top-k。
+    Baseline 下与 FPS 串行（共享 bitonic 比较器）；fuse 模式可复用距离，待扩展。
+    """
     from .knn import KNNOperator, KNNParams
+    from .layer_buffer_ops import gen_phase2_distance_events
 
     params = op_ref.params
+    input_points = int(params.get('input_points', 1024))
+    query_points = int(params.get('query_points', 512))
     knn_params = KNNParams(
-        input_points=params.get('input_points', 1024),
-        query_points=params.get('query_points', 512),
+        input_points=input_points,
+        query_points=query_points,
         k=params.get('k', 16),
     )
-    return KNNOperator(params=knn_params, hw_config=hw_config).generate_events()
+    knn_op = KNNOperator(params=knn_params, hw_config=hw_config)
+    if not getattr(hw_config, "distance_in_phase2", False):
+        return knn_op.generate_events()
+
+    # Phase2 + KNN 引擎交错：每查询 [距离计算] -> [bitonic top-k]
+    clock_ns = getattr(hw_config, "clock_period", 1.0)
+    per_query_cycles = _phase2_distance_cycles_per_query(input_points, hw_config)
+    all_events = []
+    current_cycle = 0
+    for q in range(query_points):
+        evs_d = gen_phase2_distance_events(1, input_points, hw_config, "KNN", clock_ns)
+        for e in evs_d:
+            e.cycle += current_cycle
+        all_events.extend(evs_d)
+        current_cycle += per_query_cycles
+        one_bitonic = knn_op.generate_single_bitonic_event()
+        one_bitonic.cycle = current_cycle
+        all_events.append(one_bitonic)
+        current_cycle += one_bitonic.duration
+    return all_events
 
 
 def _gen_stub(
@@ -325,29 +388,26 @@ def dispatch_layer(
     """
     Dispatch all operators in a layer sequentially.
 
-    Each operator's events are offset so it starts after the previous one ends.
-    If context contains mnsim_latency_ns/mnsim_energy_nj/mnsim_index, conv1d/linear
-    use MNSIM full NetStruct results (one Event per op).
-
-    Args:
-        layer_operators: Ordered list of OperatorRef from a LayerDef.
-        hw_config: Hardware configuration.
-        context: Optional MNSIM context (mutated: mnsim_index incremented).
-
-    Returns:
-        Combined list of Events with correct cycle offsets.
+    - BN 融合：若 bn_fuse_with_conv_linear 且上一算子是 conv1d/linear，本层 BN 不计 cycle/能耗。
+    - 其余同前：cycle 偏移、MNSIM context 等。
     """
     all_events: List[Event] = []
     current_cycle = 0
+    prev_op_type: Optional[str] = None
 
     for op_ref in layer_operators:
+        # BN 紧跟 Conv/Linear 时可选融合，不计 BN 开销
+        if getattr(hw_config, "bn_fuse_with_conv_linear", False) and prev_op_type in ("conv1d", "linear"):
+            if op_ref.op_type in ("bn", "batchnorm1d"):
+                prev_op_type = op_ref.op_type
+                continue
         events = dispatch_operator(op_ref, hw_config, context)
         for e in events:
             e.cycle += current_cycle
         all_events.extend(events)
-
         if events:
             current_cycle = max(e.cycle + e.duration for e in events)
+        prev_op_type = op_ref.op_type
 
     return all_events
 

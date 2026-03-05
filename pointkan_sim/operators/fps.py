@@ -253,23 +253,44 @@ class FPSOperator(BaseOperator):
 
     # --- Event generation ---
 
+    def generate_single_bitonic_event(self, params: Optional[FPSParams] = None) -> Event:
+        """返回单次 FPS 迭代的 bitonic 排序事件（cycle=0），供 Phase2 与 FPS 引擎交错时使用。"""
+        if params is not None:
+            self.fps_params = params
+        p = self.fps_params
+        hw = self.hw_config
+        sort_power = hw.sorting_circuit.comp_tree_1024_max.power
+        return Event(
+            event_id=0,
+            cycle=0,
+            operator="FPS",
+            stage="bitonic_sort",
+            sub_stage="bitonic_sort_1024_to_1",
+            circuit_module="comp_tree_1024_max",
+            operation="bitonic_sort_max",
+            power=sort_power,
+            duration=p.bitonic_sort_cycles,
+            clock_period_ns=hw.clock_period,
+            metadata={"phase": "fps_engine_bitonic_only"},
+        )
+
     def generate_events(self, params: Optional[FPSParams] = None) -> List[Event]:
         """
         Generate cycle-level events for FPS.
 
-        Produces one Event per stage per batch, plus one sort Event per iteration.
-        Events have relative cycles starting from 0.
-
-        Returns:
-            List of Event objects.
+        当 hw_config.distance_in_phase2=True 时，仅返回 bitonic 事件（stage5），
+        距离计算（stage1-4）由 Phase2 在 dispatcher 中统一插入。
+        否则返回完整 5 阶段事件。
         """
         if params is not None:
             self.fps_params = params
 
         p = self.fps_params
-
-        # Resolve power values from hw_config
         hw = self.hw_config
+        if getattr(hw, "distance_in_phase2", False):
+            return [self.generate_single_bitonic_event() for _ in range(p.sampled_points_num)]
+
+        # 完整 5 阶段
         cim_power = hw.sram_cim_macro.array.cim_power
         shift_add_power = hw.sram_cim_macro.shift_add.power
         mdt_power = hw.sram_cim_macro.min_distance_table.power

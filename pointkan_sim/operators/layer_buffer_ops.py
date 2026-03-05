@@ -181,6 +181,81 @@ def gen_layer_buffer_write_events(
     return events
 
 
+def gen_phase1_point_cloud_load_events(
+    num_points: int,
+    hw_config: "HardwareConfig",
+    layer_name: str,
+    num_features: int = 3,
+    bits_per_feature: int = 12,
+    clock_period_ns: Optional[float] = None,
+) -> List[Event]:
+    """
+    Phase1：系统启动，从 DRAM 加载 1×N×3 点云（每特征 12bit）到 SRAM-II。
+    Roofline：cycles = bytes / dram.bandwidth；能耗 = DRAM 读功耗 × 时间。
+    """
+    import math
+    bytes_total = int(math.ceil(num_points * num_features * bits_per_feature / 8.0))
+    if bytes_total <= 0:
+        return []
+    clk = float(clock_period_ns if clock_period_ns is not None else getattr(hw_config, "clock_period", 1.0))
+    dram = getattr(hw_config, "dram", None)
+    if dram is not None:
+        bw = max(1, getattr(dram, "bandwidth_bytes_per_cycle", 32))
+        power = getattr(dram, "read_power_mw", 50.0)
+    else:
+        buf = getattr(hw_config, "inter_layer_buffer", None)
+        bw = max(1, getattr(buf, "dram_bandwidth_bytes_per_cycle", 32)) if buf else 32
+        power = getattr(buf, "dram_read_power_mw", 50.0) if buf else 50.0
+    dur = _safe_div_ceil(bytes_total, bw)
+    return [
+        _event(
+            0, 0,
+            "LayerBuffer", "buffer_io", "dram_read",
+            "dram", "phase1_point_cloud_to_sram_ii",
+            power, dur, clk,
+            {"layer_name": layer_name, "bytes": bytes_total, "source": "point_cloud_1_N_3", "phase": 1},
+        )
+    ]
+
+
+def gen_phase2_distance_events(
+    num_queries: int,
+    num_keys: int,
+    hw_config: "HardwareConfig",
+    operator_name: str = "DistanceCompute",
+    clock_period_ns: Optional[float] = None,
+) -> List[Event]:
+    """
+    Phase2：距离计算。每查询点 (12/2)*ceil(N/128) 周期，128 行 SRAM-II 激活、2bit 距离。
+    用于 FPS/KNN 前：每迭代/每查询先跑本阶段再喂入 FPS bitonic 或 KNN 排序。
+    """
+    import math
+    if num_queries <= 0 or num_keys <= 0:
+        return []
+    clk = float(clock_period_ns if clock_period_ns is not None else getattr(hw_config, "clock_period", 1.0))
+    sram_ii = getattr(hw_config, "sram_ii", None)
+    if sram_ii is not None:
+        active = max(1, getattr(sram_ii, "active_rows", 128))
+        bits = max(1, getattr(sram_ii, "bits_per_axis", 12))
+        slice_bits = max(1, getattr(sram_ii, "bit_slice", 2))
+        power = getattr(sram_ii, "power_mw", 0.0)
+    else:
+        active, bits, slice_bits, power = 128, 12, 2, 0.0
+    per_query_cycles = (bits // slice_bits) * max(1, int(math.ceil(num_keys / active)))
+    events: List[Event] = []
+    for i in range(num_queries):
+        events.append(
+            _event(
+                i, i * per_query_cycles,
+                operator_name, "distance", "sram_ii_128row_2bit",
+                "sram_ii", "phase2_distance_compute",
+                power, per_query_cycles, clk,
+                {"query_index": i, "num_keys": num_keys, "phase": 2},
+            )
+        )
+    return events
+
+
 def gen_first_layer_input_load_events(
     input_bytes: int,
     hw_config: "HardwareConfig",
@@ -190,34 +265,30 @@ def gen_first_layer_input_load_events(
     """
     生成第一层「点云输入从 DRAM/外部加载」事件（N×3 数据喂入）。
 
-    用于模拟真实点云样本输入：每个样本 N×3（N 点数，3 为 xyz），
-    按字节数折算为 DRAM 读周期与功耗。
-
-    Args:
-        input_bytes: 输入数据字节数（通常 N * 3 * bytes_per_element）
-        hw_config: 硬件配置（使用 inter_layer_buffer 的 dram 参数）
-        layer_name: 层名
-        clock_period_ns: 时钟周期
-
-    Returns:
-        Event 列表（单段 DRAM 读或空）。
+    若 hw_config.dram 存在则用 DRAM 配置（Phase1 语义）；否则回退到 inter_layer_buffer.dram。
     """
     if input_bytes <= 0:
         return []
 
     clk = float(clock_period_ns if clock_period_ns is not None else getattr(hw_config, "clock_period", 1.0))
-    buf = getattr(hw_config, "inter_layer_buffer", None)
-    if buf is None:
-        return []
-
-    dram_bw = max(1, getattr(buf, "dram_bandwidth_bytes_per_cycle", 32))
+    dram = getattr(hw_config, "dram", None)
+    if dram is not None:
+        dram_bw = max(1, getattr(dram, "bandwidth_bytes_per_cycle", 32))
+        power = getattr(dram, "read_power_mw", 50.0)
+        op_name = "phase1_point_cloud_to_sram_ii"
+    else:
+        buf = getattr(hw_config, "inter_layer_buffer", None)
+        if buf is None:
+            return []
+        dram_bw = max(1, getattr(buf, "dram_bandwidth_bytes_per_cycle", 32))
+        power = getattr(buf, "dram_read_power_mw", 50.0)
+        op_name = "point_cloud_input_load"
     dur = _safe_div_ceil(input_bytes, dram_bw)
-    power = getattr(buf, "dram_read_power_mw", 50.0)
     return [
         _event(
             0, 0,
             "LayerBuffer", "buffer_io", "dram_read",
-            "dram", "point_cloud_input_load",
+            "dram", op_name,
             power, dur, clk,
             {"layer_name": layer_name, "bytes": input_bytes, "source": "point_cloud_Nx3"},
         )

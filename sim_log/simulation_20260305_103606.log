@@ -1,0 +1,9 @@
+[2026-03-05 10:36:06] INFO     | Logger initialized: pointcloud_ppa_sim
+[2026-03-05 10:36:06] INFO     | Log level: INFO
+[2026-03-05 10:36:06] INFO     | Log file: sim_log/simulation_20260305_103606.log
+[2026-03-05 10:36:07] INFO     | ============================================================
+[2026-03-05 10:36:07] INFO     |  真实数据评估：ModelNet40 样本 + checkpoint 权重 + MNSIM 对应层 PPA
+[2026-03-05 10:36:07] INFO     | ============================================================
+[2026-03-05 10:36:07] INFO     | Checkpoint: /workspace/PointKAN-pytorch/PointKAN-elite/classification_ModelNet40/checkpoints/pointKANElite-pointkan_elite_exp-42
+[2026-03-05 10:36:07] INFO     | num_points=1024, num_classes=40, batch_size=32
+[2026-03-05 10:36:09] INFO     | 加载模型/数据集失败: No module named 'pointnet2_ops'

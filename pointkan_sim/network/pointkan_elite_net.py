@@ -77,11 +77,12 @@ def _build_lfp_operators_elite(channels: int, num_points: int) -> List[OperatorR
     Build operator list for a PointKAN-Elite LFP layer.
 
     Pre-Norm residual: x = x + Efficient_KAN(LayerNorm(x))
-    Operator order: Conv1d+BN+ReLU → LayerNorm → KAN → Add(residual); then MaxPool / fusion Add.
+    Efficient_KAN 展开为显式 linear：fc1(in→hidden)、fc2(hidden→out)，与真实模型
+    LFP_blocks_list.*.operation1.0.fc1/fc2、operation2.0.fc1/fc2 严格对齐，便于 MNSIM/仿真 36 层一致。
 
     PointKAN-Elite LFP structure (per stage):
-      Local path:  transfer1 → LayerNorm → Efficient_KAN → Add(residual) → AdaptiveMaxPool1d(1)
-      Center path: transfer2 → LayerNorm → Efficient_KAN → Add(residual)
+      Local path:  transfer1 → LayerNorm → [fc1, fc2] (operation1) → Add(residual) → AdaptiveMaxPool1d(1)
+      Center path: transfer2 → LayerNorm → [fc1, fc2] (operation2) → Add(residual)
       Fusion:      local + center (element-wise add)
     """
     ops = []
@@ -109,13 +110,18 @@ def _build_lfp_operators_elite(channels: int, num_points: int) -> List[OperatorR
         params={"normalized_shape": channels, "num_points": num_points},
         description=f"LFP local LayerNorm({channels}) [Pre-Norm]",
     ))
-    # Efficient_KAN (black-box, elite variant with rational activation)
+    # Efficient_KAN 展开：operation1.fc1, operation1.fc2（与 pointkanElite LFP operation1 一致）
     ops.append(OperatorRef(
-        op_type="kan",
-        params={"in_features": channels, "out_features": channels, "num_points": num_points, "variant": "elite"},
-        description=f"LFP local Efficient_KAN({channels}→{channels})",
+        op_type="linear",
+        params={"in_features": channels, "out_features": channels},
+        description=f"LFP local operation1.fc1 Linear({channels}→{channels})",
     ))
-    # Pre-Norm residual add: x + KAN(LayerNorm(x))
+    ops.append(OperatorRef(
+        op_type="linear",
+        params={"in_features": channels, "out_features": channels},
+        description=f"LFP local operation1.fc2 Linear({channels}→{channels})",
+    ))
+    # Pre-Norm residual add: x + operation1(LayerNorm(x))
     ops.append(OperatorRef(
         op_type="add",
         params={"residual": True, "num_features": channels, "num_points": num_points},
@@ -151,13 +157,18 @@ def _build_lfp_operators_elite(channels: int, num_points: int) -> List[OperatorR
         params={"normalized_shape": channels, "num_points": num_points},
         description=f"LFP center LayerNorm({channels}) [Pre-Norm]",
     ))
-    # Efficient_KAN (black-box, elite variant)
+    # Efficient_KAN 展开：operation2.fc1, operation2.fc2（与 pointkanElite LFP operation2 一致）
     ops.append(OperatorRef(
-        op_type="kan",
-        params={"in_features": channels, "out_features": channels, "num_points": num_points, "variant": "elite"},
-        description=f"LFP center Efficient_KAN({channels}→{channels})",
+        op_type="linear",
+        params={"in_features": channels, "out_features": channels},
+        description=f"LFP center operation2.fc1 Linear({channels}→{channels})",
     ))
-    # Pre-Norm residual add: center + KAN(LayerNorm(center))
+    ops.append(OperatorRef(
+        op_type="linear",
+        params={"in_features": channels, "out_features": channels},
+        description=f"LFP center operation2.fc2 Linear({channels}→{channels})",
+    ))
+    # Pre-Norm residual add: center + operation2(LayerNorm(center))
     ops.append(OperatorRef(
         op_type="add",
         params={"residual": True, "num_features": channels, "num_points": num_points},
@@ -262,7 +273,7 @@ def create_pointkan_elite_classification(
             out_channels=out_channels,
             in_channels=current_channels,
         )
-        
+
         layers.append(LayerDef(
             name=f"GAM-stage{s}",
             layer_type="GAM",
@@ -395,17 +406,17 @@ def get_pointkan_elite_info() -> Dict[str, Any]:
         "dim_expansion": [2, 2, 2, 2],
         "reducers": [2, 2, 2, 2],
         "k_neighbors": [24, 24, 24, 24],
-        "kan_variant": "elite (Efficient_KAN with KAT_Group rational activation)",
+        "kan_variant": "elite (Efficient_KAN 展开为 LFP 内显式 linear: operation1/2.fc1, fc2)",
         "lfp_norm_order": "Pre-Norm (LayerNorm → Efficient_KAN)",
         "differences_from_pointkan": [
-            "LFP uses Pre-Norm: x = x + KAN(LayerNorm(x))",
-            "LFP uses Efficient_KAN (KAT_Group + Linear) instead of KANLayer (B-spline + DWConv)",
+            "LFP uses Pre-Norm: x = x + operation(LayerNorm(x))",
+            "LFP 内 Efficient_KAN 展开为 4 个 linear（operation1.fc1/fc2, operation2.fc1/fc2），与真实前向 36 层严格对齐",
             "No DWConv inside KAN module",
             "Rational activation P(x)/Q(x) instead of B-spline basis functions",
         ],
         "operators_used": [
             "conv1d", "bn", "relu", "fps", "knn", "affine_norm", "s-pool",
-            "layernorm", "kan", "linear", "batchnorm1d",
+            "layernorm", "linear", "batchnorm1d",
             "adaptive_max_pool1d", "add", "mul",
         ],
     }
