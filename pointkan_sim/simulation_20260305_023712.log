@@ -1,0 +1,17 @@
+[2026-03-05 02:37:12] INFO     | Logger initialized: pointcloud_ppa_sim
+[2026-03-05 02:37:12] INFO     | Log level: INFO
+[2026-03-05 02:37:12] INFO     | Log file: simulation_20260305_023712.log
+[2026-03-05 02:37:12] INFO     | ============================================================
+[2026-03-05 02:37:12] INFO     |  Point Cloud CIM PPA Simulator
+[2026-03-05 02:37:12] INFO     | ============================================================
+[2026-03-05 02:37:12] INFO     | Supported op_types: ['batchnorm1d', 'bn', 'conv1d', 'fps', 'kan', 'knn', 'layernorm', 'linear', 'relu', 's-pool']
+[2026-03-05 02:37:12] INFO     | 
+[2026-03-05 02:37:12] INFO     | ============================================================
+[2026-03-05 02:37:12] INFO     |  Network Simulation: pointkan
+[2026-03-05 02:37:12] INFO     | ============================================================
+[2026-03-05 02:37:12] INFO     | Network: pointkan (15 layers)
+[2026-03-05 02:37:12] INFO     | Accelerator: baseline (BASELINE)
+[2026-03-05 02:37:12] INFO     | CIM parallelism: 128
+[2026-03-05 02:37:12] INFO     | Bit-serial cycles: 6
+[2026-03-05 02:37:12] INFO     | 
+[2026-03-05 02:37:12] INFO     | ERROR: Simulation failed: Conv1dOperator not yet implemented

@@ -1,0 +1,338 @@
+{
+  "title": "PointKAN PPA \u62a5\u544a",
+  "metadata": {
+    "generated_at": "2026-03-05T05:57:09.499028",
+    "version": "0.1.0",
+    "network": "pointkan-elite",
+    "accelerator": "baseline"
+  },
+  "results": {
+    "latency": {
+      "cycles": 346716,
+      "ns": 346716.0,
+      "ms": 0.346716
+    },
+    "power_mW": 27.20781786943976,
+    "area_mm2": 0.0,
+    "energy": {
+      "nJ": 9433.385780420676,
+      "uJ": 9.433385780420677
+    },
+    "breakdown": {
+      "latency": {
+        "by_layer": {
+          "embedding": 1557,
+          "GAM-stage0": 232450,
+          "LFP-stage0": 5260,
+          "stage-0": 1034,
+          "GAM-stage1": 62466,
+          "LFP-stage1": 5340,
+          "stage-1": 1114,
+          "GAM-stage2": 17794,
+          "LFP-stage2": 6418,
+          "stage-2": 2192,
+          "GAM-stage3": 5058,
+          "LFP-stage3": 4886,
+          "stage-3": 660,
+          "classifier": 487
+        },
+        "by_operator": {
+          "Conv1d": 6403,
+          "BN": 19,
+          "ReLU": 19,
+          "FPS": 138240,
+          "KNN": 179520,
+          "AffineNorm": 4,
+          "SPool": 4,
+          "LayerNorm": 8,
+          "KAN": 12288,
+          "ADD": 8704,
+          "AdaptiveMaxPool1d": 1024,
+          "Linear": 483
+        },
+        "by_module": {
+          "rram_cim": 6886,
+          "batchnorm1d": 19,
+          "relu": 19,
+          "sram_cim_array": 279552,
+          "shift_add": 9984,
+          "min_distance_table": 4544,
+          "comp_tree_1024_max": 1920,
+          "buffer": 13632,
+          "comp_bitonic_1024_min32": 16320,
+          "layernorm": 12,
+          "spool": 1028,
+          "rram_lut": 4096,
+          "dram": 4608,
+          "adder": 4096
+        }
+      },
+      "power": {},
+      "area": {},
+      "energy": {
+        "by_layer": {
+          "embedding": 8427.442481653548,
+          "GAM-stage0": 0.0,
+          "LFP-stage0": 69.64523329624616,
+          "stage-0": 43.891633296246155,
+          "GAM-stage1": 0.0,
+          "LFP-stage1": 93.9113339975574,
+          "stage-1": 68.1577339975574,
+          "GAM-stage2": 0.0,
+          "LFP-stage2": 333.93214126529887,
+          "stage-2": 308.1785412652989,
+          "GAM-stage3": 0.0,
+          "LFP-stage3": 45.5584,
+          "stage-3": 19.8048,
+          "classifier": 22.863481648946745
+        },
+        "by_operator": {
+          "Conv1d": 9152.269498771764,
+          "BN": 0.0,
+          "ReLU": 0.0,
+          "FPS": 0.0,
+          "KNN": 0.0,
+          "AffineNorm": 0.0,
+          "SPool": 0.0,
+          "LayerNorm": 0.0,
+          "KAN": 24.576,
+          "ADD": 233.67680000000018,
+          "AdaptiveMaxPool1d": 0.0,
+          "Linear": 22.863481648946745
+        },
+        "by_module": {
+          "rram_cim": 9175.13298042071,
+          "batchnorm1d": 0.0,
+          "relu": 0.0,
+          "sram_cim_array": 0.0,
+          "shift_add": 0.0,
+          "min_distance_table": 0.0,
+          "comp_tree_1024_max": 0.0,
+          "buffer": 4.096000000000002,
+          "comp_bitonic_1024_min32": 0.0,
+          "layernorm": 0.0,
+          "spool": 0.0,
+          "rram_lut": 20.48,
+          "dram": 230.40000000000012,
+          "adder": 3.276800000000001
+        }
+      }
+    }
+  },
+  "sections": [
+    {
+      "title": "breakdown_detail",
+      "content": {
+        "by_layer": {
+          "embedding": {
+            "cycles": 1557,
+            "energy_nj": 8427.442481653548,
+            "event_count": 3
+          },
+          "GAM-stage0": {
+            "cycles": 232450,
+            "energy_nj": 0.0,
+            "event_count": 30722
+          },
+          "LFP-stage0": {
+            "cycles": 5260,
+            "energy_nj": 69.64523329624616,
+            "event_count": 22
+          },
+          "stage-0": {
+            "cycles": 1034,
+            "energy_nj": 43.891633296246155,
+            "event_count": 9
+          },
+          "GAM-stage1": {
+            "cycles": 62466,
+            "energy_nj": 0.0,
+            "event_count": 8194
+          },
+          "LFP-stage1": {
+            "cycles": 5340,
+            "energy_nj": 93.9113339975574,
+            "event_count": 22
+          },
+          "stage-1": {
+            "cycles": 1114,
+            "energy_nj": 68.1577339975574,
+            "event_count": 9
+          },
+          "GAM-stage2": {
+            "cycles": 17794,
+            "energy_nj": 0.0,
+            "event_count": 2306
+          },
+          "LFP-stage2": {
+            "cycles": 6418,
+            "energy_nj": 333.93214126529887,
+            "event_count": 22
+          },
+          "stage-2": {
+            "cycles": 2192,
+            "energy_nj": 308.1785412652989,
+            "event_count": 9
+          },
+          "GAM-stage3": {
+            "cycles": 5058,
+            "energy_nj": 0.0,
+            "event_count": 642
+          },
+          "LFP-stage3": {
+            "cycles": 4886,
+            "energy_nj": 45.5584,
+            "event_count": 22
+          },
+          "stage-3": {
+            "cycles": 660,
+            "energy_nj": 19.8048,
+            "event_count": 9
+          },
+          "classifier": {
+            "cycles": 487,
+            "energy_nj": 22.863481648946745,
+            "event_count": 7
+          }
+        },
+        "by_operator": {
+          "Conv1d": {
+            "cycles": 6403,
+            "energy_nj": 9152.269498771764,
+            "event_count": 17
+          },
+          "BN": {
+            "cycles": 19,
+            "energy_nj": 0.0,
+            "event_count": 19
+          },
+          "ReLU": {
+            "cycles": 19,
+            "energy_nj": 0.0,
+            "event_count": 19
+          },
+          "FPS": {
+            "cycles": 138240,
+            "energy_nj": 0.0,
+            "event_count": 19136
+          },
+          "KNN": {
+            "cycles": 179520,
+            "energy_nj": 0.0,
+            "event_count": 22720
+          },
+          "AffineNorm": {
+            "cycles": 4,
+            "energy_nj": 0.0,
+            "event_count": 4
+          },
+          "SPool": {
+            "cycles": 4,
+            "energy_nj": 0.0,
+            "event_count": 4
+          },
+          "LayerNorm": {
+            "cycles": 8,
+            "energy_nj": 0.0,
+            "event_count": 8
+          },
+          "KAN": {
+            "cycles": 12288,
+            "energy_nj": 24.576,
+            "event_count": 24
+          },
+          "ADD": {
+            "cycles": 8704,
+            "energy_nj": 233.67680000000018,
+            "event_count": 40
+          },
+          "AdaptiveMaxPool1d": {
+            "cycles": 1024,
+            "energy_nj": 0.0,
+            "event_count": 4
+          },
+          "Linear": {
+            "cycles": 483,
+            "energy_nj": 22.863481648946745,
+            "event_count": 3
+          }
+        },
+        "by_module": {
+          "rram_cim": {
+            "cycles": 6886,
+            "energy_nj": 9175.13298042071,
+            "event_count": 20
+          },
+          "batchnorm1d": {
+            "cycles": 19,
+            "energy_nj": 0.0,
+            "event_count": 19
+          },
+          "relu": {
+            "cycles": 19,
+            "energy_nj": 0.0,
+            "event_count": 19
+          },
+          "sram_cim_array": {
+            "cycles": 279552,
+            "energy_nj": 0.0,
+            "event_count": 19968
+          },
+          "shift_add": {
+            "cycles": 9984,
+            "energy_nj": 0.0,
+            "event_count": 9984
+          },
+          "min_distance_table": {
+            "cycles": 4544,
+            "energy_nj": 0.0,
+            "event_count": 4544
+          },
+          "comp_tree_1024_max": {
+            "cycles": 1920,
+            "energy_nj": 0.0,
+            "event_count": 960
+          },
+          "buffer": {
+            "cycles": 13632,
+            "energy_nj": 4.096000000000002,
+            "event_count": 5456
+          },
+          "comp_bitonic_1024_min32": {
+            "cycles": 16320,
+            "energy_nj": 0.0,
+            "event_count": 960
+          },
+          "layernorm": {
+            "cycles": 12,
+            "energy_nj": 0.0,
+            "event_count": 12
+          },
+          "spool": {
+            "cycles": 1028,
+            "energy_nj": 0.0,
+            "event_count": 8
+          },
+          "rram_lut": {
+            "cycles": 4096,
+            "energy_nj": 20.48,
+            "event_count": 8
+          },
+          "dram": {
+            "cycles": 4608,
+            "energy_nj": 230.40000000000012,
+            "event_count": 24
+          },
+          "adder": {
+            "cycles": 4096,
+            "energy_nj": 3.276800000000001,
+            "event_count": 16
+          }
+        },
+        "total_cycles": 346716,
+        "total_energy_nj": 9433.385780420676,
+        "latency_ms": 0.346716
+      }
+    }
+  ]
+}

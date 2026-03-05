@@ -1,0 +1,45 @@
+[2026-03-05 04:45:24] INFO     | Logger initialized: pointcloud_ppa_sim
+[2026-03-05 04:45:24] INFO     | Log level: INFO
+[2026-03-05 04:45:24] INFO     | Log file: simulation_20260305_044524.log
+[2026-03-05 04:45:24] INFO     | ============================================================
+[2026-03-05 04:45:24] INFO     |  Point Cloud CIM PPA Simulator
+[2026-03-05 04:45:24] INFO     | ============================================================
+[2026-03-05 04:45:24] INFO     | Supported op_types: ['adaptive_max_pool1d', 'add', 'affine_norm', 'batchnorm1d', 'bn', 'conv1d', 'element_multiply', 'fps', 'kan', 'knn', 'layernorm', 'linear', 'mul', 'multiplication', 'relu', 's-pool']
+[2026-03-05 04:45:24] INFO     | 
+[2026-03-05 04:45:24] INFO     | ============================================================
+[2026-03-05 04:45:24] INFO     |  Network Simulation: pointkan
+[2026-03-05 04:45:24] INFO     | ============================================================
+[2026-03-05 04:45:24] INFO     | Network: pointkan (15 layers)
+[2026-03-05 04:45:24] INFO     | Accelerator: baseline (BASELINE)
+[2026-03-05 04:45:24] INFO     | CIM parallelism: 128
+[2026-03-05 04:45:24] INFO     | Bit-serial cycles: 6
+[2026-03-05 04:45:24] INFO     | 
+[2026-03-05 04:45:26] INFO     |   embedding                       1,557 cycles     3 events  [embedding]
+[2026-03-05 04:45:26] INFO     |   GAM-stage0                    232,450 cycles  30722 events  [GAM]
+[2026-03-05 04:45:26] INFO     |   LFP-stage0                      5,004 cycles    16 events  [LFP]
+[2026-03-05 04:45:26] INFO     |   stage-0                         1,034 cycles     9 events  [stage]
+[2026-03-05 04:45:26] INFO     |   GAM-stage1                     62,466 cycles  8194 events  [GAM]
+[2026-03-05 04:45:26] INFO     |   LFP-stage1                      5,084 cycles    16 events  [LFP]
+[2026-03-05 04:45:27] INFO     |   stage-1                         1,114 cycles     9 events  [stage]
+[2026-03-05 04:45:27] INFO     |   GAM-stage2                     17,794 cycles  2306 events  [GAM]
+[2026-03-05 04:45:27] INFO     |   LFP-stage2                      6,162 cycles    16 events  [LFP]
+[2026-03-05 04:45:27] INFO     |   stage-2                         2,192 cycles     9 events  [stage]
+[2026-03-05 04:45:27] INFO     |   GAM-stage3                      5,058 cycles   642 events  [GAM]
+[2026-03-05 04:45:27] INFO     |   LFP-stage3                      4,630 cycles    16 events  [LFP]
+[2026-03-05 04:45:27] INFO     |   stage-3                           660 cycles     9 events  [stage]
+[2026-03-05 04:45:27] INFO     |   classifier                        487 cycles     7 events  [classifier]
+[2026-03-05 04:45:27] INFO     | 
+Running simulation: 41974 events, 345,692 estimated cycles...
+[2026-03-05 04:45:27] INFO     | ============================================================
+[2026-03-05 04:45:27] INFO     |  Simulation Results
+[2026-03-05 04:45:27] INFO     | ============================================================
+[2026-03-05 04:45:27] INFO     |   Network:     pointkan
+[2026-03-05 04:45:27] INFO     |   Accelerator: baseline (BASELINE)
+[2026-03-05 04:45:27] INFO     |   Clock:       1.0 ns (1000 MHz)
+[2026-03-05 04:45:27] INFO     | ------------------------------------------------------------
+[2026-03-05 04:45:27] INFO     |   Latency:     345,692 cycles (0.346 ms)
+[2026-03-05 04:45:27] INFO     |   Energy:      9298.63 nJ (9.2986 uJ)
+[2026-03-05 04:45:27] INFO     |   Avg Power:   26.90 mW
+[2026-03-05 04:45:27] INFO     |   Peak Power:  5419.58 mW
+[2026-03-05 04:45:27] INFO     |   Events:      41,974
+[2026-03-05 04:45:27] INFO     | ============================================================

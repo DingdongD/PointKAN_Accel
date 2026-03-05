@@ -332,6 +332,7 @@ class Local_Feature_Processing(nn.Module):
         self.operation2 = nn.Sequential(*operation2)
         self.norm1 =  nn.LayerNorm(out_channels)
         self.norm2 =  nn.LayerNorm(out_channels)
+        
     def forward(self, x, center):
         b, n, s, d = x.size()  
         x = x.permute(0, 1, 3, 2)

@@ -9,9 +9,10 @@ Architecture overview (PointKAN classification, ModelNet40):
     Input [B, 3, 1024]
      → Embedding: Conv1d(3→32) + BN + ReLU
      → Stage 0~3 (x4, each: points halved, channels doubled):
-         ├ GAM: FPS → KNN → S-Pool
-         ├ LFP: Conv1d+BN+ReLU → KANLayer → LayerNorm (x2 paths) → Add
-         └ GFP: ConvBNReLURes1D (Conv1d+BN+ReLU + Conv1d+BN + residual)
+         ├ GAM: FPS → KNN → AffineNorm → Concat → S-Pool
+         ├ LFP: Conv1d+BN+ReLU → KANLayer → LayerNorm → AdaptiveMaxPool1d (local);
+                 transfer2 → KAN → LayerNorm (center); Add
+         └ GFP: Conv1d→BN→ReLU → Conv1d→BN → Add(residual) → ReLU
      → Global MaxPool
      → Classifier: Linear→BN1d→ReLU (x2) → Linear
 
@@ -32,8 +33,9 @@ class OperatorRef:
 
     Attributes:
         op_type: Operator type name. One of:
-            "conv1d", "bn", "relu", "fps", "knn", "s-pool",
-            "layernorm", "linear", "batchnorm1d", "kan"
+            "conv1d", "bn", "relu", "fps", "knn", "affine_norm", "s-pool",
+            "layernorm", "linear", "batchnorm1d", "kan",
+            "adaptive_max_pool1d", "add", "mul"
         params: Operator-specific parameter dict
         description: Human-readable description of this operator instance
     """
@@ -126,12 +128,13 @@ def _build_gam_operators(
     ref_points: int,
     k: int,
     out_channels: int,
+    in_channels: int,
 ) -> List[OperatorRef]:
     """
     Build operator list for a GAM (Geometric Affine Module) layer.
 
-    GAM pipeline: FPS → KNN → (Gather → Affine Norm → Concat) → S-Pool
-    Only FPS, KNN, S-Pool are in the allowed operator set.
+    GAM pipeline: FPS → KNN → (Gather → AffineNorm → Concat) → S-Pool
+    AffineNorm: (x-mean)/(std+eps) then alpha*x+beta (fixed at inference).
     """
     return [
         OperatorRef(
@@ -149,6 +152,16 @@ def _build_gam_operators(
             description=f"KNN: query={output_points}, ref={ref_points}, K={k}",
         ),
         OperatorRef(
+            op_type="affine_norm",
+            params={
+                "num_features": in_channels,
+                "num_points": output_points,
+                "normalize": "anchor",
+                "use_xyz": False,
+            },
+            description=f"GAM AffineNorm (inference fixed): norm then alpha*x+beta, dim={in_channels}",
+        ),
+        OperatorRef(
             op_type="s-pool",
             params={
                 "in_channels": out_channels,
@@ -162,16 +175,15 @@ def _build_gam_operators(
 
 def _build_lfp_operators_pointkan(
     channels: int,
+    num_points: int,
 ) -> List[OperatorRef]:
     """
     Build operator list for a PointKAN LFP (Local Feature Processing) layer.
 
     PointKAN LFP structure (per stage):
-      Local path:  transfer1(Conv1d+BN+ReLU) → KANLayer → LayerNorm → MaxPool(K)
+      Local path:  transfer1(Conv1d+BN+ReLU) → KANLayer → LayerNorm → AdaptiveMaxPool1d(1)
       Center path: transfer2(Conv1d+BN+ReLU) → KANLayer → LayerNorm
-      Fusion:      local + center (element-wise add, ignored)
-
-    MaxPool and Add are not in the allowed operator set and are omitted.
+      Fusion:      local + center (element-wise add)
     Operator order follows forward execution strictly.
     """
     ops = []
@@ -196,14 +208,20 @@ def _build_lfp_operators_pointkan(
     # KANLayer (black-box, standard B-spline variant)
     ops.append(OperatorRef(
         op_type="kan",
-        params={"in_features": channels, "out_features": channels, "variant": "standard"},
+        params={"in_features": channels, "out_features": channels, "num_points": num_points, "variant": "standard"},
         description=f"LFP local KANLayer({channels}→{channels})",
     ))
     # LayerNorm
     ops.append(OperatorRef(
         op_type="layernorm",
-        params={"normalized_shape": channels},
+        params={"normalized_shape": channels, "num_points": num_points},
         description=f"LFP local LayerNorm({channels})",
+    ))
+    # AdaptiveMaxPool1d(output_size=1) on local path
+    ops.append(OperatorRef(
+        op_type="adaptive_max_pool1d",
+        params={"output_size": 1, "num_features": channels, "num_points": num_points},
+        description="LFP local AdaptiveMaxPool1d(1)",
     ))
 
     # --- Center path ---
@@ -226,25 +244,31 @@ def _build_lfp_operators_pointkan(
     # KANLayer (black-box, standard B-spline variant)
     ops.append(OperatorRef(
         op_type="kan",
-        params={"in_features": channels, "out_features": channels, "variant": "standard"},
+        params={"in_features": channels, "out_features": channels, "num_points": num_points, "variant": "standard"},
         description=f"LFP center KANLayer({channels}→{channels})",
     ))
     # LayerNorm
     ops.append(OperatorRef(
         op_type="layernorm",
-        params={"normalized_shape": channels},
+        params={"normalized_shape": channels, "num_points": num_points},
         description=f"LFP center LayerNorm({channels})",
+    ))
+    # Fusion: element-wise add (local + center)
+    ops.append(OperatorRef(
+        op_type="add",
+        params={"num_features": channels, "num_points": num_points},
+        description="LFP fusion: local + center",
     ))
 
     return ops
 
 
-def _build_gfp_operators(channels: int) -> List[OperatorRef]:
+def _build_gfp_operators(channels: int, num_points: int) -> List[OperatorRef]:
     """
     Build operator list for a GFP (Global Feature Processing) layer.
 
     GFP = ConvBNReLURes1D: two Conv1d-BN blocks with residual.
-    Structure: Conv1d → BN → ReLU → Conv1d → BN → (+ residual, ignored)
+    Structure: Conv1d → BN → ReLU → Conv1d → BN → Add(residual) → ReLU
     """
     return [
         OperatorRef(
@@ -271,6 +295,16 @@ def _build_gfp_operators(channels: int) -> List[OperatorRef]:
             op_type="bn",
             params={"num_features": channels},
             description=f"GFP BN({channels}) [layer 2]",
+        ),
+        OperatorRef(
+            op_type="add",
+            params={"residual": True, "num_features": channels, "num_points": num_points},
+            description="GFP residual add",
+        ),
+        OperatorRef(
+            op_type="relu",
+            params={"num_features": channels},
+            description="GFP final ReLU (act after residual)",
         ),
     ]
 
@@ -361,6 +395,7 @@ def create_pointkan_classification(
             ref_points=current_points,
             k=k,
             out_channels=out_channels,
+            in_channels=current_channels,
         )
         layers.append(LayerDef(
             name=f"GAM-stage{s}",
@@ -373,7 +408,7 @@ def create_pointkan_classification(
         ))
 
         # --- LFP ---
-        lfp_ops = _build_lfp_operators_pointkan(channels=out_channels)
+        lfp_ops = _build_lfp_operators_pointkan(channels=out_channels, num_points=out_points)
         layers.append(LayerDef(
             name=f"LFP-stage{s}",
             layer_type="LFP",
@@ -386,7 +421,7 @@ def create_pointkan_classification(
         ))
 
         # --- GFP (stage-n) ---
-        gfp_ops = _build_gfp_operators(channels=out_channels)
+        gfp_ops = _build_gfp_operators(channels=out_channels, num_points=out_points)
         layers.append(LayerDef(
             name=f"stage-{s}",
             layer_type="stage",
@@ -499,8 +534,9 @@ def get_pointkan_info() -> Dict[str, Any]:
         "kan_variant": "standard (B-spline KAN + DWConv + residual)",
         "lfp_norm_order": "Post-Norm (KAN → LayerNorm)",
         "operators_used": [
-            "conv1d", "bn", "relu", "fps", "knn", "s-pool",
+            "conv1d", "bn", "relu", "fps", "knn", "affine_norm", "s-pool",
             "layernorm", "kan", "linear", "batchnorm1d",
+            "adaptive_max_pool1d", "add", "mul",
         ],
     }
 

@@ -9,10 +9,10 @@ Architecture overview (PointKAN-Elite classification, ModelNet40):
     Input [B, 3, 1024]
      → Embedding: Conv1d(3→32) + BN + ReLU
      → Stage 0~3 (x4, each: points halved, channels doubled):
-         ├ GAM: FPS → KNN → S-Pool                    (same as PointKAN)
-         ├ LFP: Conv1d+BN+ReLU → LayerNorm → Efficient_KAN (Pre-Norm)
-         │      (x2 paths, local + center) → Add
-         └ GFP: ConvBNReLURes1D                        (same as PointKAN)
+         ├ GAM: FPS → KNN → AffineNorm → S-Pool       (same as PointKAN, inference fixed)
+         ├ LFP: transfer1 → LayerNorm → Efficient_KAN → Add(residual) → AdaptiveMaxPool1d(1);
+         │      transfer2 → LayerNorm → Efficient_KAN → Add(residual); Add(fusion)
+         └ GFP: Conv1d→BN→ReLU → Conv1d→BN → Add(residual) → ReLU  (same as PointKAN)
      → Global MaxPool
      → Classifier: Linear→BN1d→ReLU (x2) → Linear
 
@@ -72,22 +72,17 @@ class PointKANEliteConfig:
 # LFP operator builder (Elite-specific: Pre-Norm)
 # ---------------------------------------------------------------------------
 
-def _build_lfp_operators_elite(channels: int) -> List[OperatorRef]:
+def _build_lfp_operators_elite(channels: int, num_points: int) -> List[OperatorRef]:
     """
     Build operator list for a PointKAN-Elite LFP layer.
 
-    Key difference from standard PointKAN:
-      - Pre-Norm residual: x = x + Efficient_KAN(LayerNorm(x))
-      - Operator order: Conv1d+BN+ReLU → LayerNorm → KAN (not KAN → LayerNorm)
-      - KAN variant is "elite" (Efficient_KAN with rational activation)
+    Pre-Norm residual: x = x + Efficient_KAN(LayerNorm(x))
+    Operator order: Conv1d+BN+ReLU → LayerNorm → KAN → Add(residual); then MaxPool / fusion Add.
 
     PointKAN-Elite LFP structure (per stage):
-      Local path:  transfer1(Conv1d+BN+ReLU) → LayerNorm → Efficient_KAN → Add
-                   → MaxPool(K) → Reshape
-      Center path: transfer2(Conv1d+BN+ReLU) → LayerNorm → Efficient_KAN → Add
-      Fusion:      local + center (element-wise add, ignored)
-
-    MaxPool and Add are not in the allowed operator set and are omitted.
+      Local path:  transfer1 → LayerNorm → Efficient_KAN → Add(residual) → AdaptiveMaxPool1d(1)
+      Center path: transfer2 → LayerNorm → Efficient_KAN → Add(residual)
+      Fusion:      local + center (element-wise add)
     """
     ops = []
 
@@ -111,14 +106,26 @@ def _build_lfp_operators_elite(channels: int) -> List[OperatorRef]:
     # Pre-Norm: LayerNorm BEFORE Efficient_KAN
     ops.append(OperatorRef(
         op_type="layernorm",
-        params={"normalized_shape": channels},
+        params={"normalized_shape": channels, "num_points": num_points},
         description=f"LFP local LayerNorm({channels}) [Pre-Norm]",
     ))
     # Efficient_KAN (black-box, elite variant with rational activation)
     ops.append(OperatorRef(
         op_type="kan",
-        params={"in_features": channels, "out_features": channels, "variant": "elite"},
+        params={"in_features": channels, "out_features": channels, "num_points": num_points, "variant": "elite"},
         description=f"LFP local Efficient_KAN({channels}→{channels})",
+    ))
+    # Pre-Norm residual add: x + KAN(LayerNorm(x))
+    ops.append(OperatorRef(
+        op_type="add",
+        params={"residual": True, "num_features": channels, "num_points": num_points},
+        description="LFP local residual add (Pre-Norm)",
+    ))
+    # AdaptiveMaxPool1d(output_size=1) on local path
+    ops.append(OperatorRef(
+        op_type="adaptive_max_pool1d",
+        params={"output_size": 1, "num_features": channels, "num_points": num_points},
+        description="LFP local AdaptiveMaxPool1d(1)",
     ))
 
     # --- Center path ---
@@ -141,14 +148,26 @@ def _build_lfp_operators_elite(channels: int) -> List[OperatorRef]:
     # Pre-Norm: LayerNorm BEFORE Efficient_KAN
     ops.append(OperatorRef(
         op_type="layernorm",
-        params={"normalized_shape": channels},
+        params={"normalized_shape": channels, "num_points": num_points},
         description=f"LFP center LayerNorm({channels}) [Pre-Norm]",
     ))
     # Efficient_KAN (black-box, elite variant)
     ops.append(OperatorRef(
         op_type="kan",
-        params={"in_features": channels, "out_features": channels, "variant": "elite"},
+        params={"in_features": channels, "out_features": channels, "num_points": num_points, "variant": "elite"},
         description=f"LFP center Efficient_KAN({channels}→{channels})",
+    ))
+    # Pre-Norm residual add: center + KAN(LayerNorm(center))
+    ops.append(OperatorRef(
+        op_type="add",
+        params={"residual": True, "num_features": channels, "num_points": num_points},
+        description="LFP center residual add (Pre-Norm)",
+    ))
+    # Fusion: element-wise add (local + center)
+    ops.append(OperatorRef(
+        op_type="add",
+        params={"num_features": channels, "num_points": num_points},
+        description="LFP fusion: local + center",
     ))
 
     return ops
@@ -241,6 +260,7 @@ def create_pointkan_elite_classification(
             ref_points=current_points,
             k=k,
             out_channels=out_channels,
+            in_channels=current_channels,
         )
         layers.append(LayerDef(
             name=f"GAM-stage{s}",
@@ -253,7 +273,7 @@ def create_pointkan_elite_classification(
         ))
 
         # --- LFP (Elite-specific: Pre-Norm with Efficient_KAN) ---
-        lfp_ops = _build_lfp_operators_elite(channels=out_channels)
+        lfp_ops = _build_lfp_operators_elite(channels=out_channels, num_points=out_points)
         layers.append(LayerDef(
             name=f"LFP-stage{s}",
             layer_type="LFP",
@@ -266,7 +286,7 @@ def create_pointkan_elite_classification(
         ))
 
         # --- GFP (stage-n, identical to standard PointKAN) ---
-        gfp_ops = _build_gfp_operators(channels=out_channels)
+        gfp_ops = _build_gfp_operators(channels=out_channels, num_points=out_points)
         layers.append(LayerDef(
             name=f"stage-{s}",
             layer_type="stage",
@@ -383,8 +403,9 @@ def get_pointkan_elite_info() -> Dict[str, Any]:
             "Rational activation P(x)/Q(x) instead of B-spline basis functions",
         ],
         "operators_used": [
-            "conv1d", "bn", "relu", "fps", "knn", "s-pool",
+            "conv1d", "bn", "relu", "fps", "knn", "affine_norm", "s-pool",
             "layernorm", "kan", "linear", "batchnorm1d",
+            "adaptive_max_pool1d", "add", "mul",
         ],
     }
 

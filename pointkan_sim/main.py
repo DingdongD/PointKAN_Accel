@@ -1,113 +1,161 @@
 """
-Point Cloud CIM PPA Simulator - Main Entry Point
-=================================================
+PointKAN CIM PPA 仿真器 - 主入口
+================================
 
-Simulates PointKAN / PointKAN-Elite network inference on
-baseline and acc CIM accelerator architectures.
+在 CIM（存算一体）硬件仿真器上对 PointKAN / PointKAN-Elite 进行
+端到端 PPA（性能-功耗-面积）评估，支持 baseline / acc 等加速器配置。
 
-Usage:
-    python main.py --help
-    python main.py --demo
-    python main.py --network pointkan --accelerator baseline
-    python main.py --network pointkan-elite --accelerator acc
-    python main.py --list_accelerators
+使用方式（建议在工程根目录 PointKAN-pytorch 下执行）:
+    python -m pointkan_sim.main --help
+    python -m pointkan_sim.main --demo
+    python -m pointkan_sim.main --network pointkan --accelerator baseline
+    python -m pointkan_sim.main --network pointkan-elite --accelerator acc
+    python -m pointkan_sim.main --output report.json
 """
 
 import argparse
-import sys
 import os
-from typing import Optional, List, Dict, Any
+import sys
+from typing import Any, Dict, List, Optional
 
-# Fix import paths when running as script
+# -----------------------------------------------------------------------------
+# 路径修正（仅当被直接以脚本方式运行且未作为包导入时执行）
+# 目的：将上级目录加入 sys.path，使 import pointkan_sim 能成功。
+# 若使用 python -m pointkan_sim.main 启动则 __package__ 非空，此处不会执行。
+# -----------------------------------------------------------------------------
 if __name__ == "__main__" and __package__ is None:
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    parent_dir = os.path.dirname(current_dir)
-    if parent_dir not in sys.path:
-        sys.path.insert(0, parent_dir)
+    _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if _root not in sys.path:
+        sys.path.insert(0, _root)
 
 from pointkan_sim.configs.hw_config import (
-    get_accelerator_config, list_accelerator_configs, HardwareConfig,
+    get_accelerator_config,
+    list_accelerator_configs,
+    HardwareConfig,
 )
 from pointkan_sim.network.pointkan_net import (
-    OperatorRef, LayerDef,
+    LayerDef,
+    OperatorRef,
     create_pointkan_classification,
-    POINTKAN_LAYERS,
 )
-from pointkan_sim.network.pointkan_elite_net import (
-    create_pointkan_elite_classification,
-    POINTKAN_ELITE_LAYERS,
-)
+from pointkan_sim.network.pointkan_elite_net import create_pointkan_elite_classification
 from pointkan_sim.operators.dispatcher import (
-    dispatch_operator, dispatch_layer, list_supported_op_types,
+    dispatch_layer,
+    list_supported_op_types,
+)
+from pointkan_sim.integration.mnsim_netstruct import (
+    build_netstruct_from_layers,
+    run_mnsim_full,
 )
 from pointkan_sim.simulator.scheduler import Scheduler
-from pointkan_sim.simulator.event import Event
-from pointkan_sim.report.reporter import Reporter, PPAResult
+from pointkan_sim.report.reporter import Reporter, create_ppa_result
+from pointkan_sim.analysis.breakdown import analyze_simulation_events_breakdown
 from pointkan_sim.utils.logger import (
-    setup_logger, log_info, log_section, log_separator,
+    setup_logger,
+    log_info,
+    log_section,
+    log_separator,
     LogLevel,
-)
-from pointkan_sim.utils.units import (
-    cycles_to_ns, power_from_energy_nJ,
 )
 
 
 # =============================================================================
-# CLI argument parsing
+# 命令行参数解析
 # =============================================================================
 
 def parse_args() -> argparse.Namespace:
-    """Parse command line arguments."""
+    """
+    解析命令行参数。
+
+    Returns:
+        解析后的命名空间，包含 demo / network / accelerator / output 等字段。
+    """
     parser = argparse.ArgumentParser(
-        description="Point Cloud CIM PPA Simulator (new architecture)",
+        description="PointKAN CIM PPA 仿真器（点云存算一体性能/功耗评估）",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Examples:
-  python main.py --demo
-  python main.py --network pointkan --accelerator baseline
-  python main.py --network pointkan-elite --accelerator acc
-  python main.py --list_accelerators
-        """
+示例:
+  python -m pointkan_sim.main --demo
+  python -m pointkan_sim.main --network pointkan --accelerator baseline
+  python -m pointkan_sim.main --network pointkan-elite --accelerator acc --output report.json
+  python -m pointkan_sim.main --list_accelerators
+        """,
     )
 
     parser.add_argument(
-        "--demo", action="store_true",
-        help="Run demo simulation (PointKAN on baseline)")
+        "--demo",
+        action="store_true",
+        help="运行演示（PointKAN + baseline 加速器）",
+    )
     parser.add_argument(
-        "--network", type=str, default=None,
+        "--network",
+        type=str,
+        default=None,
         choices=["pointkan", "pointkan-elite"],
-        help="Network to simulate")
+        help="要仿真的网络",
+    )
     parser.add_argument(
-        "--accelerator", type=str, default="baseline",
-        help="Accelerator config name (default: baseline)")
+        "--accelerator",
+        type=str,
+        default="baseline",
+        help="加速器配置名称（默认: baseline）",
+    )
     parser.add_argument(
-        "--list_accelerators", action="store_true",
-        help="List available accelerator configurations and exit")
+        "--list_accelerators",
+        action="store_true",
+        help="列出可用加速器配置后退出",
+    )
     parser.add_argument(
-        "--input_points", type=int, default=1024,
-        help="Number of input points (default: 1024)")
+        "--input_points",
+        type=int,
+        default=1024,
+        help="输入点云点数（默认: 1024）",
+    )
     parser.add_argument(
-        "--num_classes", type=int, default=40,
-        help="Number of output classes (default: 40)")
+        "--num_classes",
+        type=int,
+        default=40,
+        help="分类类别数（默认: 40）",
+    )
     parser.add_argument(
-        "--log_level", type=str, default="INFO",
+        "--log_level",
+        type=str,
+        default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
-        help="Logging level (default: INFO)")
+        help="日志级别（默认: INFO）",
+    )
     parser.add_argument(
-        "--show_events", action="store_true",
-        help="Show detailed event statistics")
+        "--show_events",
+        action="store_true",
+        help="打印详细事件统计（按算子/阶段等）",
+    )
     parser.add_argument(
-        "--show_layers", action="store_true",
-        help="Show per-layer breakdown")
+        "--show_layers",
+        action="store_true",
+        help="打印每层周期与事件数",
+    )
     parser.add_argument(
-        "--output", type=str, default=None,
-        help="Output report file path (JSON)")
+        "--output",
+        type=str,
+        default=None,
+        help="报告输出路径，按扩展名自动选择 JSON 或 CSV",
+    )
+    parser.add_argument(
+        "--mnsim_full",
+        action="store_true",
+        help="对 conv1d/linear 使用 MNSIM 全 NetStruct（Tile/NoC 级）的延迟与能耗",
+    )
+    parser.add_argument(
+        "--no_mnsim_full",
+        action="store_true",
+        help="禁用 MNSIM 全 NetStruct，仅使用 PE 级估算",
+    )
 
     return parser.parse_args()
 
 
 # =============================================================================
-# Network loading
+# 网络加载
 # =============================================================================
 
 def load_network(
@@ -116,74 +164,83 @@ def load_network(
     num_classes: int = 40,
 ) -> List[LayerDef]:
     """
-    Load network layer definitions.
+    根据名称加载网络层定义（LayerDef 有序列表）。
 
     Args:
-        name: "pointkan" or "pointkan-elite"
-        input_points: Number of input points
-        num_classes: Number of output classes
+        name: 网络名称，"pointkan" 或 "pointkan-elite"
+        input_points: 输入点云点数
+        num_classes: 分类数
 
     Returns:
-        Ordered list of LayerDef.
+        按前向顺序排列的 LayerDef 列表。
+
+    Raises:
+        ValueError: 未知网络名时抛出。
     """
     if name == "pointkan":
         return create_pointkan_classification(
             input_points=input_points,
             num_classes=num_classes,
         )
-    elif name == "pointkan-elite":
+    if name == "pointkan-elite":
         return create_pointkan_elite_classification(
             input_points=input_points,
             num_classes=num_classes,
         )
-    else:
-        raise ValueError(f"Unknown network: {name}")
+    raise ValueError(f"未知网络: {name}")
 
 
 # =============================================================================
-# Simulation core
+# 仿真核心
 # =============================================================================
 
 def simulate_network(
     layers: List[LayerDef],
     hw_config: HardwareConfig,
     show_layers: bool = False,
+    mnsim_context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
-    Simulate a full network using the dispatcher and scheduler.
+    对整网进行周期级仿真：按层派发算子生成事件，送入调度器执行。
 
-    For each layer, dispatches all OperatorRefs to generate events,
-    then feeds them to the scheduler for cycle-accurate simulation.
+    - 若提供 mnsim_context（含 mnsim_latency_ns / mnsim_energy_nj / mnsim_index），
+      conv1d/linear 将使用 MNSIM 全 NetStruct 的每层延迟与能耗，否则使用 PE 级适配器。
+    - 每个事件的 metadata 会写入当前层名与层类型，便于后续按层/按算子/按模块做 breakdown。
 
     Args:
-        layers: Network layer definitions
-        hw_config: Hardware configuration
-        show_layers: Print per-layer info
+        layers: 网络层定义列表
+        hw_config: 硬件配置
+        show_layers: 是否在控制台打印每层周期与事件数
+        mnsim_context: 可选 MNSIM 全 NetStruct 结果上下文（会被修改：mnsim_index 递增）
 
     Returns:
-        Dictionary with simulation results.
+        包含 total_cycles、total_energy_nJ、latency_ms、avg_power_mW、peak_power_mW、
+        layer_results、sim_result 等键的字典。
     """
     scheduler = Scheduler(hw_config=hw_config)
     layer_results: List[Dict[str, Any]] = []
     current_cycle = 0
 
     for layer in layers:
+        # 无算子层（如全局池化）只记录占位信息
         if not layer.operators:
-            # Skip layers with no CIM-mappable operators (e.g., global_maxpool)
             layer_results.append({
-                'name': layer.name,
-                'type': layer.layer_type,
-                'cycles': 0,
-                'events': 0,
-                'description': layer.description,
+                "name": layer.name,
+                "type": layer.layer_type,
+                "cycles": 0,
+                "events": 0,
+                "description": layer.description,
             })
             continue
 
-        # Dispatch all operators in this layer
-        layer_events = dispatch_layer(layer.operators, hw_config)
+        # 派发该层所有算子，得到带相对周期的 Event 列表（可能使用 mnsim_context）
+        layer_events = dispatch_layer(layer.operators, hw_config, mnsim_context)
 
-        # Add events to scheduler with cycle offset
+        # 将事件加入调度器，并统一打上层名与层类型，便于 breakdown 聚合
         for event in layer_events:
+            meta = dict(event.metadata or {})
+            meta["layer_name"] = layer.name
+            meta["layer_type"] = layer.layer_type
             scheduler.event_queue.add_event(
                 cycle=event.cycle + current_cycle,
                 operator=event.operator,
@@ -194,176 +251,306 @@ def simulate_network(
                 power=event.power,
                 duration=event.duration,
                 clock_period_ns=event.clock_period_ns,
-                metadata=event.metadata,
+                metadata=meta,
             )
 
-        # Calculate layer span
-        if layer_events:
-            layer_span = max(e.cycle + e.duration for e in layer_events)
-        else:
-            layer_span = 0
-
+        # 本层时间跨度与统计
+        layer_span = max(
+            (e.cycle + e.duration for e in layer_events),
+            default=0,
+        )
         layer_results.append({
-            'name': layer.name,
-            'type': layer.layer_type,
-            'cycles': layer_span,
-            'events': len(layer_events),
-            'description': layer.description,
+            "name": layer.name,
+            "type": layer.layer_type,
+            "cycles": layer_span,
+            "events": len(layer_events),
+            "description": layer.description,
         })
 
         if show_layers:
-            log_info(f"  {layer.name:<25s}  {layer_span:>10,} cycles  "
-                     f"{len(layer_events):>4} events  [{layer.layer_type}]")
+            log_info(
+                f"  {layer.name:<25s}  {layer_span:>10,} cycles  "
+                f"{len(layer_events):>4} events  [{layer.layer_type}]"
+            )
 
         current_cycle += layer_span
 
-    # Run simulation
-    log_info(f"\nRunning simulation: {len(scheduler.event_queue)} events, "
-             f"{current_cycle:,} estimated cycles...")
+    # 运行周期级仿真，汇总总周期、总能耗、峰值功率等
+    log_info(
+        f"\n运行仿真: {len(scheduler.event_queue)} 个事件, "
+        f"约 {current_cycle:,} 周期..."
+    )
     sim_result = scheduler.run_simulation()
 
+    clock_period = hw_config.clock_period
     total_cycles = sim_result.total_cycles
     total_energy = sim_result.total_energy
-    clock_period = hw_config.clock_period
-
     latency_ns = total_cycles * clock_period
     latency_ms = latency_ns / 1e6
-    avg_power = total_energy / latency_ns * 1e3 if latency_ns > 0 else 0.0
+    avg_power = (total_energy / latency_ns * 1e3) if latency_ns > 0 else 0.0
 
     return {
-        'total_cycles': total_cycles,
-        'total_energy_nJ': total_energy,
-        'latency_ns': latency_ns,
-        'latency_ms': latency_ms,
-        'avg_power_mW': avg_power,
-        'peak_power_mW': sim_result.peak_power,
-        'total_events': len(sim_result.events),
-        'layer_results': layer_results,
-        'sim_result': sim_result,
+        "total_cycles": total_cycles,
+        "total_energy_nJ": total_energy,
+        "latency_ns": latency_ns,
+        "latency_ms": latency_ms,
+        "avg_power_mW": avg_power,
+        "peak_power_mW": sim_result.peak_power,
+        "total_events": len(sim_result.events),
+        "layer_results": layer_results,
+        "sim_result": sim_result,
     }
 
 
 # =============================================================================
-# Printing
+# 结果打印
 # =============================================================================
 
 def print_simulation_summary(
     results: Dict[str, Any],
     hw_config: HardwareConfig,
     network_name: str,
-):
-    """Print simulation summary."""
-    log_section("Simulation Results")
-    log_info(f"  Network:     {network_name}")
-    log_info(f"  Accelerator: {hw_config.accelerator_name} "
-             f"({hw_config.accelerator_type.name})")
-    log_info(f"  Clock:       {hw_config.clock_period} ns "
-             f"({1000/hw_config.clock_period:.0f} MHz)")
+) -> None:
+    """在控制台打印仿真汇总：延迟、能耗、平均/峰值功率、事件数等。"""
+    log_section("仿真结果")
+    log_info(f"  网络:       {network_name}")
+    log_info(
+        f"  加速器:     {hw_config.accelerator_name} "
+        f"({hw_config.accelerator_type.name})"
+    )
+    log_info(
+        f"  时钟:       {hw_config.clock_period} ns "
+        f"({1000 / hw_config.clock_period:.0f} MHz)"
+    )
     log_separator("-")
-    log_info(f"  Latency:     {results['total_cycles']:,} cycles "
-             f"({results['latency_ms']:.3f} ms)")
-    log_info(f"  Energy:      {results['total_energy_nJ']:.2f} nJ "
-             f"({results['total_energy_nJ']/1000:.4f} uJ)")
-    log_info(f"  Avg Power:   {results['avg_power_mW']:.2f} mW")
-    log_info(f"  Peak Power:  {results['peak_power_mW']:.2f} mW")
-    log_info(f"  Events:      {results['total_events']:,}")
+    log_info(
+        f"  延迟:       {results['total_cycles']:,} 周期 "
+        f"({results['latency_ms']:.3f} ms)"
+    )
+    log_info(
+        f"  能耗:       {results['total_energy_nJ']:.2f} nJ "
+        f"({results['total_energy_nJ'] / 1000:.4f} uJ)"
+    )
+    log_info(f"  平均功率:   {results['avg_power_mW']:.2f} mW")
+    log_info(f"  峰值功率:   {results['peak_power_mW']:.2f} mW")
+    log_info(f"  事件数:     {results['total_events']:,}")
     log_separator()
 
 
-def print_event_statistics(sim_result, hw_config: HardwareConfig):
-    """Print detailed event statistics."""
-    stats = sim_result.statistics
+def print_event_statistics(
+    sim_result: Any,
+    hw_config: HardwareConfig,
+) -> None:
+    """打印按算子、按阶段、按功率的详细事件统计。"""
+    stats = getattr(sim_result, "statistics", {})
 
-    if 'events_by_operator' in stats:
-        log_info("\n  Events by Operator:")
-        for op_name, count in sorted(stats['events_by_operator'].items()):
+    if "events_by_operator" in stats:
+        log_info("\n  按算子事件数:")
+        for op_name, count in sorted(stats["events_by_operator"].items()):
             log_info(f"    {op_name}: {count:,}")
 
-    if 'events_by_stage' in stats:
-        log_info("\n  Events by Stage:")
-        for stage_name, count in sorted(stats['events_by_stage'].items()):
+    if "events_by_stage" in stats:
+        log_info("\n  按阶段事件数:")
+        for stage_name, count in sorted(stats["events_by_stage"].items()):
             log_info(f"    {stage_name}: {count:,}")
 
-    if 'power' in stats:
-        log_info("\n  Power Statistics:")
-        log_info(f"    Average: {stats['power']['average_mW']:.2f} mW")
-        log_info(f"    Peak:    {stats['power']['peak_mW']:.2f} mW")
-        log_info(f"    Min:     {stats['power']['min_mW']:.2f} mW")
+    if "power" in stats:
+        log_info("\n  功率统计:")
+        log_info(f"    平均: {stats['power']['average_mW']:.2f} mW")
+        log_info(f"    峰值: {stats['power']['peak_mW']:.2f} mW")
+        log_info(f"    最小: {stats['power']['min_mW']:.2f} mW")
 
 
 # =============================================================================
-# Main workflows
+# Breakdown 与 PPA 结果
+# =============================================================================
+
+def _attach_breakdown_and_ppa(
+    results: Dict[str, Any],
+    hw_config: HardwareConfig,
+) -> None:
+    """
+    根据仿真事件列表计算按层/按算子/按模块的 breakdown，并写入 results。
+
+    会向 results 中写入:
+    - breakdown: 原始 breakdown 字典（by_layer / by_operator / by_module，含 cycles、energy_nj、event_count）
+    - ppa_result: PPAResult 实例，含总延迟/能耗及 latency_breakdown、energy_breakdown，供 Reporter 输出。
+    """
+    events = getattr(results.get("sim_result"), "events", [])
+    clock_ns = hw_config.clock_period
+    breakdown = analyze_simulation_events_breakdown(events, clock_ns)
+    results["breakdown"] = breakdown
+
+    latency_breakdown = {
+        "by_layer": {k: v["cycles"] for k, v in breakdown["by_layer"].items()},
+        "by_operator": {k: v["cycles"] for k, v in breakdown["by_operator"].items()},
+        "by_module": {k: v["cycles"] for k, v in breakdown["by_module"].items()},
+    }
+    energy_breakdown = {
+        "by_layer": {k: v["energy_nj"] for k, v in breakdown["by_layer"].items()},
+        "by_operator": {k: v["energy_nj"] for k, v in breakdown["by_operator"].items()},
+        "by_module": {k: v["energy_nj"] for k, v in breakdown["by_module"].items()},
+    }
+
+    results["ppa_result"] = create_ppa_result(
+        latency_cycles=results["total_cycles"],
+        power_mW=results["avg_power_mW"],
+        area_mm2=0.0,
+        clock_period_ns=clock_ns,
+        latency_breakdown=latency_breakdown,
+        energy_breakdown=energy_breakdown,
+    )
+
+
+def _write_report_to_file(
+    results: Dict[str, Any],
+    output_path: str,
+    network_name: str,
+    accelerator_name: str,
+) -> None:
+    """
+    将 PPA 结果与 breakdown 写入文件（JSON 或 CSV，由扩展名决定）。
+
+    Args:
+        results: 必须包含 ppa_result 与可选的 breakdown
+        output_path: 输出文件路径
+        network_name: 网络名称，写入报告元数据
+        accelerator_name: 加速器名称，写入报告元数据
+    """
+    ppa = results.get("ppa_result")
+    if ppa is None:
+        return
+
+    reporter = Reporter(title="PointKAN PPA 报告")
+    reporter.set_results(ppa)
+    reporter.add_metadata("network", network_name)
+    reporter.add_metadata("accelerator", accelerator_name)
+    if results.get("breakdown"):
+        reporter.add_section("breakdown_detail", results["breakdown"])
+
+    if output_path.lower().endswith(".csv"):
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(reporter.generate_csv_header() + "\n")
+            f.write(reporter.generate_csv_row() + "\n")
+        log_info(f"\nCSV 报告已保存: {output_path}")
+    else:
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(reporter.generate_json_report())
+        log_info(f"\nJSON 报告已保存: {output_path}")
+
+
+# =============================================================================
+# 主流程：演示与指定网络仿真
 # =============================================================================
 
 def run_demo(args: argparse.Namespace) -> Dict[str, Any]:
-    """Run demo simulation."""
-    log_section("Demo: PointKAN on baseline")
+    """
+    运行演示流程：PointKAN + 指定加速器，默认打印每层信息并汇总 PPA。
+    """
+    log_section("演示: PointKAN on baseline")
     hw_config = get_accelerator_config(args.accelerator)
     layers = load_network("pointkan", args.input_points, args.num_classes)
 
-    log_info(f"Network: PointKAN ({len(layers)} layers)")
-    log_info(f"Accelerator: {hw_config.accelerator_name}")
-    log_info(f"CIM parallelism: {hw_config.cim_parallelism}")
+    log_info(f"网络: PointKAN（{len(layers)} 层）")
+    log_info(f"加速器: {hw_config.accelerator_name}")
+    log_info(f"CIM 并行度: {hw_config.cim_parallelism}")
     log_info("")
 
     results = simulate_network(layers, hw_config, show_layers=True)
+    _attach_breakdown_and_ppa(results, hw_config)
     print_simulation_summary(results, hw_config, "PointKAN")
 
     if args.show_events:
-        print_event_statistics(results['sim_result'], hw_config)
+        print_event_statistics(results["sim_result"], hw_config)
 
     return results
 
 
 def run_network_simulation(args: argparse.Namespace) -> Dict[str, Any]:
-    """Run full network simulation."""
+    """
+    运行指定网络的完整仿真：可选 MNSIM 全 NetStruct、每层打印、事件统计与报告输出。
+    """
     network_name = args.network
-    log_section(f"Network Simulation: {network_name}")
+    log_section(f"网络仿真: {network_name}")
 
     hw_config = get_accelerator_config(args.accelerator)
     layers = load_network(network_name, args.input_points, args.num_classes)
 
-    log_info(f"Network: {network_name} ({len(layers)} layers)")
-    log_info(f"Accelerator: {hw_config.accelerator_name} "
-             f"({hw_config.accelerator_type.name})")
-    log_info(f"CIM parallelism: {hw_config.cim_parallelism}")
-    log_info(f"Bit-serial cycles: {hw_config.bit_serial_cycles}")
+    log_info(f"网络: {network_name}（{len(layers)} 层）")
+    log_info(
+        f"加速器: {hw_config.accelerator_name} "
+        f"({hw_config.accelerator_type.name})"
+    )
+    log_info(f"CIM 并行度: {hw_config.cim_parallelism}")
+    log_info(f"Bit-serial 周期: {hw_config.bit_serial_cycles}")
+    log_info("")
+
+    # 可选：为 conv1d/linear 启用 MNSIM 全 NetStruct（Tile/NoC 级）延迟与能耗
+    mnsim_context = None
+    use_mnsim_full = getattr(args, "mnsim_full", False)
+    no_mnsim_full = getattr(args, "no_mnsim_full", False)
+    if use_mnsim_full and not no_mnsim_full:
+        netstruct, _ = build_netstruct_from_layers(layers)
+        if netstruct:
+            mnsim_result = run_mnsim_full(netstruct)
+            if mnsim_result.success:
+                mnsim_context = {
+                    "mnsim_latency_ns": mnsim_result.layer_latency_ns,
+                    "mnsim_energy_nj": mnsim_result.layer_energy_nj,
+                    "mnsim_index": 0,
+                }
+                log_info("已启用 MNSIM 全 NetStruct（Tile/NoC）用于 conv1d/linear。")
+            else:
+                log_info(f"MNSIM 全 NetStruct 未启用: {mnsim_result.error}")
+        else:
+            log_info("MNSIM 全 NetStruct 未启用: 无 conv1d/linear 层。")
     log_info("")
 
     results = simulate_network(
-        layers, hw_config, show_layers=args.show_layers)
+        layers,
+        hw_config,
+        show_layers=args.show_layers,
+        mnsim_context=mnsim_context,
+    )
     print_simulation_summary(results, hw_config, network_name)
 
     if args.show_events:
-        print_event_statistics(results['sim_result'], hw_config)
+        print_event_statistics(results["sim_result"], hw_config)
 
+    _attach_breakdown_and_ppa(results, hw_config)
     return results
 
 
 # =============================================================================
-# Entry point
+# 程序入口（仅在被直接运行时执行，与文件顶部的路径修正是两处不同的 __main__ 用途）
+# =============================================================================
+# 说明：
+# - 顶部 "if __name__ == '__main__' and __package__ is None"：在「直接运行本文件」时
+#   先修正 sys.path，保证后续 import pointkan_sim 能找到包，只执行一次且必须在 import 之前。
+# - 此处 "if __name__ == '__main__'"：真正的入口，解析参数、选择演示或指定网络、写报告并退出。
 # =============================================================================
 
-def main():
-    """Main entry point."""
+def main() -> int:
+    """
+    主入口：解析参数、初始化日志、执行演示或网络仿真，可选写报告并返回退出码。
+    """
     args = parse_args()
 
-    # Setup logging
-    log_level = LogLevel[args.log_level]
-    setup_logger(level=log_level)
+    setup_logger(level=LogLevel[args.log_level])
 
-    # Handle --list_accelerators
     if args.list_accelerators:
-        print("Available accelerator configurations:")
+        print("可用加速器配置:")
         for name in list_accelerator_configs():
             cfg = get_accelerator_config(name)
-            print(f"  {name:<15s}  [{cfg.accelerator_type.name}, "
-                  f"CIM parallelism={cfg.cim_parallelism}, "
-                  f"modules: {', '.join(cfg.get_all_modules().keys())}]")
+            print(
+                f"  {name:<15s}  [{cfg.accelerator_type.name}, "
+                f"CIM parallelism={cfg.cim_parallelism}, "
+                f"modules: {', '.join(cfg.get_all_modules().keys())}]"
+            )
         return 0
 
-    log_section("Point Cloud CIM PPA Simulator")
-    log_info(f"Supported op_types: {list_supported_op_types()}")
+    log_section("PointKAN CIM PPA 仿真器")
+    log_info(f"支持的算子类型: {list_supported_op_types()}")
     log_info("")
 
     try:
@@ -372,28 +559,26 @@ def main():
         elif args.network:
             results = run_network_simulation(args)
         else:
-            log_info("No operation specified. Running demo...")
+            log_info("未指定操作，运行演示...")
             results = run_demo(args)
 
-        # Save output if specified
-        if args.output and results:
-            import json
-            output_data = {
-                k: v for k, v in results.items()
-                if k != 'sim_result'  # not serializable
-            }
-            with open(args.output, 'w') as f:
-                json.dump(output_data, f, indent=2, default=str)
-            log_info(f"\nResults saved to: {args.output}")
+        if args.output and results and results.get("ppa_result") is not None:
+            _write_report_to_file(
+                results,
+                args.output,
+                network_name=args.network or "pointkan",
+                accelerator_name=get_accelerator_config(args.accelerator).accelerator_name,
+            )
 
         return 0
 
     except Exception as e:
-        log_info(f"ERROR: Simulation failed: {e}")
+        log_info(f"错误: 仿真失败 - {e}")
         import traceback
         traceback.print_exc()
         return 1
 
 
+# 仅当本文件被直接运行（而非 import）时执行 main，并以其返回值退出进程
 if __name__ == "__main__":
     sys.exit(main())

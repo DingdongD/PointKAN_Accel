@@ -359,3 +359,67 @@ def print_breakdown(breakdown: OperatorBreakdown, **kwargs):
 def print_network_breakdown(network_data: Dict[str, Any]):
     """Print network breakdown to console."""
     print(format_network_breakdown(network_data))
+
+
+def analyze_simulation_events_breakdown(
+    events: List['Event'],
+    clock_period_ns: float = 1.0,
+) -> Dict[str, Any]:
+    """
+    Compute layer / operator / module breakdown from a flat list of Events.
+
+    Events should have metadata['layer_name'] and metadata.get('layer_type') set
+    when they were queued (e.g. in main.simulate_network).
+
+    Returns:
+        Dict with:
+          - by_layer: { layer_name: { cycles, energy_nj, event_count } }
+          - by_operator: { operator: { cycles, energy_nj, event_count } }
+          - by_module: { circuit_module: { cycles, energy_nj, event_count } }
+          - total_cycles: max(cycle + duration) - min(cycle) + 1
+          - total_energy_nj: sum of event.energy
+    """
+    from collections import defaultdict
+
+    by_layer: Dict[str, Dict[str, Any]] = defaultdict(lambda: {"cycles": 0, "energy_nj": 0.0, "event_count": 0})
+    by_operator: Dict[str, Dict[str, Any]] = defaultdict(lambda: {"cycles": 0, "energy_nj": 0.0, "event_count": 0})
+    by_module: Dict[str, Dict[str, Any]] = defaultdict(lambda: {"cycles": 0, "energy_nj": 0.0, "event_count": 0})
+
+    total_energy_nj = 0.0
+    min_cycle = float("inf")
+    max_end_cycle = -1
+
+    for e in events:
+        layer_name = (e.metadata or {}).get("layer_name", "unknown")
+        op_name = e.operator or "unknown"
+        mod_name = e.circuit_module or "unknown"
+
+        dur = getattr(e, "duration", 1)
+        en = getattr(e, "energy", 0.0)
+
+        by_layer[layer_name]["cycles"] += dur
+        by_layer[layer_name]["energy_nj"] += en
+        by_layer[layer_name]["event_count"] += 1
+
+        by_operator[op_name]["cycles"] += dur
+        by_operator[op_name]["energy_nj"] += en
+        by_operator[op_name]["event_count"] += 1
+
+        by_module[mod_name]["cycles"] += dur
+        by_module[mod_name]["energy_nj"] += en
+        by_module[mod_name]["event_count"] += 1
+
+        total_energy_nj += en
+        min_cycle = min(min_cycle, e.cycle)
+        max_end_cycle = max(max_end_cycle, e.cycle + dur - 1)
+
+    total_cycles = max(0, max_end_cycle - min_cycle + 1) if events else 0
+
+    return {
+        "by_layer": dict(by_layer),
+        "by_operator": dict(by_operator),
+        "by_module": dict(by_module),
+        "total_cycles": total_cycles,
+        "total_energy_nj": total_energy_nj,
+        "latency_ms": total_cycles * clock_period_ns / 1e6,
+    }
