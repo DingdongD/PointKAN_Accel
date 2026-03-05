@@ -69,6 +69,60 @@ def _resolve_numel(params: Dict[str, Any], default_features: int = 1, default_po
     return max(1, num_features * num_points)
 
 
+def _quant_dequant_power_cycles(hw_config: "HardwareConfig", numel: int) -> tuple:
+    """从 hw_config.logic_circuit.quant_dequant 取 power/cycles；cycles 为 0 时按 numel/parallelism 估算。"""
+    qd = getattr(
+        getattr(hw_config, "logic_circuit", None),
+        "quant_dequant",
+        None,
+    )
+    power = float(getattr(qd, "power", 0.0) or 0.0)
+    cycles_cfg = getattr(qd, "cycles", 0) or 0
+    vec = max(1, getattr(hw_config, "cim_parallelism", 128))
+    cycles = max(1, cycles_cfg) if cycles_cfg else max(1, _safe_div_ceil(numel, vec))
+    return power, cycles
+
+
+def gen_quant_events(
+    numel: int,
+    hw_config: "HardwareConfig",
+    layer_name: str = "",
+    op_name: str = "Conv1d",
+) -> List[Event]:
+    """W8A8：激活 FP32→INT8 量化节点，供 MNSIM INT 计算前使用。"""
+    clk = _clock(hw_config)
+    power, cycles = _quant_dequant_power_cycles(hw_config, numel)
+    return [
+        _event(
+            0, 0,
+            op_name, "quant", "quantize",
+            "quant_dequant", "activation_fp32_to_int8",
+            power, cycles, clk,
+            {"layer_name": layer_name, "numel": numel, "w8a8": True},
+        )
+    ]
+
+
+def gen_dequant_events(
+    numel: int,
+    hw_config: "HardwareConfig",
+    layer_name: str = "",
+    op_name: str = "Conv1d",
+) -> List[Event]:
+    """W8A8：输出 INT8→FP32 反量化节点，供后续 BN/ReLU 等浮点非线性使用；MNSIM 输出为 INT。"""
+    clk = _clock(hw_config)
+    power, cycles = _quant_dequant_power_cycles(hw_config, numel)
+    return [
+        _event(
+            0, 0,
+            op_name, "dequant", "dequantize",
+            "quant_dequant", "output_int8_to_fp32",
+            power, cycles, clk,
+            {"layer_name": layer_name, "numel": numel, "w8a8": True},
+        )
+    ]
+
+
 def gen_bn_events(params: Dict[str, Any], hw_config: "HardwareConfig") -> List[Event]:
     numel = _resolve_numel(params)
     vec = int(params.get("vector_width", getattr(hw_config, "cim_parallelism", 128)))
@@ -218,6 +272,7 @@ def gen_conv1d_rram_cim_events(params: Dict[str, Any], hw_config: "HardwareConfi
     out_ch = int(params.get("out_channels", 1))
     kernel = int(params.get("kernel_size", 1))
     num_points = int(params.get("num_points", 1))
+    layer_name = str(params.get("layer_name", ""))
 
     fallback_power = 25.0
     if hasattr(hw_config, "rram_cim_macro"):
@@ -231,19 +286,32 @@ def gen_conv1d_rram_cim_events(params: Dict[str, Any], hw_config: "HardwareConfi
         cim_parallelism=max(1, getattr(hw_config, "cim_parallelism", 128)),
         fallback_power_mw=fallback_power,
     )
-    return [
-        _event(
-            0, 0, "Conv1d", "rram_cim", "matrix_vector", "rram_cim", "conv1d_rram_cim",
-            est.avg_power_mw, est.cycles, _clock(hw_config),
-            {"source": est.source, "latency_ns": est.latency_ns, "energy_nj": est.energy_nj},
-        )
-    ]
+    compute_ev = _event(
+        0, 0, "Conv1d", "rram_cim", "matrix_vector", "rram_cim", "conv1d_rram_cim",
+        est.avg_power_mw, est.cycles, _clock(hw_config),
+        {"source": est.source, "latency_ns": est.latency_ns, "energy_nj": est.energy_nj},
+    )
+
+    if not getattr(hw_config, "enable_w8a8_quant_dequant", False):
+        return [compute_ev]
+
+    # W8A8：前量化(激活 FP32→INT8)、后反量化(输出 INT8→FP32)，MNSIM 为 INT 计算
+    in_numel = max(1, in_ch * num_points)
+    out_numel = max(1, out_ch * num_points)
+    q_evs = gen_quant_events(in_numel, hw_config, layer_name=layer_name, op_name="Conv1d")
+    d_evs = gen_dequant_events(out_numel, hw_config, layer_name=layer_name, op_name="Conv1d")
+    q_ev, d_ev = q_evs[0], d_evs[0]
+    c0 = q_ev.cycle + q_ev.duration
+    compute_ev.cycle = c0
+    d_ev.cycle = c0 + compute_ev.duration
+    return [q_ev, compute_ev, d_ev]
 
 
 def gen_linear_rram_cim_events(params: Dict[str, Any], hw_config: "HardwareConfig") -> List[Event]:
     in_f = int(params.get("in_features", 1))
     out_f = int(params.get("out_features", 1))
     tokens = int(params.get("tokens", 1))
+    layer_name = str(params.get("layer_name", ""))
 
     fallback_power = 20.0
     if hasattr(hw_config, "rram_cim_macro"):
@@ -257,10 +325,22 @@ def gen_linear_rram_cim_events(params: Dict[str, Any], hw_config: "HardwareConfi
         cim_parallelism=max(1, getattr(hw_config, "cim_parallelism", 128)),
         fallback_power_mw=fallback_power,
     )
-    return [
-        _event(
-            0, 0, "Linear", "rram_cim", "matrix_vector", "rram_cim", "linear_rram_cim",
-            est.avg_power_mw, est.cycles, _clock(hw_config),
-            {"source": est.source, "latency_ns": est.latency_ns, "energy_nj": est.energy_nj},
-        )
-    ]
+    compute_ev = _event(
+        0, 0, "Linear", "rram_cim", "matrix_vector", "rram_cim", "linear_rram_cim",
+        est.avg_power_mw, est.cycles, _clock(hw_config),
+        {"source": est.source, "latency_ns": est.latency_ns, "energy_nj": est.energy_nj},
+    )
+
+    if not getattr(hw_config, "enable_w8a8_quant_dequant", False):
+        return [compute_ev]
+
+    # W8A8：前量化(激活 FP32→INT8)、后反量化(输出 INT8→FP32)，MNSIM 为 INT 计算
+    in_numel = max(1, in_f * max(1, tokens))
+    out_numel = max(1, out_f * max(1, tokens))
+    q_evs = gen_quant_events(in_numel, hw_config, layer_name=layer_name, op_name="Linear")
+    d_evs = gen_dequant_events(out_numel, hw_config, layer_name=layer_name, op_name="Linear")
+    q_ev, d_ev = q_evs[0], d_evs[0]
+    c0 = q_ev.cycle + q_ev.duration
+    compute_ev.cycle = c0
+    d_ev.cycle = c0 + compute_ev.duration
+    return [q_ev, compute_ev, d_ev]

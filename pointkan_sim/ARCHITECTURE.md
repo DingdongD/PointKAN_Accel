@@ -19,10 +19,18 @@ python -m pointkan_sim.main --network pointkan --accelerator baseline --mnsim_fu
 
 # 查看支持的加速器
 python -m pointkan_sim.main --list_accelerators
+
+# 打印每层激活 shape（input_shape → output_shape）与数据量
+python -m pointkan_sim.main --network pointkan --show_layers --show_shapes
+
+# 禁用层间 buffer（仅仿真计算单元，与旧行为一致）
+python -m pointkan_sim.main --network pointkan --no_layer_buffer
 ```
 
-- `--output`：按扩展名自动选择 JSON 或 CSV，报告包含 PPA 汇总与 layer/operator/module breakdown。  
-- `--mnsim_full`：对 conv1d/linear 使用 MNSIM 完整 NetStruct 的 Model_latency/Model_energy；未指定或 MNSIM 不可用时回退到 PE 级 mnsim_adapter。
+- `--output`：按扩展名自动选择 JSON 或 CSV，报告包含 PPA 汇总、breakdown 与 **activation_shapes**（每层 input/output shape 与字节数）。  
+- `--mnsim_full`：对 conv1d/linear 使用 MNSIM 完整 NetStruct 的 Model_latency/Model_energy；未指定或 MNSIM 不可用时回退到 PE 级 mnsim_adapter。  
+- `--show_shapes`：控制台打印每层激活 shape，便于确认 pipeline 下的激活交互次数。  
+- `--no_layer_buffer`：关闭层间 buffer 读写与 buffer size 约束。
 
 ---
 
@@ -228,7 +236,20 @@ pointkan_sim/
    - 当前为可选 `--mnsim_full`；若希望默认启用 Tile/NoC 级评估，需在 main 中改为默认调用 `build_netstruct_from_layers` + `run_mnsim_full`，并在 MNSIM 不可用时静默回退到 PE 级。  
    - **待修改位置**：`main.py` 中 `run_network_simulation` 内 mnsim_context 的构建逻辑。
 
-### 4.2 建议完成（用于完整评估与报告）
+### 4.2 已实现：层间 Buffer 与激活 Shape（2026-03-05）
+
+5. **层间 buffer 交互**  
+   - 已实现：`configs/hw_config.py` 中 **InterLayerBufferConfig**（size_bytes、bandwidth_bytes_per_cycle、read/write_power_mw、spill_to_dram、dram 带宽与功率）。  
+   - `operators/layer_buffer_ops.py`：每层开始前可插入「从 buffer（及 DRAM spill）读入输入」事件，每层结束后可插入「将输出写回 buffer（及 spill）」事件；首层前可插入「点云 N×3 从 DRAM 加载」事件。  
+   - 当单层数据量超过 `size_bytes` 时，超出部分按 DRAM 读写建模（周期与能耗），模拟实际内存行为。  
+   - 使用 `--no_layer_buffer` 可关闭层间 buffer，仅仿真计算单元（与旧行为一致）。
+
+6. **激活 shape 与点云输入 N×3**  
+   - **点云输入**：每个样本固定为 **N×3**（N=点数，3=xyz），在 `compute_activation_shapes` 中第一层 input_shape=(input_points, 3)，input_bytes=N×3×bytes_per_element。  
+   - **network/activation_shape.py**：`compute_activation_shapes(layers, input_points, input_channels=3)` 逐层推导每层 input_shape/output_shape、input_bytes/output_bytes，供 buffer 事件与报告使用。  
+   - **显示**：`--show_shapes` 时在控制台打印每层「in shape → out shape (bytes)」；报告 JSON/CSV 的 **activation_shapes** 小节包含每层 input_shape、output_shape、input_bytes、output_bytes，便于确定当前 pipeline 下的激活交互次数与数据量。
+
+### 4.3 建议完成（用于完整评估与报告）
 
 3. **Adapter 层升级**  
    - 用户可下一步在 `operators/mnsim_adapter.py` 或 `integration/mnsim_netstruct.py` 中增强：更细粒度 Tile/NoC 映射、Pipeline 模式、或与 MNSIM 的 Inputindex/Outputindex 等字段的完整对齐。  
@@ -263,6 +284,17 @@ pointkan_sim/
 
 3. **统一单位**  
    - MNSIM 的 latency 单位需与 pointkan_sim 一致（如 ns 或 cycles，用 hw_config.clock_period 换算）；energy 统一为 nJ，便于与自定义模块的 event.energy 相加。
+
+### 5.3 Conv/Linear 矩阵乘与 W8A8、量化/反量化
+
+- **矩阵乘形式与 Tile/NoC 映射**  
+  - **Conv1d**：在 `integration/mnsim_netstruct.py` 中映射为 MNSIM 的 conv 层，空间为 (1, L)；计算等价于 (out_ch × (in_ch×kernel)) 与 (in_ch×kernel × L) 的矩阵乘，通过 TCG 做 **Tile/NoC 级** 仿真。  
+  - **Linear**：映射为 MNSIM 的 fc 层，即 Infeature×Outfeature 矩阵乘，同样走 Tile/NoC 仿真。
+- **W8A8 与 MNSIM 输出**  
+  - 二者在 NetStruct 中均使用 **Inputbit/Weightbit/outputbit = 8**（W8A8）；MNSIM 侧为 **INT** 计算，输出为整数量化结果。
+- **量化和反量化节点**  
+  - 非线性（BN、ReLU 等）在仿真中按 **FP32** 处理，因此需在 Conv/Linear **前** 插入 **量化**（FP32→INT8）、**后** 插入 **反量化**（INT8→FP32）。  
+  - 在 `hw_config` 中设置 `enable_w8a8_quant_dequant = True`，并在 `logic_circuit.quant_dequant` 中配置 `power`、`cycles` 后，`operators/common_ops.py` 会在生成 conv1d/linear 事件时自动在计算前后插入 quant/dequant 事件，参与 cycle 与能耗仿真。
 
 ---
 

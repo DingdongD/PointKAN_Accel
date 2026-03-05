@@ -262,6 +262,7 @@ def create_pointkan_elite_classification(
             out_channels=out_channels,
             in_channels=current_channels,
         )
+        
         layers.append(LayerDef(
             name=f"GAM-stage{s}",
             layer_type="GAM",

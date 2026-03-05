@@ -29,6 +29,8 @@ from ..simulator.event import Event
 from .common_ops import (
     gen_conv1d_rram_cim_events,
     gen_linear_rram_cim_events,
+    gen_quant_events,
+    gen_dequant_events,
     gen_bn_events,
     gen_layernorm_events,
     gen_relu_events,
@@ -67,19 +69,32 @@ def _gen_conv1d(
             cycles = max(1, int(math.ceil(lat_ns[idx] / clock_ns)))
             power_mw = (en_nj[idx] * 1e3 / (cycles * clock_ns)) if (cycles * clock_ns) > 0 else 0.0
             context["mnsim_index"] = idx + 1
-            return [
-                Event(
-                    event_id=0,
-                    cycle=0,
-                    operator="conv1d",
-                    circuit_module="mnsim_tile_noc",
-                    operation="conv1d_mnsim_full",
-                    power=power_mw,
-                    duration=cycles,
-                    clock_period_ns=clock_ns,
-                    metadata={"source": "mnsim_full"},
-                )
-            ]
+            mnsim_ev = Event(
+                event_id=0,
+                cycle=0,
+                operator="conv1d",
+                circuit_module="mnsim_tile_noc",
+                operation="conv1d_mnsim_full",
+                power=power_mw,
+                duration=cycles,
+                clock_period_ns=clock_ns,
+                metadata={"source": "mnsim_full"},
+            )
+            if getattr(hw_config, "enable_w8a8_quant_dequant", False):
+                p = op_ref.params
+                in_ch = int(p.get("in_channels", 1))
+                out_ch = int(p.get("out_channels", 1))
+                num_points = int(p.get("num_points", 1))
+                layer_name = str(p.get("layer_name", ""))
+                in_numel = max(1, in_ch * num_points)
+                out_numel = max(1, out_ch * num_points)
+                q_evs = gen_quant_events(in_numel, hw_config, layer_name=layer_name, op_name="Conv1d")
+                d_evs = gen_dequant_events(out_numel, hw_config, layer_name=layer_name, op_name="Conv1d")
+                q_ev, d_ev = q_evs[0], d_evs[0]
+                mnsim_ev.cycle = q_ev.cycle + q_ev.duration
+                d_ev.cycle = mnsim_ev.cycle + mnsim_ev.duration
+                return [q_ev, mnsim_ev, d_ev]
+            return [mnsim_ev]
     return gen_conv1d_rram_cim_events(op_ref.params, hw_config)
 
 
@@ -98,19 +113,32 @@ def _gen_linear(
             cycles = max(1, int(math.ceil(lat_ns[idx] / clock_ns)))
             power_mw = (en_nj[idx] * 1e3 / (cycles * clock_ns)) if (cycles * clock_ns) > 0 else 0.0
             context["mnsim_index"] = idx + 1
-            return [
-                Event(
-                    event_id=0,
-                    cycle=0,
-                    operator="linear",
-                    circuit_module="mnsim_tile_noc",
-                    operation="linear_mnsim_full",
-                    power=power_mw,
-                    duration=cycles,
-                    clock_period_ns=clock_ns,
-                    metadata={"source": "mnsim_full"},
-                )
-            ]
+            mnsim_ev = Event(
+                event_id=0,
+                cycle=0,
+                operator="linear",
+                circuit_module="mnsim_tile_noc",
+                operation="linear_mnsim_full",
+                power=power_mw,
+                duration=cycles,
+                clock_period_ns=clock_ns,
+                metadata={"source": "mnsim_full"},
+            )
+            if getattr(hw_config, "enable_w8a8_quant_dequant", False):
+                p = op_ref.params
+                in_f = int(p.get("in_features", 1))
+                out_f = int(p.get("out_features", 1))
+                tokens = int(p.get("tokens", 1))
+                layer_name = str(p.get("layer_name", ""))
+                in_numel = max(1, in_f * max(1, tokens))
+                out_numel = max(1, out_f * max(1, tokens))
+                q_evs = gen_quant_events(in_numel, hw_config, layer_name=layer_name, op_name="Linear")
+                d_evs = gen_dequant_events(out_numel, hw_config, layer_name=layer_name, op_name="Linear")
+                q_ev, d_ev = q_evs[0], d_evs[0]
+                mnsim_ev.cycle = q_ev.cycle + q_ev.duration
+                d_ev.cycle = mnsim_ev.cycle + mnsim_ev.duration
+                return [q_ev, mnsim_ev, d_ev]
+            return [mnsim_ev]
     return gen_linear_rram_cim_events(op_ref.params, hw_config)
 
 

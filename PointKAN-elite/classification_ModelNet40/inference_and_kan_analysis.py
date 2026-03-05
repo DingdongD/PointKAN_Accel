@@ -19,10 +19,17 @@ import argparse
 import json
 import os
 import sys
+import time
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
 import sklearn.metrics as metrics
+
+try:
+    import pandas as pd
+    _HAS_PANDAS = True
+except ImportError:
+    _HAS_PANDAS = False
 
 # 将当前任务目录与项目根目录加入 path，便于导入 models / data / utils 以及 kat_rational
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -119,6 +126,16 @@ def parse_args():
         default=None,
         help="将每层每组 GRF 的 numerator/denominator 系数导出到该 JSON 文件，便于从 JSON 直接还原 GRF-KAN",
     )
+    parser.add_argument(
+        "--eval_fps_opt",
+        action="store_true",
+        help="在常规推理外再跑一遍 FPS 优化版模型（预计算级联 FPS 索引），汇报两者精度与耗时对比",
+    )
+    parser.add_argument(
+        "--print_shapes",
+        action="store_true",
+        help="推理时打印 PointKAN-Elite 每一层输出的 shape 分析（基于 1 个 batch 前向一次）",
+    )
     return parser.parse_args()
 
 
@@ -153,12 +170,128 @@ def load_state_dict_for_model(checkpoint_path, device):
     return state
 
 
+def _collect_weight_shapes(net):
+    """收集各层权重/参数 shape，返回 [(layer_name, param_name, shape_tuple), ...]。"""
+    weight_log = []
+    for n, p in net.embedding.named_parameters():
+        weight_log.append(("embedding", n, tuple(p.shape)))
+    n_stages = getattr(net, "stages", len(net.GAM_list))
+    for i in range(n_stages):
+        for n, p in net.GAM_list[i].named_parameters():
+            weight_log.append((f"GAM-stage{i}", n, tuple(p.shape)))
+        for n, p in net.LFP_blocks_list[i].named_parameters():
+            weight_log.append((f"LFP-stage{i}", n, tuple(p.shape)))
+        for n, p in net.GFP_blocks_list[i].named_parameters():
+            weight_log.append((f"GFP-stage{i}", n, tuple(p.shape)))
+    for n, p in net.classifier.named_parameters():
+        weight_log.append(("classifier", n, tuple(p.shape)))
+    return weight_log
+
+
+def _shape_to_str(s):
+    """将 shape 转为可读字符串，便于 DataFrame 显示。"""
+    if isinstance(s, (list, tuple)):
+        return str(tuple(s))
+    return str(s)
+
+
+def print_layer_shapes(net, device, batch_size=2, num_points=1024):
+    """
+    对 PointKAN-Elite 做一次前向传播，收集每一层的**输入激活 shape**与**权重 shape**，
+    合并为一张表（DataFrame）打印，便于对照查看。
+    """
+    # 用 pre_hook 收集每层输入激活 shape
+    input_shapes = {}
+
+    def _make_pre_hook(name, multi_input=False):
+        def hook(module, inp):
+            if multi_input:
+                # GAM: (xyz, points); LFP: (x, center)
+                parts = []
+                for x in (inp if isinstance(inp, (list, tuple)) else [inp]):
+                    if isinstance(x, torch.Tensor):
+                        parts.append(tuple(x.shape))
+                    else:
+                        parts.append(x)
+                input_shapes[name] = _shape_to_str(tuple(parts))
+            else:
+                t = inp[0] if isinstance(inp, (list, tuple)) else inp
+                if isinstance(t, torch.Tensor):
+                    input_shapes[name] = _shape_to_str(tuple(t.shape))
+                else:
+                    input_shapes[name] = str(t)
+        return hook
+
+    pre_hooks = []
+    pre_hooks.append(net.embedding.register_forward_pre_hook(_make_pre_hook("embedding", multi_input=False)))
+    n_stages = getattr(net, "stages", len(net.GAM_list))
+    for i in range(n_stages):
+        pre_hooks.append(net.GAM_list[i].register_forward_pre_hook(_make_pre_hook(f"GAM-stage{i}", multi_input=True)))
+        pre_hooks.append(net.LFP_blocks_list[i].register_forward_pre_hook(_make_pre_hook(f"LFP-stage{i}", multi_input=True)))
+        pre_hooks.append(net.GFP_blocks_list[i].register_forward_pre_hook(_make_pre_hook(f"GFP-stage{i}", multi_input=False)))
+    pre_hooks.append(net.classifier.register_forward_pre_hook(_make_pre_hook("classifier", multi_input=False)))
+
+    net.eval()
+    with torch.no_grad():
+        x = torch.rand(batch_size, 3, num_points, device=device)
+        _ = net(x)
+
+    for h in pre_hooks:
+        h.remove()
+
+    # 收集权重 shape，并与该层输入激活 shape 对齐
+    weight_log = _collect_weight_shapes(net)
+    rows = []
+    for layer_name, param_name, param_shape in weight_log:
+        input_shape_str = input_shapes.get(layer_name, "")
+        rows.append({
+            "Layer": layer_name,
+            "Input_Activation_Shape": input_shape_str,
+            "Param_Name": param_name,
+            "Param_Shape": _shape_to_str(param_shape),
+        })
+
+    print("\nPointKAN-Elite 每层 输入激活 shape ↔ 权重 shape (batch_size={}, num_points={})\n".format(batch_size, num_points))
+    if _HAS_PANDAS:
+        df = pd.DataFrame(rows)
+        pd.set_option("display.max_rows", None)
+        pd.set_option("display.width", None)
+        pd.set_option("display.max_colwidth", 50)
+        print(df.to_string(index=False))
+        print()
+        return df
+    else:
+        # 无 pandas 时用简单表格
+        print("  {:<16} {:<42} {:<36} {}".format(
+            "Layer", "Input_Activation_Shape", "Param_Name", "Param_Shape"))
+        print("  " + "-" * 120)
+        for r in rows:
+            print("  {:<16} {:<42} {:<36} {}".format(
+                r["Layer"][:15], r["Input_Activation_Shape"][:40], r["Param_Name"][:34], r["Param_Shape"]))
+        print()
+        return rows
+
+
 def build_model_and_load_checkpoint(checkpoint_path, device):
     """
     构建与训练时一致的 pointKANElite 模型，并加载 best 权重。
     返回：加载好权重的模型（单卡，已 eval）。
     """
     net = models.__dict__["pointKANElite"]()
+    state = load_state_dict_for_model(checkpoint_path, device)
+    net.load_state_dict(state, strict=True)
+    net = net.to(device)
+    net.eval()
+    return net
+
+
+def build_fps_optimized_model(checkpoint_path, device):
+    """
+    构建 FPS 优化版 pointKANElite（预计算级联 FPS 索引），加载同一 checkpoint。
+    与 build_model_and_load_checkpoint 使用相同 state_dict，数值结果一致。
+    返回：加载好权重的 FPS 优化模型（单卡，已 eval）。
+    """
+    net = models.__dict__["pointKANEliteFPSOptimized"]()
     state = load_state_dict_for_model(checkpoint_path, device)
     net.load_state_dict(state, strict=True)
     net = net.to(device)
@@ -702,6 +835,10 @@ def main():
     # 1) 构建模型并加载权重
     net = build_model_and_load_checkpoint(checkpoint_path, device)
 
+    # 1b) 可选：打印每一层推理时的 shape
+    if getattr(args, "print_shapes", False):
+        print_layer_shapes(net, device, batch_size=min(2, args.batch_size), num_points=args.num_points)
+
     # 2) 准备测试集并推理
     test_dataset = ModelNet40(partition="test", num_points=args.num_points)
     test_loader = DataLoader(
@@ -711,7 +848,14 @@ def main():
         num_workers=args.workers,
         drop_last=False,
     )
+    # 若启用 FPS 优化对比，则对原始推理计时
+    do_fps_opt = getattr(args, "eval_fps_opt", False)
+    if do_fps_opt:
+        t_vanilla_start = time.perf_counter()
     eval_result = run_evaluation(net, test_loader, cal_loss, device)
+    if do_fps_opt:
+        t_vanilla = time.perf_counter() - t_vanilla_start
+
     print("\n" + "=" * 50)
     print("推理验证结果 (ModelNet40 Test)")
     print("=" * 50)
@@ -719,7 +863,39 @@ def main():
     print(f"  Test Loss: {eval_result['loss']:.4f}")
     print(f"  Test Acc (accuracy): {eval_result['acc']:.2f}%")
     print(f"  Test Acc (balanced): {eval_result['acc_avg']:.2f}%")
+    if do_fps_opt:
+        print(f"  原始 FPS 推理耗时: {t_vanilla:.3f}s  ({1000*t_vanilla/eval_result['num_samples']:.2f} ms/sample)")
     print("=" * 50 + "\n")
+
+    # 2b) 可选：FPS 优化版模型评估（预计算级联 FPS 索引，与原始数值一致，对比耗时）
+    if do_fps_opt:
+        t0 = time.perf_counter()
+        net_fps_opt = build_fps_optimized_model(checkpoint_path, device)
+        t_build = time.perf_counter() - t0
+        t1 = time.perf_counter()
+        eval_result_fps_opt = run_evaluation(net_fps_opt, test_loader, cal_loss, device)
+        t_fps_opt = time.perf_counter() - t1
+        n = eval_result_fps_opt["num_samples"]
+        speedup = t_vanilla / t_fps_opt if t_fps_opt > 0 else 0.0
+        latency_reduce_pct = (1.0 - t_fps_opt / t_vanilla) * 100.0 if t_vanilla > 0 else 0.0
+        print("\n" + "=" * 50)
+        print("FPS 优化版推理验证 (ModelNet40 Test)")
+        print("=" * 50)
+        print(f"  测试样本数: {eval_result_fps_opt['num_samples']}")
+        print(f"  Test Loss: {eval_result_fps_opt['loss']:.4f}")
+        print(f"  Test Acc (accuracy): {eval_result_fps_opt['acc']:.2f}%")
+        print(f"  Test Acc (balanced): {eval_result_fps_opt['acc_avg']:.2f}%")
+        print(f"  构建 FPS 优化模型耗时: {t_build:.3f}s")
+        print(f"  FPS 优化推理耗时: {t_fps_opt:.3f}s  ({1000*t_fps_opt/n:.2f} ms/sample)")
+        print("--- 与原始 FPS 推理的延迟对比 ---")
+        print(f"  原始推理耗时:     {t_vanilla:.3f}s  ({1000*t_vanilla/n:.2f} ms/sample)")
+        print(f"  FPS 优化耗时:     {t_fps_opt:.3f}s  ({1000*t_fps_opt/n:.2f} ms/sample)")
+        print(f"  加速比:           {speedup:.3f}x")
+        print(f"  延迟降低:         {latency_reduce_pct:.2f}%")
+        print("--- 精度对比 ---")
+        print(f"  Loss 差: {eval_result_fps_opt['loss'] - eval_result['loss']:.6f}")
+        print(f"  Acc 差:  {eval_result_fps_opt['acc'] - eval_result['acc']:.4f}%")
+        print("=" * 50 + "\n")
 
     # 3) 提取 KAT_Group 因果多项式系数（直接从 state_dict，避免再次加载）
     state_dict = load_state_dict_for_model(checkpoint_path, device)

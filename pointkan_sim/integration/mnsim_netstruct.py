@@ -5,6 +5,13 @@ Builds a synthetic NetStruct from PointKAN conv1d/linear operators only,
 runs MNSIM Model_latency and Model_energy to get per-layer latency (ns) and
 energy (nJ), then these can be used when dispatching conv1d/linear to emit
 one Event per layer with the MNSIM-derived values.
+
+Conv/Linear 与 MNSIM 的映射（W8A8、矩阵乘形式）：
+- Conv1d：映射为 MNSIM conv，空间 (1, L)；等价于 (out_ch, in_ch*kernel) × (in_ch*kernel, L)
+  的矩阵乘，通过 TCG 做 Tile/NoC 级仿真。Inputbit/Weightbit/outputbit = 8，即 W8A8；MNSIM 侧为 INT 计算。
+- Linear：映射为 MNSIM fc，Infeature×Outfeature 矩阵乘，同样 8bit 输入/权/输出，Tile/NoC 仿真。
+若需在仿真中显式计入量化和反量化（FP32↔INT8）的 cycle/功耗，请启用 hw_config.enable_w8a8_quant_dequant，
+并在 logic_circuit.quant_dequant 中配置 power/cycles。
 """
 
 from __future__ import annotations
@@ -132,7 +139,7 @@ def build_netstruct_from_layers(
                 ld = _layer_dict_conv(
                     in_ch, out_ch, num_points, kernel,
                     layer_index=layer_index,
-                    input_index=-1 if layer_index == 0 else 0,
+                    input_index=-1,  # 首层表示外部输入，非首层表示前一层（layer_id-1）
                     output_index=1,
                 )
             else:
@@ -141,7 +148,7 @@ def build_netstruct_from_layers(
                 ld = _layer_dict_fc(
                     in_f, out_f,
                     layer_index=layer_index,
-                    input_index=-1 if layer_index == 0 else 0,
+                    input_index=-1,  # 同上
                     output_index=1,
                 )
             netstruct.append([(ld, None)])
@@ -155,11 +162,13 @@ def run_mnsim_full(
     netstruct: List[Any],
     simconfig_path: Optional[str] = None,
     use_pipeline: bool = False,
+    conv_linear_order: Optional[List[Tuple[str, int]]] = None,
 ) -> MNSIMFullResult:
     """
     Run MNSIM Model_latency and Model_energy on the given NetStruct.
 
     Returns per-layer latency (ns) and energy (nJ) in the same order as NetStruct.
+    conv_linear_order: 可选，与 netstruct 同序的 (layer_name, op_idx) 列表，用于日志与报告。
     """
     if not netstruct:
         return MNSIMFullResult(success=True)
@@ -207,6 +216,20 @@ def run_mnsim_full(
         )
 
         n = len(netstruct)
+        # 校验 MNSIM 返回的列表长度与可访问性，避免 empty sequence 等错误
+        def _len(x: Any) -> int:
+            return len(x) if x is not None else 0
+        if _len(model_latency.total_buffer_latency) < n or _len(model_latency.total_computing_latency) < n:
+            return MNSIMFullResult(
+                success=False,
+                error="MNSIM total_buffer_latency/total_computing_latency 长度不足",
+            )
+        if _len(model_energy.arch_energy) < n:
+            return MNSIMFullResult(
+                success=False,
+                error="MNSIM arch_energy 长度不足",
+            )
+
         latency_ns: List[float] = []
         energy_nj: List[float] = []
 
@@ -225,7 +248,7 @@ def run_mnsim_full(
         return MNSIMFullResult(
             layer_latency_ns=latency_ns,
             layer_energy_nj=energy_nj,
-            conv_linear_order=[],  # caller already has order from build_netstruct_from_layers
+            conv_linear_order=conv_linear_order or [],
             success=True,
         )
     except Exception as e:

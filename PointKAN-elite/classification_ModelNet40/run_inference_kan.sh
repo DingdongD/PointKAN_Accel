@@ -20,21 +20,24 @@ CALIBRATION_MARGIN="${CALIBRATION_MARGIN:-0.05}"
 
 # ========== 通过注释切换：只保留要执行的那一段，其余注释掉 ==========
 
-# 方式一：只做推理（不生成图与 JSON）
+# 方式一：只做推理（不生成图与 JSON）；可加 --print_shapes 输出每层 shape
 # python inference_and_kan_analysis.py --checkpoint "$CKPT" --no_vis
+# python inference_and_kan_analysis.py --checkpoint "$CKPT" --no_vis --print_shapes
 
 # 方式二：推理 + 校准 + f(x) 曲线 + 组间相似性图 + JSON（激活范围与相似性/压缩分析）
 # python inference_and_kan_analysis.py --checkpoint "$CKPT" \
 #   --calibration_partition "$CALIBRATION_PARTITION" \
 #   --calibration_samples "$CALIBRATION_SAMPLES" \
 #   --calibration_margin "$CALIBRATION_MARGIN"
+# 若需每层 shape 分析，在以上命令末尾加 --print_shapes
 
 
-# 方式三：同上，并指定输出目录与 JSON 路径
+# 方式三：同上，并指定输出目录与 JSON 路径（可选加 --print_shapes 做每层 shape 分析）
 python inference_and_kan_analysis.py --checkpoint "$CKPT" --out_dir ./my_kan_analysis \
   --calibration_partition "$CALIBRATION_PARTITION" \
   --calibration_samples "$CALIBRATION_SAMPLES" \
   --calibration_margin "$CALIBRATION_MARGIN" \
+  --print_shapes \
   ${JSON_OUTPUT:+--json_output "$JSON_OUTPUT"}
 
 

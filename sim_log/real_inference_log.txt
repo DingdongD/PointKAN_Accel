@@ -1,0 +1,32 @@
+Command: /opt/conda/envs/pointkan/bin/python /workspace/PointKAN-pytorch/PointKAN-elite/classification_ModelNet40/inference_and_kan_analysis.py --checkpoint /workspace/PointKAN-pytorch/PointKAN-elite/classification_ModelNet40/checkpoints/pointKANElite-pointkan_elite_exp-42 --num_points 1024 --no_vis
+CWD: /workspace/PointKAN-pytorch/PointKAN-elite/classification_ModelNet40
+
+加载检查点: /workspace/PointKAN-pytorch/PointKAN-elite/classification_ModelNet40/checkpoints/pointKANElite-pointkan_elite_exp-42/best_checkpoint.pth
+
+==================================================
+推理验证结果 (ModelNet40 Test)
+==================================================
+  测试样本数: 2468
+  Test Loss: 1.4474
+  Test Acc (accuracy): 92.38%
+  Test Acc (balanced): 88.72%
+==================================================
+
+共提取到 16 个 KAT_Group 的因果多项式系数。
+  - LFP_blocks_list.0.operation1.0.act1: numerator shape (1, 6), denominator shape (8, 4)
+  - LFP_blocks_list.0.operation1.0.act2: numerator shape (1, 6), denominator shape (8, 4)
+  - LFP_blocks_list.0.operation2.0.act1: numerator shape (1, 6), denominator shape (8, 4)
+  - LFP_blocks_list.0.operation2.0.act2: numerator shape (1, 6), denominator shape (8, 4)
+  - LFP_blocks_list.1.operation1.0.act1: numerator shape (1, 6), denominator shape (8, 4)
+  - LFP_blocks_list.1.operation1.0.act2: numerator shape (1, 6), denominator shape (8, 4)
+  - LFP_blocks_list.1.operation2.0.act1: numerator shape (1, 6), denominator shape (8, 4)
+  - LFP_blocks_list.1.operation2.0.act2: numerator shape (1, 6), denominator shape (8, 4)
+  - LFP_blocks_list.2.operation1.0.act1: numerator shape (1, 6), denominator shape (8, 4)
+  - LFP_blocks_list.2.operation1.0.act2: numerator shape (1, 6), denominator shape (8, 4)
+  - LFP_blocks_list.2.operation2.0.act1: numerator shape (1, 6), denominator shape (8, 4)
+  - LFP_blocks_list.2.operation2.0.act2: numerator shape (1, 6), denominator shape (8, 4)
+  - LFP_blocks_list.3.operation1.0.act1: numerator shape (1, 6), denominator shape (8, 4)
+  - LFP_blocks_list.3.operation1.0.act2: numerator shape (1, 6), denominator shape (8, 4)
+  - LFP_blocks_list.3.operation2.0.act1: numerator shape (1, 6), denominator shape (8, 4)
+  - LFP_blocks_list.3.operation2.0.act2: numerator shape (1, 6), denominator shape (8, 4)
+已指定 --no_vis，跳过可视化。

@@ -133,6 +133,138 @@ def fps_with_knn_adaptive(
 
 
 @torch.no_grad()
+def fps_with_knn_coarse_fine(
+    X: torch.Tensor,
+    K: int,
+    k_neighbors: int = 24,
+    init_threshold: float = 0.1,
+    max_iter: int = 10,
+    min_candidates_ratio: float = 1.2,
+    seed: str = "first",
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    粗筛 + 细筛 加强版 FPS+KNN。
+    粗筛：调节阈值使候选数 >= min_candidates_ratio * k_neighbors（保证候选数 > k_neighbors）。
+    细筛：在候选集合上做精排序 topk，得到最终 k_neighbors 个邻居。
+    返回与 fps_with_knn_adaptive 对齐：idx, radii, knn_idx, distances_matrix, knn_radii, thresholds
+    """
+    assert X.ndim == 3
+    B, N, D = X.shape
+    device, dtype = X.device, X.dtype
+    K = min(K, N)
+    min_candidates = max(k_neighbors + 1, int(k_neighbors * min_candidates_ratio))
+
+    x2 = (X * X).sum(dim=-1)
+    idx = torch.zeros((B, K), dtype=torch.long, device=device)
+    radii = torch.zeros((B, K), dtype=dtype, device=device)
+    min_dist = torch.full((B, N), float("inf"), dtype=dtype, device=device)
+    distances_matrix = torch.zeros((B, K, N), dtype=dtype, device=device)
+    thresholds = torch.zeros((B, K), dtype=dtype, device=device)
+    knn_idx = torch.zeros((B, K, k_neighbors), dtype=torch.long, device=device)
+    knn_radii = torch.zeros((B, K), dtype=dtype, device=device)
+
+    if seed == "first":
+        first = torch.zeros(B, dtype=torch.long, device=device)
+    elif seed == "random":
+        first = torch.randint(0, N, (B,), device=device)
+    elif seed == "max_norm":
+        first = torch.argmax(x2, dim=1)
+    else:
+        raise ValueError(f"Unknown seed: {seed}")
+
+    idx[:, 0] = first
+    C = X[torch.arange(B), first]
+    c2 = (C * C).sum(dim=-1, keepdim=True)
+    dot = (X @ C.unsqueeze(-1)).squeeze(-1)
+    d2 = (x2 + c2 - 2.0 * dot).clamp_min_(0.0).sqrt()
+    distances_matrix[:, 0, :] = d2
+    min_dist.copy_(d2)
+    radii[:, 0], _ = torch.max(min_dist, dim=1)
+    min_dist[torch.arange(B), first] = 0.0
+
+    for t in range(1, K):
+        farthest = torch.argmax(min_dist, dim=1)
+        idx[:, t] = farthest
+        C = X[torch.arange(B), farthest]
+        c2 = (C * C).sum(dim=-1, keepdim=True)
+        dot = (X @ C.unsqueeze(-1)).squeeze(-1)
+        d2 = (x2 + c2 - 2.0 * dot).clamp_min_(0.0).sqrt()
+        distances_matrix[:, t, :] = d2
+        torch.minimum(min_dist, d2, out=min_dist)
+        radii[:, t], _ = torch.max(min_dist, dim=1)
+        min_dist[torch.arange(B), farthest] = 0.0
+
+    for t in range(K):
+        d = distances_matrix[:, t, :]
+        threshold = torch.full((B,), init_threshold, dtype=dtype, device=device)
+        for i in range(max_iter):
+            mask = d < threshold.unsqueeze(-1)
+            count = mask.sum(dim=1).float()
+            done = count >= min_candidates
+            if done.all():
+                break
+            too_few = (count < min_candidates).float()
+            adjust = torch.where(too_few.bool(), 0.1, 0.0)
+            threshold = threshold * (1 + adjust)
+        thresholds[:, t] = threshold
+        mask = d < threshold.unsqueeze(-1)
+        masked_d = d.clone()
+        masked_d[~mask] = float("inf")
+        k_actual = min(k_neighbors, N)
+        knn_vals, knn_idx_t = torch.topk(masked_d, k=k_actual, dim=1, largest=False)
+        knn_idx[:, t, :] = knn_idx_t
+        knn_radii[:, t] = knn_vals[:, -1]
+
+    return idx, radii, knn_idx, distances_matrix, knn_radii, thresholds
+
+
+@torch.no_grad()
+def fps_with_knn_vanilla(
+    X: torch.Tensor,
+    K: int,
+    k_neighbors: int = 24,
+    seed: str = "first",
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    与 fps_with_knn_adaptive 相同的 FPS，但 KNN 使用标准精确 topk（vanilla KNN）。
+    返回：idx, radii, knn_idx, distances_matrix, knn_radii。
+    """
+    idx, radii, _, distances_matrix, _, _, _ = fps_with_knn_adaptive(
+        X, K, k_neighbors=k_neighbors, init_threshold=0.1,
+        max_iter=10, tol=0.05, seed=seed
+    )
+    B, K, N = distances_matrix.shape
+    device = X.device
+    k_actual = min(k_neighbors, N)
+    knn_vals, knn_idx = torch.topk(distances_matrix, k=k_actual, dim=2, largest=False)
+    knn_radii = knn_vals[:, :, -1]
+    return idx, radii, knn_idx, distances_matrix, knn_radii
+
+
+def knn_neighbor_set_iou(
+    idx_a: torch.Tensor, idx_b: torch.Tensor, batch_dims: int = 2
+) -> torch.Tensor:
+    """
+    计算两组 KNN 邻居索引的 IoU（交并比）。
+    idx_a, idx_b: (B, K, k)，每元素为点索引。返回 (B, K) float32。
+    """
+    if idx_a.dim() == 2:
+        idx_a = idx_a.unsqueeze(1)
+        idx_b = idx_b.unsqueeze(1)
+    B, K, k = idx_a.shape
+    device = idx_a.device
+    iou_list = []
+    for b in range(B):
+        for t in range(K):
+            set_a = set(idx_a[b, t].cpu().tolist())
+            set_b = set(idx_b[b, t].cpu().tolist())
+            inter = len(set_a & set_b)
+            union = len(set_a | set_b)
+            iou_list.append(inter / union if union > 0 else 1.0)
+    return torch.tensor(iou_list, device=device, dtype=torch.float32).view(B, K)
+
+
+@torch.no_grad()
 def compute_fps_radii_batch(X: torch.Tensor, K: int, seed: str = "first") -> torch.Tensor:
     """
     X: [B, N, 3], 返回 radii [B, K]

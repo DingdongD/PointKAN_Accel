@@ -75,11 +75,11 @@ def setup_logger(
     if file_output:
         if log_file is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            log_file = f"simulation_{timestamp}.log"
+            log_file = str(Path("sim_log") / f"simulation_{timestamp}.log")
         
         _log_file_path = log_file
         
-        # Ensure directory exists
+        # Ensure directory exists (e.g. sim_log)
         log_path = Path(log_file)
         log_path.parent.mkdir(parents=True, exist_ok=True)
         

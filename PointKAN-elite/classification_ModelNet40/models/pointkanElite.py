@@ -6,8 +6,14 @@ from .kan import KAN
 from kat_rational import KAT_Group
 # from torch import einsum
 # from einops import rearrange, repeat
-from timm.models.layers import to_2tuple
 from functools import partial
+
+
+def to_2tuple(x):
+    """将标量或序列转为 (a, b)，与 timm.models.layers.to_2tuple 行为一致。"""
+    if isinstance(x, (list, tuple)):
+        return (x[0], x[1]) if len(x) >= 2 else (x[0], x[0])
+    return (x, x)
 
 from pointnet2_ops import pointnet2_utils
 
@@ -178,6 +184,7 @@ class Geometric_Affine_Module(nn.Module):
             grouped_points = self.affine_alpha*grouped_points + self.affine_beta # 仿射变换 
  
         new_points = torch.cat([grouped_points, new_points.view(B, S, 1, -1).repeat(1, 1, self.kneighbors, 1)], dim=-1)
+        
         # S-Pool
         e_new_points = torch.exp(new_points.permute(0,3,1,2))  # B 2C G K
         up = (new_points.permute(0,3,1,2) * e_new_points).mean(-1) # B 2C G

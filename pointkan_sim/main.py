@@ -11,12 +11,21 @@ PointKAN CIM PPA 仿真器 - 主入口
     python -m pointkan_sim.main --network pointkan --accelerator baseline
     python -m pointkan_sim.main --network pointkan-elite --accelerator acc
     python -m pointkan_sim.main --output report.json
+
+仿真日志、报告、时间线 CSV 等统一写入 --sim_log_dir 目录（默认 ./sim_log）。
+使用真实 checkpoint 与 ModelNet40 配置评估：python -m pointkan_sim.run_sim_with_real_eval --run_real_inference --output report.json
 """
 
 import argparse
+import math
 import os
 import sys
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+# 仿真日志与报告统一输出目录（相对当前工作目录）
+SIM_LOG_DIR = "sim_log"
 
 # -----------------------------------------------------------------------------
 # 路径修正（仅当被直接以脚本方式运行且未作为包导入时执行）
@@ -39,9 +48,19 @@ from pointkan_sim.network.pointkan_net import (
     create_pointkan_classification,
 )
 from pointkan_sim.network.pointkan_elite_net import create_pointkan_elite_classification
+from pointkan_sim.network.activation_shape import (
+    compute_activation_shapes,
+    ActivationShapeInfo,
+    format_activation_shape,
+)
 from pointkan_sim.operators.dispatcher import (
     dispatch_layer,
     list_supported_op_types,
+)
+from pointkan_sim.operators.layer_buffer_ops import (
+    gen_first_layer_input_load_events,
+    gen_layer_buffer_read_events,
+    gen_layer_buffer_write_events,
 )
 from pointkan_sim.integration.mnsim_netstruct import (
     build_netstruct_from_layers,
@@ -50,6 +69,11 @@ from pointkan_sim.integration.mnsim_netstruct import (
 from pointkan_sim.simulator.scheduler import Scheduler
 from pointkan_sim.report.reporter import Reporter, create_ppa_result
 from pointkan_sim.analysis.breakdown import analyze_simulation_events_breakdown
+from pointkan_sim.analysis.timeline import (
+    build_module_activity_timeline,
+    build_module_activity_segments,
+    timeline_to_csv_rows,
+)
 from pointkan_sim.utils.logger import (
     setup_logger,
     log_info,
@@ -150,6 +174,39 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="禁用 MNSIM 全 NetStruct，仅使用 PE 级估算",
     )
+    parser.add_argument(
+        "--no_layer_buffer",
+        action="store_true",
+        help="禁用层间 buffer 读写（仅仿真计算单元，与旧行为一致）",
+    )
+    parser.add_argument(
+        "--show_shapes",
+        action="store_true",
+        help="打印每层激活 shape（input_shape → output_shape）与数据量",
+    )
+    parser.add_argument(
+        "--output_timeline_csv",
+        type=str,
+        default=None,
+        help="输出「每 cycle 下工作的模块」时间线到 CSV（可用 --timeline_stride 采样）",
+    )
+    parser.add_argument(
+        "--timeline_stride",
+        type=int,
+        default=500,
+        help="时间线采样步长（cycle），默认 500；仅与 --output_timeline_csv 配合",
+    )
+    parser.add_argument(
+        "--enable_w8a8_quant_dequant",
+        action="store_true",
+        help="在 Conv/Linear 前后插入量化和反量化节点（FP32↔INT8），参与 cycle/功耗仿真；需在 hw_config.logic_circuit.quant_dequant 配置 power/cycles",
+    )
+    parser.add_argument(
+        "--sim_log_dir",
+        type=str,
+        default=SIM_LOG_DIR,
+        help="仿真日志与报告等输出统一保存目录，默认 sim_log",
+    )
 
     return parser.parse_args()
 
@@ -194,35 +251,71 @@ def load_network(
 # 仿真核心
 # =============================================================================
 
+def _add_events_to_scheduler(
+    scheduler: Scheduler,
+    events: List[Any],
+    base_cycle: int,
+    layer_name: str,
+    layer_type: str,
+) -> None:
+    """将一批 Event 加入调度器，并打上层名与层类型。"""
+    for event in events:
+        meta = dict(event.metadata or {})
+        meta["layer_name"] = layer_name
+        meta["layer_type"] = layer_type
+        scheduler.event_queue.add_event(
+            cycle=event.cycle + base_cycle,
+            operator=event.operator,
+            stage=event.stage,
+            sub_stage=event.sub_stage,
+            circuit_module=event.circuit_module,
+            operation=event.operation,
+            power=event.power,
+            duration=event.duration,
+            clock_period_ns=event.clock_period_ns,
+            metadata=meta,
+        )
+
+
 def simulate_network(
     layers: List[LayerDef],
     hw_config: HardwareConfig,
     show_layers: bool = False,
     mnsim_context: Optional[Dict[str, Any]] = None,
+    activation_shapes: Optional[List[ActivationShapeInfo]] = None,
+    enable_layer_buffer: bool = True,
+    show_shapes: bool = False,
 ) -> Dict[str, Any]:
     """
     对整网进行周期级仿真：按层派发算子生成事件，送入调度器执行。
 
-    - 若提供 mnsim_context（含 mnsim_latency_ns / mnsim_energy_nj / mnsim_index），
-      conv1d/linear 将使用 MNSIM 全 NetStruct 的每层延迟与能耗，否则使用 PE 级适配器。
-    - 每个事件的 metadata 会写入当前层名与层类型，便于后续按层/按算子/按模块做 breakdown。
+    - 若提供 mnsim_context，conv1d/linear 使用 MNSIM 全 NetStruct 结果。
+    - 若 enable_layer_buffer 且提供 activation_shapes，则在每层首尾插入层间 buffer 读写事件
+      （首层前：点云 N×3 输入加载；层间：buffer 读/写，超过 buffer_size 部分按 DRAM spill 建模）。
+    - 每个事件的 metadata 会写入当前层名与层类型，便于 breakdown 聚合。
 
     Args:
         layers: 网络层定义列表
         hw_config: 硬件配置
         show_layers: 是否在控制台打印每层周期与事件数
-        mnsim_context: 可选 MNSIM 全 NetStruct 结果上下文（会被修改：mnsim_index 递增）
+        mnsim_context: 可选 MNSIM 全 NetStruct 结果上下文
+        activation_shapes: 每层激活 shape 与字节数（用于 buffer 事件与报告）
+        enable_layer_buffer: 是否启用层间 buffer 读写与 buffer size 约束
+        show_shapes: 是否打印每层激活 shape（input → output）
 
     Returns:
-        包含 total_cycles、total_energy_nJ、latency_ms、avg_power_mW、peak_power_mW、
-        layer_results、sim_result 等键的字典。
+        包含 total_cycles、total_energy_nJ、layer_results、sim_result、activation_shapes 等键的字典。
     """
     scheduler = Scheduler(hw_config=hw_config)
     layer_results: List[Dict[str, Any]] = []
     current_cycle = 0
+    clock_ns = hw_config.clock_period
+    use_buffer = enable_layer_buffer and activation_shapes is not None and len(activation_shapes) == len(layers)
 
-    for layer in layers:
-        # 无算子层（如全局池化）只记录占位信息
+    for i, layer in enumerate(layers):
+        shape_info = activation_shapes[i] if (activation_shapes and i < len(activation_shapes)) else None
+
+        # 无算子层（如全局池化）只记录占位信息，不产生事件
         if not layer.operators:
             layer_results.append({
                 "name": layer.name,
@@ -230,50 +323,81 @@ def simulate_network(
                 "cycles": 0,
                 "events": 0,
                 "description": layer.description,
+                "input_shape": list(shape_info.input_shape) if shape_info and shape_info.input_shape else None,
+                "output_shape": list(shape_info.output_shape) if shape_info and shape_info.output_shape else None,
             })
+            if show_layers and show_shapes and shape_info:
+                log_info(
+                    f"  {layer.name:<25s}  —  (无算子)  "
+                    f"in {format_activation_shape(shape_info.input_shape)}  "
+                    f"→ out {format_activation_shape(shape_info.output_shape)}"
+                )
             continue
 
-        # 派发该层所有算子，得到带相对周期的 Event 列表（可能使用 mnsim_context）
-        layer_events = dispatch_layer(layer.operators, hw_config, mnsim_context)
+        layer_start_cycle = current_cycle
+        num_events_this_layer = 0
 
-        # 将事件加入调度器，并统一打上层名与层类型，便于 breakdown 聚合
-        for event in layer_events:
-            meta = dict(event.metadata or {})
-            meta["layer_name"] = layer.name
-            meta["layer_type"] = layer.layer_type
-            scheduler.event_queue.add_event(
-                cycle=event.cycle + current_cycle,
-                operator=event.operator,
-                stage=event.stage,
-                sub_stage=event.sub_stage,
-                circuit_module=event.circuit_module,
-                operation=event.operation,
-                power=event.power,
-                duration=event.duration,
-                clock_period_ns=event.clock_period_ns,
-                metadata=meta,
+        # 1) 首层：点云输入 N×3 从 DRAM 加载
+        if use_buffer and shape_info and i == 0 and shape_info.input_bytes > 0:
+            load_events = gen_first_layer_input_load_events(
+                shape_info.input_bytes, hw_config, layer.name, clock_ns
             )
+            _add_events_to_scheduler(scheduler, load_events, current_cycle, layer.name, layer.layer_type)
+            if load_events:
+                current_cycle += sum(e.duration for e in load_events)
+                num_events_this_layer += len(load_events)
 
-        # 本层时间跨度与统计
-        layer_span = max(
-            (e.cycle + e.duration for e in layer_events),
-            default=0,
-        )
+        # 2) 非首层：从 buffer（及可选 DRAM spill）读入本层输入
+        if use_buffer and shape_info and i > 0 and shape_info.input_bytes > 0:
+            read_events = gen_layer_buffer_read_events(
+                shape_info.input_bytes, hw_config, layer.name, clock_ns
+            )
+            _add_events_to_scheduler(scheduler, read_events, current_cycle, layer.name, layer.layer_type)
+            if read_events:
+                current_cycle += sum(e.duration for e in read_events)
+                num_events_this_layer += len(read_events)
+
+        # 3) 本层计算事件
+        layer_events = dispatch_layer(layer.operators, hw_config, mnsim_context)
+        _add_events_to_scheduler(scheduler, layer_events, current_cycle, layer.name, layer.layer_type)
+        layer_span = max((e.cycle + e.duration for e in layer_events), default=0)
+        current_cycle += layer_span
+        num_events_this_layer += len(layer_events)
+
+        # 4) 非末层：将本层输出写回 buffer（及可选 DRAM spill）
+        if use_buffer and shape_info and i < len(layers) - 1 and shape_info.output_bytes > 0:
+            write_events = gen_layer_buffer_write_events(
+                shape_info.output_bytes, hw_config, layer.name, clock_ns
+            )
+            _add_events_to_scheduler(scheduler, write_events, current_cycle, layer.name, layer.layer_type)
+            if write_events:
+                current_cycle += sum(e.duration for e in write_events)
+                num_events_this_layer += len(write_events)
+
         layer_results.append({
             "name": layer.name,
             "type": layer.layer_type,
-            "cycles": layer_span,
-            "events": len(layer_events),
+            "cycles": current_cycle - layer_start_cycle,
+            "events": num_events_this_layer,
             "description": layer.description,
+            "input_shape": list(shape_info.input_shape) if shape_info and shape_info.input_shape else None,
+            "output_shape": list(shape_info.output_shape) if shape_info and shape_info.output_shape else None,
+            "input_bytes": shape_info.input_bytes if shape_info else None,
+            "output_bytes": shape_info.output_bytes if shape_info else None,
         })
 
         if show_layers:
+            shape_str = ""
+            if show_shapes and shape_info:
+                shape_str = (
+                    f"  in {format_activation_shape(shape_info.input_shape)} "
+                    f"→ out {format_activation_shape(shape_info.output_shape)}  "
+                    f"({shape_info.output_bytes} B)"
+                )
             log_info(
-                f"  {layer.name:<25s}  {layer_span:>10,} cycles  "
-                f"{len(layer_events):>4} events  [{layer.layer_type}]"
+                f"  {layer.name:<25s}  {current_cycle - layer_start_cycle:>10,} cycles  "
+                f"{num_events_this_layer:>4} events  [{layer.layer_type}]{shape_str}"
             )
-
-        current_cycle += layer_span
 
     # 运行周期级仿真，汇总总周期、总能耗、峰值功率等
     log_info(
@@ -289,7 +413,7 @@ def simulate_network(
     latency_ms = latency_ns / 1e6
     avg_power = (total_energy / latency_ns * 1e3) if latency_ns > 0 else 0.0
 
-    return {
+    out: Dict[str, Any] = {
         "total_cycles": total_cycles,
         "total_energy_nJ": total_energy,
         "latency_ns": latency_ns,
@@ -300,6 +424,9 @@ def simulate_network(
         "layer_results": layer_results,
         "sim_result": sim_result,
     }
+    if activation_shapes is not None:
+        out["activation_shapes"] = [s.to_dict() for s in activation_shapes]
+    return out
 
 
 # =============================================================================
@@ -427,6 +554,8 @@ def _write_report_to_file(
     reporter.add_metadata("accelerator", accelerator_name)
     if results.get("breakdown"):
         reporter.add_section("breakdown_detail", results["breakdown"])
+    if results.get("activation_shapes"):
+        reporter.add_section("activation_shapes", results["activation_shapes"])
 
     if output_path.lower().endswith(".csv"):
         with open(output_path, "w", encoding="utf-8") as f:
@@ -446,17 +575,28 @@ def _write_report_to_file(
 def run_demo(args: argparse.Namespace) -> Dict[str, Any]:
     """
     运行演示流程：PointKAN + 指定加速器，默认打印每层信息并汇总 PPA。
+    点云输入为 N×3（N=input_points），并启用层间 buffer 与激活 shape 显示（若 --show_shapes）。
     """
     log_section("演示: PointKAN on baseline")
     hw_config = get_accelerator_config(args.accelerator)
+    hw_config.enable_w8a8_quant_dequant = getattr(args, "enable_w8a8_quant_dequant", False)
     layers = load_network("pointkan", args.input_points, args.num_classes)
+    activation_shapes = compute_activation_shapes(layers, args.input_points, input_channels=3)
 
     log_info(f"网络: PointKAN（{len(layers)} 层）")
+    log_info(f"点云输入: N×3，N={args.input_points}（每样本 {args.input_points * 3 * 4} B）")
     log_info(f"加速器: {hw_config.accelerator_name}")
     log_info(f"CIM 并行度: {hw_config.cim_parallelism}")
     log_info("")
 
-    results = simulate_network(layers, hw_config, show_layers=True)
+    results = simulate_network(
+        layers,
+        hw_config,
+        show_layers=True,
+        activation_shapes=activation_shapes,
+        enable_layer_buffer=not getattr(args, "no_layer_buffer", False),
+        show_shapes=getattr(args, "show_shapes", False),
+    )
     _attach_breakdown_and_ppa(results, hw_config)
     print_simulation_summary(results, hw_config, "PointKAN")
 
@@ -468,15 +608,19 @@ def run_demo(args: argparse.Namespace) -> Dict[str, Any]:
 
 def run_network_simulation(args: argparse.Namespace) -> Dict[str, Any]:
     """
-    运行指定网络的完整仿真：可选 MNSIM 全 NetStruct、每层打印、事件统计与报告输出。
+    运行指定网络的完整仿真：点云 N×3 输入、层间 buffer、可选 MNSIM 全 NetStruct、
+    每层打印与激活 shape（--show_shapes）、事件统计与报告输出。
     """
     network_name = args.network
     log_section(f"网络仿真: {network_name}")
 
     hw_config = get_accelerator_config(args.accelerator)
+    hw_config.enable_w8a8_quant_dequant = getattr(args, "enable_w8a8_quant_dequant", False)
     layers = load_network(network_name, args.input_points, args.num_classes)
+    activation_shapes = compute_activation_shapes(layers, args.input_points, input_channels=3)
 
     log_info(f"网络: {network_name}（{len(layers)} 层）")
+    log_info(f"点云输入: N×3，N={args.input_points}（每样本 {args.input_points * 3 * 4} B）")
     log_info(
         f"加速器: {hw_config.accelerator_name} "
         f"({hw_config.accelerator_type.name})"
@@ -485,14 +629,17 @@ def run_network_simulation(args: argparse.Namespace) -> Dict[str, Any]:
     log_info(f"Bit-serial 周期: {hw_config.bit_serial_cycles}")
     log_info("")
 
-    # 可选：为 conv1d/linear 启用 MNSIM 全 NetStruct（Tile/NoC 级）延迟与能耗
+    # 为 conv1d/linear 启用 MNSIM 全 NetStruct（Tile/NoC 级）延迟与能耗
     mnsim_context = None
     use_mnsim_full = getattr(args, "mnsim_full", False)
     no_mnsim_full = getattr(args, "no_mnsim_full", False)
     if use_mnsim_full and not no_mnsim_full:
-        netstruct, _ = build_netstruct_from_layers(layers)
+        netstruct, conv_linear_order = build_netstruct_from_layers(layers)
         if netstruct:
-            mnsim_result = run_mnsim_full(netstruct)
+            mnsim_result = run_mnsim_full(
+                netstruct,
+                conv_linear_order=conv_linear_order,
+            )
             if mnsim_result.success:
                 mnsim_context = {
                     "mnsim_latency_ns": mnsim_result.layer_latency_ns,
@@ -500,6 +647,18 @@ def run_network_simulation(args: argparse.Namespace) -> Dict[str, Any]:
                     "mnsim_index": 0,
                 }
                 log_info("已启用 MNSIM 全 NetStruct（Tile/NoC）用于 conv1d/linear。")
+                # 每层 conv/linear 的 cycle、latency(ns)、energy(nJ) 详细日志
+                clock_ns = getattr(hw_config, "clock_period", 1.0)
+                order = mnsim_result.conv_linear_order or []
+                for idx, (lat_ns, en_nj) in enumerate(
+                    zip(mnsim_result.layer_latency_ns, mnsim_result.layer_energy_nj)
+                ):
+                    layer_name = order[idx][0] if idx < len(order) else f"layer_{idx}"
+                    cycles = max(1, int(math.ceil(lat_ns / clock_ns)))
+                    log_info(
+                        f"  MNSIM [{layer_name}] latency={lat_ns:.1f} ns, "
+                        f"cycles={cycles}, energy={en_nj:.2f} nJ"
+                    )
             else:
                 log_info(f"MNSIM 全 NetStruct 未启用: {mnsim_result.error}")
         else:
@@ -511,6 +670,9 @@ def run_network_simulation(args: argparse.Namespace) -> Dict[str, Any]:
         hw_config,
         show_layers=args.show_layers,
         mnsim_context=mnsim_context,
+        activation_shapes=activation_shapes,
+        enable_layer_buffer=not getattr(args, "no_layer_buffer", False),
+        show_shapes=getattr(args, "show_shapes", False),
     )
     print_simulation_summary(results, hw_config, network_name)
 
@@ -518,6 +680,21 @@ def run_network_simulation(args: argparse.Namespace) -> Dict[str, Any]:
         print_event_statistics(results["sim_result"], hw_config)
 
     _attach_breakdown_and_ppa(results, hw_config)
+
+    # 模块活动时间线：不同 cycle 下有哪些模块在工作（前段算完可供给后段）
+    events = getattr(results.get("sim_result"), "events", [])
+    if events:
+        stride = getattr(args, "timeline_stride", 500)
+        results["module_activity_timeline"] = build_module_activity_timeline(
+            events, cycle_stride=stride
+        )
+        results["module_activity_segments"] = build_module_activity_segments(events)
+    out_tl = getattr(args, "output_timeline_csv", None)
+    if out_tl and results.get("module_activity_timeline"):
+        with open(out_tl, "w", encoding="utf-8") as f:
+            f.write("\n".join(timeline_to_csv_rows(results["module_activity_timeline"])))
+        log_info(f"模块活动时间线已写入: {out_tl}")
+
     return results
 
 
@@ -536,7 +713,16 @@ def main() -> int:
     """
     args = parse_args()
 
-    setup_logger(level=LogLevel[args.log_level])
+    # 统一输出目录：创建 sim_log 并将日志、报告、时间线 CSV 等写入该目录
+    Path(args.sim_log_dir).mkdir(parents=True, exist_ok=True)
+    _log_path = Path(args.sim_log_dir) / f"simulation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    setup_logger(level=LogLevel[args.log_level], log_file=str(_log_path))
+
+    # 相对路径的报告/时间线输出统一落到 sim_log_dir
+    if getattr(args, "output", None) and not os.path.isabs(args.output):
+        args.output = str(Path(args.sim_log_dir) / os.path.basename(args.output))
+    if getattr(args, "output_timeline_csv", None) and not os.path.isabs(args.output_timeline_csv):
+        args.output_timeline_csv = str(Path(args.sim_log_dir) / os.path.basename(args.output_timeline_csv))
 
     if args.list_accelerators:
         print("可用加速器配置:")

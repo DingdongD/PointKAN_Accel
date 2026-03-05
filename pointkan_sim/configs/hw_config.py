@@ -319,6 +319,38 @@ class LogicCircuitConfig:
 
 
 # =============================================================================
+# Inter-Layer Buffer (层间激活缓存)
+# =============================================================================
+
+@dataclass
+class InterLayerBufferConfig:
+    """
+    层间激活 buffer：模拟上一层输出写回、下一层从 buffer 读入的容量与带宽限制。
+
+    当单层输出数据量超过 size_bytes 时，超出部分按 spill 到 DRAM 建模（可选），
+    用于模拟实际内存行为与多次读写。
+
+    Attributes:
+        size_bytes: Buffer 容量（字节）；超过则产生 spill 或分块
+        bandwidth_bytes_per_cycle: 每周期可读/写字节数（带宽）
+        read_power_mw: Buffer 读功率 (mW)
+        write_power_mw: Buffer 写功率 (mW)
+        spill_to_dram: 是否将超出 capacity 的部分建模为 DRAM 读写
+        dram_bandwidth_bytes_per_cycle: DRAM 带宽（spill 时用）
+        dram_read_power_mw: DRAM 读功率 (mW)
+        dram_write_power_mw: DRAM 写功率 (mW)
+    """
+    size_bytes: int = 65536                    # 64 KB 片上 buffer
+    bandwidth_bytes_per_cycle: int = 256       # 256 B/cycle
+    read_power_mw: float = 2.0
+    write_power_mw: float = 2.0
+    spill_to_dram: bool = True
+    dram_bandwidth_bytes_per_cycle: int = 32
+    dram_read_power_mw: float = 50.0
+    dram_write_power_mw: float = 50.0
+
+
+# =============================================================================
 # Top-Level Hardware Configuration
 # =============================================================================
 
@@ -338,6 +370,7 @@ class HardwareConfig:
         rram_cim_macro: RRAM-CIM macro configuration (placeholder)
         sorting_circuit: Sorting circuit configuration
         logic_circuit: Logic circuit configuration
+        inter_layer_buffer: 层间激活 buffer 配置（容量、带宽、spill）
     """
     # Identity
     accelerator_type: AcceleratorType = AcceleratorType.BASELINE
@@ -362,6 +395,11 @@ class HardwareConfig:
     logic_circuit: LogicCircuitConfig = field(
         default_factory=LogicCircuitConfig
     )
+    inter_layer_buffer: InterLayerBufferConfig = field(
+        default_factory=InterLayerBufferConfig
+    )
+    # W8A8：Conv/Linear 前插入量化(FP32→INT8)、后插入反量化(INT8→FP32)，供 BN/ReLU 等浮点非线性使用
+    enable_w8a8_quant_dequant: bool = False
 
     # =========================================================================
     # Derived convenience properties
@@ -535,6 +573,16 @@ def _build_baseline() -> HardwareConfig:
             quant_dequant=QuantDequantConfig(power=0.0, cycles=0), # TODO
             interpolation=None,                 # baseline: no interpolation
         ),
+        inter_layer_buffer=InterLayerBufferConfig(
+            size_bytes=65536,                   # 64 KB
+            bandwidth_bytes_per_cycle=256,
+            read_power_mw=2.0,
+            write_power_mw=2.0,
+            spill_to_dram=True,
+            dram_bandwidth_bytes_per_cycle=32,
+            dram_read_power_mw=50.0,
+            dram_write_power_mw=50.0,
+        ),
     )
 
 
@@ -627,6 +675,16 @@ def _build_acc() -> HardwareConfig:
                 power=0.0,                      # TODO
                 cycles=0,                       # TODO
             ),
+        ),
+        inter_layer_buffer=InterLayerBufferConfig(
+            size_bytes=65536,
+            bandwidth_bytes_per_cycle=256,
+            read_power_mw=2.0,
+            write_power_mw=2.0,
+            spill_to_dram=True,
+            dram_bandwidth_bytes_per_cycle=32,
+            dram_read_power_mw=50.0,
+            dram_write_power_mw=50.0,
         ),
     )
 

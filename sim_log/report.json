@@ -1,0 +1,594 @@
+{
+  "title": "PointKAN PPA \u62a5\u544a",
+  "metadata": {
+    "generated_at": "2026-03-05T09:33:31.280831",
+    "version": "0.1.0",
+    "network": "pointkan-elite",
+    "accelerator": "baseline"
+  },
+  "results": {
+    "latency": {
+      "cycles": 1812379,
+      "ns": 1812379.0,
+      "ms": 1.812379
+    },
+    "power_mW": 19.205355436211466,
+    "area_mm2": 0.0,
+    "energy": {
+      "nJ": 34807.3828801255,
+      "uJ": 34.8073828801255
+    },
+    "breakdown": {
+      "latency": {
+        "by_layer": {
+          "embedding": 1269870,
+          "GAM-stage0": 237058,
+          "LFP-stage0": 14588,
+          "stage-0": 10362,
+          "GAM-stage1": 67074,
+          "LFP-stage1": 19378,
+          "stage-1": 15152,
+          "GAM-stage2": 22402,
+          "LFP-stage2": 29872,
+          "stage-2": 26056,
+          "GAM-stage3": 9666,
+          "LFP-stage3": 33976,
+          "stage-3": 30576,
+          "classifier": 26349
+        },
+        "by_operator": {
+          "LayerBuffer": 57992,
+          "conv1d": 1388220,
+          "BN": 19,
+          "ReLU": 19,
+          "FPS": 138240,
+          "KNN": 179520,
+          "AffineNorm": 4,
+          "SPool": 4,
+          "LayerNorm": 8,
+          "KAN": 12288,
+          "ADD": 8704,
+          "AdaptiveMaxPool1d": 1024,
+          "linear": 26337
+        },
+        "by_module": {
+          "dram": 56192,
+          "mnsim_tile_noc": 1414557,
+          "batchnorm1d": 19,
+          "relu": 19,
+          "inter_layer_buffer": 6408,
+          "sram_cim_array": 279552,
+          "shift_add": 9984,
+          "min_distance_table": 4544,
+          "comp_tree_1024_max": 1920,
+          "buffer": 13632,
+          "comp_bitonic_1024_min32": 16320,
+          "layernorm": 12,
+          "spool": 1028,
+          "rram_lut": 4096,
+          "adder": 4096
+        }
+      },
+      "power": {},
+      "area": {},
+      "energy": {
+        "by_layer": {
+          "embedding": 21357.90694586015,
+          "GAM-stage0": 205.824,
+          "LFP-stage0": 341.352262279298,
+          "stage-0": 315.59866227929797,
+          "GAM-stage1": 205.824,
+          "LFP-stage1": 431.8476363127701,
+          "stage-1": 406.0940363127701,
+          "GAM-stage2": 205.824,
+          "LFP-stage2": 1112.3380448957096,
+          "stage-2": 1086.5844448957098,
+          "GAM-stage3": 205.824,
+          "LFP-stage3": 3265.727157134985,
+          "stage-3": 3239.9735571349856,
+          "classifier": 2426.6641330197976
+        },
+        "by_operator": {
+          "LayerBuffer": 2592.0160000000014,
+          "conv1d": 29530.465947105666,
+          "BN": 0.0,
+          "ReLU": 0.0,
+          "FPS": 0.0,
+          "KNN": 0.0,
+          "AffineNorm": 0.0,
+          "SPool": 0.0,
+          "LayerNorm": 0.0,
+          "KAN": 24.576,
+          "ADD": 233.67680000000018,
+          "AdaptiveMaxPool1d": 0.0,
+          "linear": 2426.648133019798
+        },
+        "by_module": {
+          "dram": 2809.600000000002,
+          "mnsim_tile_noc": 31957.114080125462,
+          "batchnorm1d": 0.0,
+          "relu": 0.0,
+          "inter_layer_buffer": 12.816000000000008,
+          "sram_cim_array": 0.0,
+          "shift_add": 0.0,
+          "min_distance_table": 0.0,
+          "comp_tree_1024_max": 0.0,
+          "buffer": 4.096000000000002,
+          "comp_bitonic_1024_min32": 0.0,
+          "layernorm": 0.0,
+          "spool": 0.0,
+          "rram_lut": 20.48,
+          "adder": 3.276800000000001
+        }
+      }
+    }
+  },
+  "sections": [
+    {
+      "title": "breakdown_detail",
+      "content": {
+        "by_layer": {
+          "embedding": {
+            "cycles": 1269870,
+            "energy_nj": 21357.90694586015,
+            "event_count": 6
+          },
+          "GAM-stage0": {
+            "cycles": 237058,
+            "energy_nj": 205.824,
+            "event_count": 30726
+          },
+          "LFP-stage0": {
+            "cycles": 14588,
+            "energy_nj": 341.352262279298,
+            "event_count": 26
+          },
+          "stage-0": {
+            "cycles": 10362,
+            "energy_nj": 315.59866227929797,
+            "event_count": 13
+          },
+          "GAM-stage1": {
+            "cycles": 67074,
+            "energy_nj": 205.824,
+            "event_count": 8198
+          },
+          "LFP-stage1": {
+            "cycles": 19378,
+            "energy_nj": 431.8476363127701,
+            "event_count": 26
+          },
+          "stage-1": {
+            "cycles": 15152,
+            "energy_nj": 406.0940363127701,
+            "event_count": 13
+          },
+          "GAM-stage2": {
+            "cycles": 22402,
+            "energy_nj": 205.824,
+            "event_count": 2310
+          },
+          "LFP-stage2": {
+            "cycles": 29872,
+            "energy_nj": 1112.3380448957096,
+            "event_count": 26
+          },
+          "stage-2": {
+            "cycles": 26056,
+            "energy_nj": 1086.5844448957098,
+            "event_count": 13
+          },
+          "GAM-stage3": {
+            "cycles": 9666,
+            "energy_nj": 205.824,
+            "event_count": 646
+          },
+          "LFP-stage3": {
+            "cycles": 33976,
+            "energy_nj": 3265.727157134985,
+            "event_count": 26
+          },
+          "stage-3": {
+            "cycles": 30576,
+            "energy_nj": 3239.9735571349856,
+            "event_count": 13
+          },
+          "classifier": {
+            "cycles": 26349,
+            "energy_nj": 2426.6641330197976,
+            "event_count": 8
+          }
+        },
+        "by_operator": {
+          "LayerBuffer": {
+            "cycles": 57992,
+            "energy_nj": 2592.0160000000014,
+            "event_count": 52
+          },
+          "conv1d": {
+            "cycles": 1388220,
+            "energy_nj": 29530.465947105666,
+            "event_count": 17
+          },
+          "BN": {
+            "cycles": 19,
+            "energy_nj": 0.0,
+            "event_count": 19
+          },
+          "ReLU": {
+            "cycles": 19,
+            "energy_nj": 0.0,
+            "event_count": 19
+          },
+          "FPS": {
+            "cycles": 138240,
+            "energy_nj": 0.0,
+            "event_count": 19136
+          },
+          "KNN": {
+            "cycles": 179520,
+            "energy_nj": 0.0,
+            "event_count": 22720
+          },
+          "AffineNorm": {
+            "cycles": 4,
+            "energy_nj": 0.0,
+            "event_count": 4
+          },
+          "SPool": {
+            "cycles": 4,
+            "energy_nj": 0.0,
+            "event_count": 4
+          },
+          "LayerNorm": {
+            "cycles": 8,
+            "energy_nj": 0.0,
+            "event_count": 8
+          },
+          "KAN": {
+            "cycles": 12288,
+            "energy_nj": 24.576,
+            "event_count": 24
+          },
+          "ADD": {
+            "cycles": 8704,
+            "energy_nj": 233.67680000000018,
+            "event_count": 40
+          },
+          "AdaptiveMaxPool1d": {
+            "cycles": 1024,
+            "energy_nj": 0.0,
+            "event_count": 4
+          },
+          "linear": {
+            "cycles": 26337,
+            "energy_nj": 2426.648133019798,
+            "event_count": 3
+          }
+        },
+        "by_module": {
+          "dram": {
+            "cycles": 56192,
+            "energy_nj": 2809.600000000002,
+            "event_count": 50
+          },
+          "mnsim_tile_noc": {
+            "cycles": 1414557,
+            "energy_nj": 31957.114080125462,
+            "event_count": 20
+          },
+          "batchnorm1d": {
+            "cycles": 19,
+            "energy_nj": 0.0,
+            "event_count": 19
+          },
+          "relu": {
+            "cycles": 19,
+            "energy_nj": 0.0,
+            "event_count": 19
+          },
+          "inter_layer_buffer": {
+            "cycles": 6408,
+            "energy_nj": 12.816000000000008,
+            "event_count": 26
+          },
+          "sram_cim_array": {
+            "cycles": 279552,
+            "energy_nj": 0.0,
+            "event_count": 19968
+          },
+          "shift_add": {
+            "cycles": 9984,
+            "energy_nj": 0.0,
+            "event_count": 9984
+          },
+          "min_distance_table": {
+            "cycles": 4544,
+            "energy_nj": 0.0,
+            "event_count": 4544
+          },
+          "comp_tree_1024_max": {
+            "cycles": 1920,
+            "energy_nj": 0.0,
+            "event_count": 960
+          },
+          "buffer": {
+            "cycles": 13632,
+            "energy_nj": 4.096000000000002,
+            "event_count": 5456
+          },
+          "comp_bitonic_1024_min32": {
+            "cycles": 16320,
+            "energy_nj": 0.0,
+            "event_count": 960
+          },
+          "layernorm": {
+            "cycles": 12,
+            "energy_nj": 0.0,
+            "event_count": 12
+          },
+          "spool": {
+            "cycles": 1028,
+            "energy_nj": 0.0,
+            "event_count": 8
+          },
+          "rram_lut": {
+            "cycles": 4096,
+            "energy_nj": 20.48,
+            "event_count": 8
+          },
+          "adder": {
+            "cycles": 4096,
+            "energy_nj": 3.276800000000001,
+            "event_count": 16
+          }
+        },
+        "total_cycles": 1812379,
+        "total_energy_nj": 34807.3828801255,
+        "latency_ms": 1.812379
+      }
+    },
+    {
+      "title": "activation_shapes",
+      "content": [
+        {
+          "layer_name": "embedding",
+          "layer_type": "embedding",
+          "input_shape": [
+            1024,
+            3
+          ],
+          "output_shape": [
+            1024,
+            32
+          ],
+          "input_numel": 3072,
+          "output_numel": 32768,
+          "input_bytes": 12288,
+          "output_bytes": 131072
+        },
+        {
+          "layer_name": "GAM-stage0",
+          "layer_type": "GAM",
+          "input_shape": [
+            1024,
+            32
+          ],
+          "output_shape": [
+            512,
+            64
+          ],
+          "input_numel": 32768,
+          "output_numel": 32768,
+          "input_bytes": 131072,
+          "output_bytes": 131072
+        },
+        {
+          "layer_name": "LFP-stage0",
+          "layer_type": "LFP",
+          "input_shape": [
+            512,
+            64
+          ],
+          "output_shape": [
+            512,
+            64
+          ],
+          "input_numel": 32768,
+          "output_numel": 32768,
+          "input_bytes": 131072,
+          "output_bytes": 131072
+        },
+        {
+          "layer_name": "stage-0",
+          "layer_type": "stage",
+          "input_shape": [
+            512,
+            64
+          ],
+          "output_shape": [
+            512,
+            64
+          ],
+          "input_numel": 32768,
+          "output_numel": 32768,
+          "input_bytes": 131072,
+          "output_bytes": 131072
+        },
+        {
+          "layer_name": "GAM-stage1",
+          "layer_type": "GAM",
+          "input_shape": [
+            512,
+            64
+          ],
+          "output_shape": [
+            256,
+            128
+          ],
+          "input_numel": 32768,
+          "output_numel": 32768,
+          "input_bytes": 131072,
+          "output_bytes": 131072
+        },
+        {
+          "layer_name": "LFP-stage1",
+          "layer_type": "LFP",
+          "input_shape": [
+            256,
+            128
+          ],
+          "output_shape": [
+            256,
+            128
+          ],
+          "input_numel": 32768,
+          "output_numel": 32768,
+          "input_bytes": 131072,
+          "output_bytes": 131072
+        },
+        {
+          "layer_name": "stage-1",
+          "layer_type": "stage",
+          "input_shape": [
+            256,
+            128
+          ],
+          "output_shape": [
+            256,
+            128
+          ],
+          "input_numel": 32768,
+          "output_numel": 32768,
+          "input_bytes": 131072,
+          "output_bytes": 131072
+        },
+        {
+          "layer_name": "GAM-stage2",
+          "layer_type": "GAM",
+          "input_shape": [
+            256,
+            128
+          ],
+          "output_shape": [
+            128,
+            256
+          ],
+          "input_numel": 32768,
+          "output_numel": 32768,
+          "input_bytes": 131072,
+          "output_bytes": 131072
+        },
+        {
+          "layer_name": "LFP-stage2",
+          "layer_type": "LFP",
+          "input_shape": [
+            128,
+            256
+          ],
+          "output_shape": [
+            128,
+            256
+          ],
+          "input_numel": 32768,
+          "output_numel": 32768,
+          "input_bytes": 131072,
+          "output_bytes": 131072
+        },
+        {
+          "layer_name": "stage-2",
+          "layer_type": "stage",
+          "input_shape": [
+            128,
+            256
+          ],
+          "output_shape": [
+            128,
+            256
+          ],
+          "input_numel": 32768,
+          "output_numel": 32768,
+          "input_bytes": 131072,
+          "output_bytes": 131072
+        },
+        {
+          "layer_name": "GAM-stage3",
+          "layer_type": "GAM",
+          "input_shape": [
+            128,
+            256
+          ],
+          "output_shape": [
+            64,
+            512
+          ],
+          "input_numel": 32768,
+          "output_numel": 32768,
+          "input_bytes": 131072,
+          "output_bytes": 131072
+        },
+        {
+          "layer_name": "LFP-stage3",
+          "layer_type": "LFP",
+          "input_shape": [
+            64,
+            512
+          ],
+          "output_shape": [
+            64,
+            512
+          ],
+          "input_numel": 32768,
+          "output_numel": 32768,
+          "input_bytes": 131072,
+          "output_bytes": 131072
+        },
+        {
+          "layer_name": "stage-3",
+          "layer_type": "stage",
+          "input_shape": [
+            64,
+            512
+          ],
+          "output_shape": [
+            64,
+            512
+          ],
+          "input_numel": 32768,
+          "output_numel": 32768,
+          "input_bytes": 131072,
+          "output_bytes": 131072
+        },
+        {
+          "layer_name": "global_maxpool",
+          "layer_type": "global_maxpool",
+          "input_shape": [
+            64,
+            512
+          ],
+          "output_shape": [
+            512
+          ],
+          "input_numel": 32768,
+          "output_numel": 512,
+          "input_bytes": 131072,
+          "output_bytes": 2048
+        },
+        {
+          "layer_name": "classifier",
+          "layer_type": "classifier",
+          "input_shape": [
+            512
+          ],
+          "output_shape": [
+            40
+          ],
+          "input_numel": 512,
+          "output_numel": 40,
+          "input_bytes": 2048,
+          "output_bytes": 160
+        }
+      ]
+    }
+  ]
+}
