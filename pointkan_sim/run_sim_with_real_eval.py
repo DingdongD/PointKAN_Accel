@@ -22,7 +22,6 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
-from collections import Counter
 
 # 工程根目录（PointKAN-pytorch）
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -240,7 +239,7 @@ def main() -> int:
         log_separator,
     )
 
-    from pointkan_sim.memory.transactions import infer_memory_transaction
+    from pointkan_sim.memory.transactions import extract_memory_transactions, summarize_memory_transactions
 
     # -------------------------------------------------------------------------
     # 模式：用 ModelNet40 真实样本 + 真实权重 调度仿真，MNSIM 由真实前向得到的层维度驱动
@@ -447,7 +446,7 @@ def main() -> int:
 
         # 可选：导出内存交互事务，使用统一接口（src/dst/kind）
         if args.export_memory_transactions and operator_sequence:
-            mem_txn = [t for t in (infer_memory_transaction(it) for it in operator_sequence) if t is not None]
+            mem_txn = extract_memory_transactions(operator_sequence)
             mem_path = sim_results_dir / "memory_transactions.txt"
             with open(mem_path, "w", encoding="utf-8") as f:
                 f.write("# 内存交互事务序列（统一接口，按 cycle 排序）\n")
@@ -459,7 +458,7 @@ def main() -> int:
                     )
 
             # 额外输出简表：按 src->dst 与 kind 聚合，帮助你快速判断内存分级是否合理
-            route_counter = Counter((tx.src.value, tx.dst.value, tx.kind.value) for tx in mem_txn)
+            route_counter = summarize_memory_transactions(mem_txn)
             summary_path = sim_results_dir / "memory_transactions_summary.txt"
             with open(summary_path, "w", encoding="utf-8") as f:
                 f.write("# 内存事务聚合统计（src->dst, kind）\n")

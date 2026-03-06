@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Iterable, List, Tuple
 
 
 class MemoryLevel(str, Enum):
@@ -138,3 +138,22 @@ def infer_memory_transaction(item: Dict[str, Any]) -> Optional[MemoryTransaction
         dst=dst,
         kind=kind,
     )
+
+
+def extract_memory_transactions(operator_sequence: Iterable[Dict[str, Any]]) -> List[MemoryTransaction]:
+    """从 operator_sequence 批量提取内存事务。"""
+    return [tx for tx in (infer_memory_transaction(it) for it in operator_sequence) if tx is not None]
+
+
+def summarize_memory_transactions(memory_txns: Iterable[MemoryTransaction]) -> Dict[Tuple[str, str, str], int]:
+    """
+    统计内存事务通路负载。
+
+    Returns:
+        {(src, dst, kind): count}
+    """
+    summary: Dict[Tuple[str, str, str], int] = {}
+    for tx in memory_txns:
+        key = (tx.src.value, tx.dst.value, tx.kind.value)
+        summary[key] = summary.get(key, 0) + 1
+    return summary
