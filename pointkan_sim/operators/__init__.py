@@ -1,8 +1,9 @@
 """
-Operators Module
-================
+算子模块（Operators）
+=====================
 
-Point cloud and NN operators for CIM deployment.
+点云与神经网络算子在 CIM 上的部署：FPS、KNN、Conv1d、Linear、BN、ReLU 等，
+通过 dispatcher 按 op_type 派发到对应 handler，生成周期级 Event 供仿真与 operator_sequence 输出。
 """
 
 from .base_operator import (

@@ -1,9 +1,9 @@
 """
-Base Operator Model
-====================
+算子基类（Base Operator Model）
+===============================
 
-Abstract base class for point cloud operators.
-Defines the interface for stage-based modeling with flat macro-module architecture.
+点云算子的抽象基类，定义「按阶段建模 + 扁平宏模块架构」的接口。
+各具体算子（FPS、KNN、Conv1d、Linear 等）需实现 calculate_cycles、calculate_energy、generate_events。
 """
 
 from abc import ABC, abstractmethod
@@ -19,13 +19,13 @@ if TYPE_CHECKING:
 @dataclass
 class SubStage:
     """
-    Sub-stage within an operator stage.
+    算子某一阶段内的子阶段。
 
     Attributes:
-        name: Sub-stage name
-        circuit_modules: List of circuit modules involved
-        is_pipeline: Whether this sub-stage is pipelined
-        description: Human-readable description
+        name: 子阶段名称
+        circuit_modules: 参与的电路模块列表
+        is_pipeline: 是否可与其他子阶段流水
+        description: 可读描述
     """
     name: str
     circuit_modules: List[CircuitModule]
@@ -36,13 +36,13 @@ class SubStage:
 @dataclass
 class Stage:
     """
-    Operator stage containing sub-stages.
+    算子的一个执行阶段，可包含多个子阶段。
 
     Attributes:
-        name: Stage name
-        sub_stages: List of computation sub-stages
-        is_pipeline: Whether stages can be pipelined with other stages
-        description: Human-readable description
+        name: 阶段名称
+        sub_stages: 子阶段列表
+        is_pipeline: 是否可与其它阶段流水
+        description: 可读描述
     """
     name: str
     sub_stages: List[SubStage] = field(default_factory=list)
@@ -50,33 +50,32 @@ class Stage:
     description: str = ""
 
     def add_sub_stage(self, sub_stage: SubStage) -> None:
-        """Add a computation sub-stage."""
+        """添加一个计算子阶段。"""
         self.sub_stages.append(sub_stage)
 
 
 @dataclass
 class OperatorParams:
     """
-    Base parameters for operator execution.
+    算子执行所需的基础参数。
 
     Attributes:
-        input_points: Number of input points
+        input_points: 输入点数量
     """
     input_points: int = 1024
 
 
 class BaseOperator(ABC):
     """
-    Abstract base class for point cloud operators.
+    点云算子的抽象基类，按阶段/子阶段做数据流建模。
 
-    Defines the interface for dataflow modeling with stages and sub-stages.
-    Each operator (FPS, KNN, etc.) must implement this interface.
+    各具体算子（FPS、KNN 等）需实现：_define_stages、calculate_cycles、calculate_energy、generate_events。
 
     Attributes:
-        name: Operator name
-        stages: List of execution stages
-        params: Operator parameters
-        hw_config: Hardware configuration
+        name: 算子名称
+        stages: 执行阶段列表
+        params: 算子参数
+        hw_config: 硬件配置
     """
 
     def __init__(
@@ -95,26 +94,26 @@ class BaseOperator(ABC):
 
     @abstractmethod
     def _define_stages(self) -> None:
-        """Define the stages and sub-stages of this operator."""
+        """定义本算子的阶段与子阶段。"""
         pass
 
     @abstractmethod
     def calculate_cycles(self, params: Optional[OperatorParams] = None) -> int:
-        """Calculate total execution cycles."""
+        """计算总执行周期数。"""
         pass
 
     @abstractmethod
     def calculate_energy(self, params: Optional[OperatorParams] = None) -> float:
-        """Calculate total energy consumption (nJ)."""
+        """计算总能耗 (nJ)。"""
         pass
 
     @abstractmethod
     def generate_events(self, params: Optional[OperatorParams] = None) -> List[Any]:
-        """Generate cycle-level events for simulation."""
+        """生成周期级仿真事件列表。"""
         pass
 
     def get_stages(self) -> List[Stage]:
-        """Get list of stages."""
+        """返回阶段列表。"""
         return self.stages
 
     def __repr__(self) -> str:

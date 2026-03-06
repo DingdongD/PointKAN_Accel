@@ -1,18 +1,19 @@
 """
-Breakdown Analysis Module
-=========================
+Breakdown 分析模块
+=================
 
-Provides detailed breakdown analysis for:
-1. Energy consumption by circuit module
-2. Cycle breakdown by stage/sub-stage
-3. Operator-level analysis (FPS vs KNN)
+对仿真事件进行多维度聚合，供 PPA 报告与饼图使用：
+1. 按电路模块（circuit_module）聚合能耗
+2. 按阶段/子阶段（stage/sub_stage）聚合周期与能耗
+3. 按算子（operator）聚合，用于 FPS/KNN/Conv/Linear 等对比
 
-This module is designed to be integrated with main.py for post-simulation analysis.
+与 main.py 配合：仿真结束后调用 analyze_simulation_events_breakdown，
+得到 by_layer / by_operator / by_module（均含 cycles、energy_nj、event_count）。
 
-Key Concepts:
-- Activity Cycles: Sum of event durations (can exceed total_cycles due to pipelining)
-- Total Cycles: Actual wall-clock cycles from calculate_cycles()
-- Cycle%: Relative contribution to total activity (sums to 100%)
+概念说明：
+- Activity Cycles：事件 duration 之和（流水线可导致大于 wall-clock 总周期）
+- Total Cycles：实际墙钟周期
+- Cycle% / Energy%：相对占比，用于饼图
 """
 
 import math
@@ -33,9 +34,9 @@ def _get_cim_parallelism(hw_config: 'HardwareConfig') -> int:
 
 @dataclass
 class ModuleBreakdown:
-    """Breakdown data for a single circuit module."""
+    """单个电路模块的周期/能耗汇总。"""
     name: str
-    activity_cycles: int = 0     # Sum of event durations for this module
+    activity_cycles: int = 0   # 该模块上所有事件 duration 之和
     energy_nj: float = 0.0
     event_count: int = 0
     avg_power_mw: float = 0.0
@@ -43,28 +44,26 @@ class ModuleBreakdown:
 
 @dataclass
 class StageBreakdown:
-    """Breakdown data for a stage or sub-stage."""
+    """单个阶段或子阶段的周期/能耗汇总。"""
     name: str
-    activity_cycles: int = 0     # Sum of event durations for this stage
+    activity_cycles: int = 0
     energy_nj: float = 0.0
     event_count: int = 0
 
 
 @dataclass
 class OperatorBreakdown:
-    """Complete breakdown for an operator."""
+    """单个算子的完整 breakdown（总周期、总能耗、按 stage/module 细分）。"""
     name: str
-    total_cycles: int = 0           # Wall-clock cycles from calculate_cycles()
-    total_activity_cycles: int = 0  # Sum of all event durations
+    total_cycles: int = 0             # 墙钟周期（calculate_cycles）
+    total_activity_cycles: int = 0    # 所有事件 duration 之和
     total_energy_nj: float = 0.0
     latency_ms: float = 0.0
 
-    # Breakdowns
     stages: Dict[str, StageBreakdown] = field(default_factory=dict)
     sub_stages: Dict[str, StageBreakdown] = field(default_factory=dict)
     modules: Dict[str, ModuleBreakdown] = field(default_factory=dict)
 
-    # Hardware info
     parallelism_factor: int = 1
     clock_period_ns: float = 100.0
 
@@ -75,20 +74,14 @@ def analyze_operator_breakdown(
     events: Optional[List['Event']] = None
 ) -> OperatorBreakdown:
     """
-    Analyze an operator and return detailed breakdown.
-
-    # REFACTORED: Task A2 - Scheme A (single-PE share scaling):
-    # generate_events() produces events for ONE PE's workload (batches_per_pe).
-    # This function scales energy by total_pes to get chip-level energy.
-    # Cycle counts are NOT scaled (they represent wall-clock time, already correct).
-
+    分析单个算子，返回按 stage/module 细分的周期与能耗。
+    事件能耗为单 PE 份额，内部按 total_pes 缩放为芯片级能耗；周期不缩放。
     Args:
-        operator: The operator to analyze
-        hw_config: Hardware configuration
-        events: Pre-generated events (optional, will generate if None)
-
+        operator: 待分析算子
+        hw_config: 硬件配置
+        events: 预生成事件（可选，为 None 时内部生成）
     Returns:
-        OperatorBreakdown with all metrics
+        OperatorBreakdown，含总周期、总能耗及 stages/modules 细分
     """
     # Get parallelism info from flat architecture
     cim_parallelism = _get_cim_parallelism(hw_config)
@@ -248,136 +241,19 @@ def format_breakdown_table(
     return "\n".join(lines)
 
 
-def analyze_network_breakdown(
-    operators: List['BaseOperator'],
-    hw_config: 'HardwareConfig',
-    operator_names: Optional[List[str]] = None
-) -> Dict[str, Any]:
-    """
-    Analyze a full network of operators.
-
-    # REFACTORED: Task A2 - Scheme A: events represent single-PE workload.
-    # Energy is scaled by total_pes for chip-level values.
-
-    Args:
-        operators: List of operators
-        hw_config: Hardware configuration
-        operator_names: Optional names for operators
-
-    Returns:
-        Dictionary with network-level breakdown
-    """
-    if operator_names is None:
-        operator_names = [f"Op_{i}" for i in range(len(operators))]
-
-    cim_parallelism = _get_cim_parallelism(hw_config)
-    total_pes = cim_parallelism  # flat arch: no tile/PE hierarchy
-    clock_period = hw_config.clock_period
-
-    total_cycles = 0
-    total_energy = 0.0
-    layer_data = []
-    module_totals = defaultdict(float)
-
-    for name, op in zip(operator_names, operators):
-        cycles = op.calculate_cycles()
-        # REFACTORED: Task A2 - Scheme A: scale single-PE energy to chip-level
-        events = op.generate_events()
-        single_pe_energy = sum(e.energy for e in events)
-        energy = single_pe_energy * total_pes
-        total_cycles += cycles
-        total_energy += energy
-
-        layer_data.append({
-            'name': name,
-            'cycles': cycles,
-            'energy': energy,
-            'breakdown': analyze_operator_breakdown(op, hw_config, events=events)
-        })
-
-        # Aggregate module energy (already using same events, avoid regeneration)
-        for event in events:
-            module = event.circuit_module or 'UNKNOWN'
-            module_totals[module] += event.energy * total_pes  # REFACTORED: Task A2
-
-    return {
-        'total_cycles': total_cycles,
-        'total_energy': total_energy,
-        'latency_ms': total_cycles * clock_period / 1e6,
-        'layers': layer_data,
-        'module_totals': dict(module_totals),
-        'parallelism': total_pes,
-        'clock_period': clock_period
-    }
-
-
-def format_network_breakdown(network_data: Dict[str, Any]) -> str:
-    """Format network breakdown as readable string."""
-    lines = []
-    total_cycles = network_data['total_cycles']
-    total_energy = network_data['total_energy']
-    module_totals = network_data['module_totals']
-    total_module_energy = sum(module_totals.values())
-
-    lines.append(f"\n{'='*80}")
-    lines.append(f" Network Breakdown Analysis")
-    lines.append(f"{'='*80}")
-
-    lines.append(f"\nNetwork Summary:")
-    lines.append(f"  Total Cycles: {total_cycles:,}")
-    lines.append(f"  Total Energy: {total_energy:.2f} nJ")
-    lines.append(f"  Total Latency: {network_data['latency_ms']:.3f} ms")
-    lines.append(f"  Parallelism: {network_data['parallelism']}x")
-
-    lines.append(f"\nLayer-by-Layer Breakdown:")
-    lines.append("-" * 70)
-    lines.append(f"{'Layer':<15} {'Cycles':>14} {'Cycle%':>8} {'Energy(nJ)':>12} {'Energy%':>8}")
-    lines.append("-" * 70)
-
-    for layer in network_data['layers']:
-        c_pct = (layer['cycles'] / total_cycles * 100) if total_cycles > 0 else 0
-        e_pct = (layer['energy'] / total_energy * 100) if total_energy > 0 else 0
-        lines.append(f"{layer['name']:<15} {layer['cycles']:>14,} {c_pct:>7.1f}% {layer['energy']:>12.2f} {e_pct:>7.1f}%")
-
-    lines.append(f"\nCircuit Module Energy Distribution:")
-    lines.append("-" * 60)
-    lines.append(f"{'Module':<20} {'Energy(nJ)':>15} {'Percentage':>12}")
-    lines.append("-" * 60)
-
-    for module, energy in sorted(module_totals.items(), key=lambda x: x[1], reverse=True):
-        pct = (energy / total_module_energy * 100) if total_module_energy > 0 else 0
-        lines.append(f"{module:<20} {energy:>15.2f} {pct:>11.1f}%")
-
-    return "\n".join(lines)
-
-
-def print_breakdown(breakdown: OperatorBreakdown, **kwargs):
-    """Print breakdown to console."""
-    print(format_breakdown_table(breakdown, **kwargs))
-
-
-def print_network_breakdown(network_data: Dict[str, Any]):
-    """Print network breakdown to console."""
-    print(format_network_breakdown(network_data))
-
-
 def analyze_simulation_events_breakdown(
     events: List['Event'],
     clock_period_ns: float = 1.0,
 ) -> Dict[str, Any]:
     """
-    Compute layer / operator / module breakdown from a flat list of Events.
-
-    Events should have metadata['layer_name'] and metadata.get('layer_type') set
-    when they were queued (e.g. in main.simulate_network).
-
+    从仿真事件列表按层/算子/电路模块三维度聚合周期与能耗。
+    要求事件在入队时已设置 metadata['layer_name']（如 main.simulate_network 中 _add_events_to_scheduler）。
     Returns:
-        Dict with:
-          - by_layer: { layer_name: { cycles, energy_nj, event_count } }
-          - by_operator: { operator: { cycles, energy_nj, event_count } }
-          - by_module: { circuit_module: { cycles, energy_nj, event_count } }
-          - total_cycles: max(cycle + duration) - min(cycle) + 1
-          - total_energy_nj: sum of event.energy
+        by_layer: 层名 -> { cycles, energy_nj, event_count }
+        by_operator: 算子名 -> { cycles, energy_nj, event_count }
+        by_module: 电路模块名 -> { cycles, energy_nj, event_count }
+        total_cycles: 墙钟总周期（max(end_cycle)-min(cycle)+1）
+        total_energy_nj: 事件能耗之和
     """
     from collections import defaultdict
 

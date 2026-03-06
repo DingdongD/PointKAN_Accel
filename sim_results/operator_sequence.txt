@@ -2,7 +2,7 @@
 # idx	cycle	end_cycle	duration	operator	stage	operation	layer_name	energy_nj
 0	0	383	384	LayerBuffer	buffer_io	phase1_point_cloud_to_sram_ii	embedding	19.2
 1	384	407	24	Conv1d	quant	activation_fp32_to_int8	embedding	0.0
-2	408	438687	438280	conv1d		conv1d_mnsim_full	embedding	68491.9861
+2	408	438687	438280	Conv1d		conv1d_mnsim_full	embedding	68491.9861
 3	438688	438943	256	Conv1d	dequant	output_int8_to_fp32	embedding	0.0
 4	438944	438944	1	BN	normalize	batchnorm1d_affine	embedding	0.0
 5	438945	438945	1	ReLU	activation	relu	embedding	0.0
@@ -3089,32 +3089,32 @@
 3086	505764	506019	256	LayerBuffer	buffer_io	buffer_read	LFP-stage0	0.512
 3087	506020	508067	2048	LayerBuffer	buffer_io	inter_layer_spill_read	LFP-stage0	102.4
 3088	508068	508068	1	Conv1d	quant	activation_fp32_to_int8	LFP-stage0	0.0
-3089	508069	550828	42760	conv1d		conv1d_mnsim_full	LFP-stage0	13406.5316
+3089	508069	550828	42760	Conv1d		conv1d_mnsim_full	LFP-stage0	13406.5316
 3090	550829	550829	1	Conv1d	dequant	output_int8_to_fp32	LFP-stage0	0.0
 3091	550830	550830	1	BN	normalize	batchnorm1d_affine	LFP-stage0	0.0
 3092	550831	550831	1	ReLU	activation	relu	LFP-stage0	0.0
 3093	550832	550832	1	LayerNorm	normalize	layernorm_affine	LFP-stage0	0.0
 3094	550833	550833	1	Linear	quant	activation_fp32_to_int8	LFP-stage0	0.0
-3095	550834	593593	42760	linear		linear_mnsim_full	LFP-stage0	13406.5316
+3095	550834	593593	42760	Linear		linear_mnsim_full	LFP-stage0	13406.5316
 3096	593594	593594	1	Linear	dequant	output_int8_to_fp32	LFP-stage0	0.0
 3097	593595	593595	1	Linear	quant	activation_fp32_to_int8	LFP-stage0	0.0
-3098	593596	636355	42760	linear		linear_mnsim_full	LFP-stage0	13406.5316
+3098	593596	636355	42760	Linear		linear_mnsim_full	LFP-stage0	13406.5316
 3099	636356	636356	1	Linear	dequant	output_int8_to_fp32	LFP-stage0	0.0
 3100	636357	636612	256	ADD	residual_buffer	offchip_residual_read	LFP-stage0	12.8
 3101	636613	636868	256	ADD	elementwise	elementwise_add	LFP-stage0	0.2048
 3102	636869	636996	128	ADD	residual_buffer	offchip_residual_write	LFP-stage0	6.4
 3103	636997	637252	256	AdaptiveMaxPool1d	pool	adaptive_max_pool1d	LFP-stage0	0.0
 3104	637253	637253	1	Conv1d	quant	activation_fp32_to_int8	LFP-stage0	0.0
-3105	637254	639587	2334	conv1d		conv1d_mnsim_full	LFP-stage0	624.4133
+3105	637254	639587	2334	Conv1d		conv1d_mnsim_full	LFP-stage0	624.4133
 3106	639588	639588	1	Conv1d	dequant	output_int8_to_fp32	LFP-stage0	0.0
 3107	639589	639589	1	BN	normalize	batchnorm1d_affine	LFP-stage0	0.0
 3108	639590	639590	1	ReLU	activation	relu	LFP-stage0	0.0
 3109	639591	639591	1	LayerNorm	normalize	layernorm_affine	LFP-stage0	0.0
 3110	639592	639592	1	Linear	quant	activation_fp32_to_int8	LFP-stage0	0.0
-3111	639593	641926	2334	linear		linear_mnsim_full	LFP-stage0	624.4133
+3111	639593	641926	2334	Linear		linear_mnsim_full	LFP-stage0	624.4133
 3112	641927	641927	1	Linear	dequant	output_int8_to_fp32	LFP-stage0	0.0
 3113	641928	641928	1	Linear	quant	activation_fp32_to_int8	LFP-stage0	0.0
-3114	641929	644262	2334	linear		linear_mnsim_full	LFP-stage0	624.4133
+3114	641929	644262	2334	Linear		linear_mnsim_full	LFP-stage0	624.4133
 3115	644263	644263	1	Linear	dequant	output_int8_to_fp32	LFP-stage0	0.0
 3116	644264	644519	256	ADD	residual_buffer	offchip_residual_read	LFP-stage0	12.8
 3117	644520	644775	256	ADD	elementwise	elementwise_add	LFP-stage0	0.2048
@@ -3123,12 +3123,12 @@
 3120	645160	645160	1	LayerBuffer	buffer_io	buffer_write	LFP-stage0	0.002
 3121	645161	645161	1	LayerBuffer	buffer_io	buffer_read	stage-0	0.002
 3122	645162	645162	1	Conv1d	quant	activation_fp32_to_int8	stage-0	0.0
-3123	645163	647496	2334	conv1d		conv1d_mnsim_full	stage-0	624.4133
+3123	645163	647496	2334	Conv1d		conv1d_mnsim_full	stage-0	624.4133
 3124	647497	647497	1	Conv1d	dequant	output_int8_to_fp32	stage-0	0.0
 3125	647498	647498	1	BN	normalize	batchnorm1d_affine	stage-0	0.0
 3126	647499	647499	1	ReLU	activation	relu	stage-0	0.0
 3127	647500	647500	1	Conv1d	quant	activation_fp32_to_int8	stage-0	0.0
-3128	647501	649834	2334	conv1d		conv1d_mnsim_full	stage-0	624.4133
+3128	647501	649834	2334	Conv1d		conv1d_mnsim_full	stage-0	624.4133
 3129	649835	649835	1	Conv1d	dequant	output_int8_to_fp32	stage-0	0.0
 3130	649836	649836	1	BN	normalize	batchnorm1d_affine	stage-0	0.0
 3131	649837	650092	256	ADD	residual_buffer	offchip_residual_read	stage-0	12.8
@@ -4682,32 +4682,32 @@
 4679	675056	675311	256	LayerBuffer	buffer_io	buffer_read	LFP-stage1	0.512
 4680	675312	677359	2048	LayerBuffer	buffer_io	inter_layer_spill_read	LFP-stage1	102.4
 4681	677360	677360	1	Conv1d	quant	activation_fp32_to_int8	LFP-stage1	0.0
-4682	677361	720975	43615	conv1d		conv1d_mnsim_full	LFP-stage1	13557.1975
+4682	677361	720975	43615	Conv1d		conv1d_mnsim_full	LFP-stage1	13557.1975
 4683	720976	720976	1	Conv1d	dequant	output_int8_to_fp32	LFP-stage1	0.0
 4684	720977	720977	1	BN	normalize	batchnorm1d_affine	LFP-stage1	0.0
 4685	720978	720978	1	ReLU	activation	relu	LFP-stage1	0.0
 4686	720979	720979	1	LayerNorm	normalize	layernorm_affine	LFP-stage1	0.0
 4687	720980	720980	1	Linear	quant	activation_fp32_to_int8	LFP-stage1	0.0
-4688	720981	764595	43615	linear		linear_mnsim_full	LFP-stage1	13557.1975
+4688	720981	764595	43615	Linear		linear_mnsim_full	LFP-stage1	13557.1975
 4689	764596	764596	1	Linear	dequant	output_int8_to_fp32	LFP-stage1	0.0
 4690	764597	764597	1	Linear	quant	activation_fp32_to_int8	LFP-stage1	0.0
-4691	764598	808212	43615	linear		linear_mnsim_full	LFP-stage1	13557.1975
+4691	764598	808212	43615	Linear		linear_mnsim_full	LFP-stage1	13557.1975
 4692	808213	808213	1	Linear	dequant	output_int8_to_fp32	LFP-stage1	0.0
 4693	808214	808469	256	ADD	residual_buffer	offchip_residual_read	LFP-stage1	12.8
 4694	808470	808725	256	ADD	elementwise	elementwise_add	LFP-stage1	0.2048
 4695	808726	808853	128	ADD	residual_buffer	offchip_residual_write	LFP-stage1	6.4
 4696	808854	809109	256	AdaptiveMaxPool1d	pool	adaptive_max_pool1d	LFP-stage1	0.0
 4697	809110	809110	1	Conv1d	quant	activation_fp32_to_int8	LFP-stage1	0.0
-4698	809111	812298	3188	conv1d		conv1d_mnsim_full	LFP-stage1	775.0793
+4698	809111	812298	3188	Conv1d		conv1d_mnsim_full	LFP-stage1	775.0793
 4699	812299	812299	1	Conv1d	dequant	output_int8_to_fp32	LFP-stage1	0.0
 4700	812300	812300	1	BN	normalize	batchnorm1d_affine	LFP-stage1	0.0
 4701	812301	812301	1	ReLU	activation	relu	LFP-stage1	0.0
 4702	812302	812302	1	LayerNorm	normalize	layernorm_affine	LFP-stage1	0.0
 4703	812303	812303	1	Linear	quant	activation_fp32_to_int8	LFP-stage1	0.0
-4704	812304	815491	3188	linear		linear_mnsim_full	LFP-stage1	775.0793
+4704	812304	815491	3188	Linear		linear_mnsim_full	LFP-stage1	775.0793
 4705	815492	815492	1	Linear	dequant	output_int8_to_fp32	LFP-stage1	0.0
 4706	815493	815493	1	Linear	quant	activation_fp32_to_int8	LFP-stage1	0.0
-4707	815494	818681	3188	linear		linear_mnsim_full	LFP-stage1	775.0793
+4707	815494	818681	3188	Linear		linear_mnsim_full	LFP-stage1	775.0793
 4708	818682	818682	1	Linear	dequant	output_int8_to_fp32	LFP-stage1	0.0
 4709	818683	818938	256	ADD	residual_buffer	offchip_residual_read	LFP-stage1	12.8
 4710	818939	819194	256	ADD	elementwise	elementwise_add	LFP-stage1	0.2048
@@ -4716,12 +4716,12 @@
 4713	819579	819580	2	LayerBuffer	buffer_io	buffer_write	LFP-stage1	0.004
 4714	819581	819582	2	LayerBuffer	buffer_io	buffer_read	stage-1	0.004
 4715	819583	819583	1	Conv1d	quant	activation_fp32_to_int8	stage-1	0.0
-4716	819584	822771	3188	conv1d		conv1d_mnsim_full	stage-1	775.0793
+4716	819584	822771	3188	Conv1d		conv1d_mnsim_full	stage-1	775.0793
 4717	822772	822772	1	Conv1d	dequant	output_int8_to_fp32	stage-1	0.0
 4718	822773	822773	1	BN	normalize	batchnorm1d_affine	stage-1	0.0
 4719	822774	822774	1	ReLU	activation	relu	stage-1	0.0
 4720	822775	822775	1	Conv1d	quant	activation_fp32_to_int8	stage-1	0.0
-4721	822776	825963	3188	conv1d		conv1d_mnsim_full	stage-1	775.0793
+4721	822776	825963	3188	Conv1d		conv1d_mnsim_full	stage-1	775.0793
 4722	825964	825964	1	Conv1d	dequant	output_int8_to_fp32	stage-1	0.0
 4723	825965	825965	1	BN	normalize	batchnorm1d_affine	stage-1	0.0
 4724	825966	826221	256	ADD	residual_buffer	offchip_residual_read	stage-1	12.8
@@ -5507,32 +5507,32 @@
 5504	839281	839536	256	LayerBuffer	buffer_io	buffer_read	LFP-stage2	0.512
 5505	839537	841584	2048	LayerBuffer	buffer_io	inter_layer_spill_read	LFP-stage2	102.4
 5506	841585	841586	2	Conv1d	quant	activation_fp32_to_int8	LFP-stage2	0.0
-5507	841587	888687	47101	conv1d		conv1d_mnsim_full	LFP-stage2	14354.0814
+5507	841587	888687	47101	Conv1d		conv1d_mnsim_full	LFP-stage2	14354.0814
 5508	888688	888689	2	Conv1d	dequant	output_int8_to_fp32	LFP-stage2	0.0
 5509	888690	888690	1	BN	normalize	batchnorm1d_affine	LFP-stage2	0.0
 5510	888691	888691	1	ReLU	activation	relu	LFP-stage2	0.0
 5511	888692	888692	1	LayerNorm	normalize	layernorm_affine	LFP-stage2	0.0
 5512	888693	888694	2	Linear	quant	activation_fp32_to_int8	LFP-stage2	0.0
-5513	888695	935795	47101	linear		linear_mnsim_full	LFP-stage2	14354.0814
+5513	888695	935795	47101	Linear		linear_mnsim_full	LFP-stage2	14354.0814
 5514	935796	935797	2	Linear	dequant	output_int8_to_fp32	LFP-stage2	0.0
 5515	935798	935799	2	Linear	quant	activation_fp32_to_int8	LFP-stage2	0.0
-5516	935800	982900	47101	linear		linear_mnsim_full	LFP-stage2	14354.0814
+5516	935800	982900	47101	Linear		linear_mnsim_full	LFP-stage2	14354.0814
 5517	982901	982902	2	Linear	dequant	output_int8_to_fp32	LFP-stage2	0.0
 5518	982903	983158	256	ADD	residual_buffer	offchip_residual_read	LFP-stage2	12.8
 5519	983159	983414	256	ADD	elementwise	elementwise_add	LFP-stage2	0.2048
 5520	983415	983542	128	ADD	residual_buffer	offchip_residual_write	LFP-stage2	6.4
 5521	983543	983798	256	AdaptiveMaxPool1d	pool	adaptive_max_pool1d	LFP-stage2	0.0
 5522	983799	983800	2	Conv1d	quant	activation_fp32_to_int8	LFP-stage2	0.0
-5523	983801	990475	6675	conv1d		conv1d_mnsim_full	LFP-stage2	1571.9632
+5523	983801	990475	6675	Conv1d		conv1d_mnsim_full	LFP-stage2	1571.9632
 5524	990476	990477	2	Conv1d	dequant	output_int8_to_fp32	LFP-stage2	0.0
 5525	990478	990478	1	BN	normalize	batchnorm1d_affine	LFP-stage2	0.0
 5526	990479	990479	1	ReLU	activation	relu	LFP-stage2	0.0
 5527	990480	990480	1	LayerNorm	normalize	layernorm_affine	LFP-stage2	0.0
 5528	990481	990482	2	Linear	quant	activation_fp32_to_int8	LFP-stage2	0.0
-5529	990483	997157	6675	linear		linear_mnsim_full	LFP-stage2	1571.9632
+5529	990483	997157	6675	Linear		linear_mnsim_full	LFP-stage2	1571.9632
 5530	997158	997159	2	Linear	dequant	output_int8_to_fp32	LFP-stage2	0.0
 5531	997160	997161	2	Linear	quant	activation_fp32_to_int8	LFP-stage2	0.0
-5532	997162	1003836	6675	linear		linear_mnsim_full	LFP-stage2	1571.9632
+5532	997162	1003836	6675	Linear		linear_mnsim_full	LFP-stage2	1571.9632
 5533	1003837	1003838	2	Linear	dequant	output_int8_to_fp32	LFP-stage2	0.0
 5534	1003839	1004094	256	ADD	residual_buffer	offchip_residual_read	LFP-stage2	12.8
 5535	1004095	1004350	256	ADD	elementwise	elementwise_add	LFP-stage2	0.2048
@@ -5541,12 +5541,12 @@
 5538	1004735	1004738	4	LayerBuffer	buffer_io	buffer_write	LFP-stage2	0.008
 5539	1004739	1004742	4	LayerBuffer	buffer_io	buffer_read	stage-2	0.008
 5540	1004743	1004744	2	Conv1d	quant	activation_fp32_to_int8	stage-2	0.0
-5541	1004745	1011419	6675	conv1d		conv1d_mnsim_full	stage-2	1571.9632
+5541	1004745	1011419	6675	Conv1d		conv1d_mnsim_full	stage-2	1571.9632
 5542	1011420	1011421	2	Conv1d	dequant	output_int8_to_fp32	stage-2	0.0
 5543	1011422	1011422	1	BN	normalize	batchnorm1d_affine	stage-2	0.0
 5544	1011423	1011423	1	ReLU	activation	relu	stage-2	0.0
 5545	1011424	1011425	2	Conv1d	quant	activation_fp32_to_int8	stage-2	0.0
-5546	1011426	1018612	7187	conv1d		conv1d_mnsim_full	stage-2	1571.9632
+5546	1011426	1018612	7187	Conv1d		conv1d_mnsim_full	stage-2	1571.9632
 5547	1018613	1018614	2	Conv1d	dequant	output_int8_to_fp32	stage-2	0.0
 5548	1018615	1018615	1	BN	normalize	batchnorm1d_affine	stage-2	0.0
 5549	1018616	1018871	256	ADD	residual_buffer	offchip_residual_read	stage-2	12.8
@@ -5948,32 +5948,32 @@
 5945	1028283	1028538	256	LayerBuffer	buffer_io	buffer_read	LFP-stage3	0.512
 5946	1028539	1030586	2048	LayerBuffer	buffer_io	inter_layer_spill_read	LFP-stage3	102.4
 5947	1030587	1030590	4	Conv1d	quant	activation_fp32_to_int8	LFP-stage3	0.0
-5948	1030591	1090904	60314	conv1d		conv1d_mnsim_full	LFP-stage3	57121.748
+5948	1030591	1090904	60314	Conv1d		conv1d_mnsim_full	LFP-stage3	57121.748
 5949	1090905	1090908	4	Conv1d	dequant	output_int8_to_fp32	LFP-stage3	0.0
 5950	1090909	1090909	1	BN	normalize	batchnorm1d_affine	LFP-stage3	0.0
 5951	1090910	1090910	1	ReLU	activation	relu	LFP-stage3	0.0
 5952	1090911	1090911	1	LayerNorm	normalize	layernorm_affine	LFP-stage3	0.0
 5953	1090912	1090915	4	Linear	quant	activation_fp32_to_int8	LFP-stage3	0.0
-5954	1090916	1150000	59085	linear		linear_mnsim_full	LFP-stage3	57121.748
+5954	1090916	1150000	59085	Linear		linear_mnsim_full	LFP-stage3	57121.748
 5955	1150001	1150004	4	Linear	dequant	output_int8_to_fp32	LFP-stage3	0.0
 5956	1150005	1150008	4	Linear	quant	activation_fp32_to_int8	LFP-stage3	0.0
-5957	1150009	1210322	60314	linear		linear_mnsim_full	LFP-stage3	57121.748
+5957	1150009	1210322	60314	Linear		linear_mnsim_full	LFP-stage3	57121.748
 5958	1210323	1210326	4	Linear	dequant	output_int8_to_fp32	LFP-stage3	0.0
 5959	1210327	1210582	256	ADD	residual_buffer	offchip_residual_read	LFP-stage3	12.8
 5960	1210583	1210838	256	ADD	elementwise	elementwise_add	LFP-stage3	0.2048
 5961	1210839	1210966	128	ADD	residual_buffer	offchip_residual_write	LFP-stage3	6.4
 5962	1210967	1211222	256	AdaptiveMaxPool1d	pool	adaptive_max_pool1d	LFP-stage3	0.0
 5963	1211223	1211226	4	Conv1d	quant	activation_fp32_to_int8	LFP-stage3	0.0
-5964	1211227	1231119	19893	conv1d		conv1d_mnsim_full	LFP-stage3	12384.3342
+5964	1211227	1231119	19893	Conv1d		conv1d_mnsim_full	LFP-stage3	12384.3342
 5965	1231120	1231123	4	Conv1d	dequant	output_int8_to_fp32	LFP-stage3	0.0
 5966	1231124	1231124	1	BN	normalize	batchnorm1d_affine	LFP-stage3	0.0
 5967	1231125	1231125	1	ReLU	activation	relu	LFP-stage3	0.0
 5968	1231126	1231126	1	LayerNorm	normalize	layernorm_affine	LFP-stage3	0.0
 5969	1231127	1231130	4	Linear	quant	activation_fp32_to_int8	LFP-stage3	0.0
-5970	1231131	1250401	19271	linear		linear_mnsim_full	LFP-stage3	12384.3342
+5970	1231131	1250401	19271	Linear		linear_mnsim_full	LFP-stage3	12384.3342
 5971	1250402	1250405	4	Linear	dequant	output_int8_to_fp32	LFP-stage3	0.0
 5972	1250406	1250409	4	Linear	quant	activation_fp32_to_int8	LFP-stage3	0.0
-5973	1250410	1270296	19887	linear		linear_mnsim_full	LFP-stage3	12384.3342
+5973	1250410	1270296	19887	Linear		linear_mnsim_full	LFP-stage3	12384.3342
 5974	1270297	1270300	4	Linear	dequant	output_int8_to_fp32	LFP-stage3	0.0
 5975	1270301	1270556	256	ADD	residual_buffer	offchip_residual_read	LFP-stage3	12.8
 5976	1270557	1270812	256	ADD	elementwise	elementwise_add	LFP-stage3	0.2048
@@ -5982,12 +5982,12 @@
 5979	1271197	1271204	8	LayerBuffer	buffer_io	buffer_write	LFP-stage3	0.016
 5980	1271205	1271212	8	LayerBuffer	buffer_io	buffer_read	stage-3	0.016
 5981	1271213	1271216	4	Conv1d	quant	activation_fp32_to_int8	stage-3	0.0
-5982	1271217	1290286	19070	conv1d		conv1d_mnsim_full	stage-3	12384.3342
+5982	1271217	1290286	19070	Conv1d		conv1d_mnsim_full	stage-3	12384.3342
 5983	1290287	1290290	4	Conv1d	dequant	output_int8_to_fp32	stage-3	0.0
 5984	1290291	1290291	1	BN	normalize	batchnorm1d_affine	stage-3	0.0
 5985	1290292	1290292	1	ReLU	activation	relu	stage-3	0.0
 5986	1290293	1290296	4	Conv1d	quant	activation_fp32_to_int8	stage-3	0.0
-5987	1290297	1310183	19887	conv1d		conv1d_mnsim_full	stage-3	12384.3342
+5987	1290297	1310183	19887	Conv1d		conv1d_mnsim_full	stage-3	12384.3342
 5988	1310184	1310187	4	Conv1d	dequant	output_int8_to_fp32	stage-3	0.0
 5989	1310188	1310188	1	BN	normalize	batchnorm1d_affine	stage-3	0.0
 5990	1310189	1310444	256	ADD	residual_buffer	offchip_residual_read	stage-3	12.8
@@ -5998,15 +5998,15 @@
 5995	1311086	1313133	2048	LayerBuffer	buffer_io	inter_layer_spill_write	stage-3	102.4
 5996	1313134	1313141	8	LayerBuffer	buffer_io	buffer_read	classifier	0.016
 5997	1313142	1313145	4	Linear	quant	activation_fp32_to_int8	classifier	0.0
-5998	1313146	1331308	18163	linear		linear_mnsim_full	classifier	10469.6215
+5998	1313146	1331308	18163	Linear		linear_mnsim_full	classifier	10469.6215
 5999	1331309	1331312	4	Linear	dequant	output_int8_to_fp32	classifier	0.0
 6000	1331313	1331313	1	BN	normalize	batchnorm1d_affine	classifier	0.0
 6001	1331314	1331314	1	ReLU	activation	relu	classifier	0.0
 6002	1331315	1331318	4	Linear	quant	activation_fp32_to_int8	classifier	0.0
-6003	1331319	1340601	9283	linear		linear_mnsim_full	classifier	3360.7502
+6003	1331319	1340601	9283	Linear		linear_mnsim_full	classifier	3360.7502
 6004	1340602	1340603	2	Linear	dequant	output_int8_to_fp32	classifier	0.0
 6005	1340604	1340604	1	BN	normalize	batchnorm1d_affine	classifier	0.0
 6006	1340605	1340605	1	ReLU	activation	relu	classifier	0.0
 6007	1340606	1340607	2	Linear	quant	activation_fp32_to_int8	classifier	0.0
-6008	1340608	1341573	966	linear		linear_mnsim_full	classifier	137.2927
+6008	1340608	1341573	966	Linear		linear_mnsim_full	classifier	137.2927
 6009	1341574	1341574	1	Linear	dequant	output_int8_to_fp32	classifier	0.0

@@ -1,8 +1,10 @@
 """
-FPS Operator Model
-==================
+FPS 算子（最远点采样）
+======================
 
-Farthest Point Sampling (FPS) using SRAM-CIM processing.
+基于 SRAM-CIM 的最远点采样：k^2、-2qk、距离累加、最小距离表更新、Bitonic 排序五阶段，
+每轮迭代对候选点按批做距离计算，最后做一次 Bitonic 排序选出最远点。
+生成事件时 operator 统一为 "FPS"（PascalCase），供 operator_sequence.txt 使用。
 
 Uses 5 sequential stages:
 1. k^2 computation (SRAM-CIM-array + shift-and-add, bit-serial)
@@ -51,17 +53,8 @@ if TYPE_CHECKING:
 @dataclass
 class FPSParams(OperatorParams):
     """
-    FPS-specific parameters.
-
-    Inherits from OperatorParams:
-        input_points: Total input points (N), default 1024
-
-    Additional attributes:
-        sampled_points_num: Number of points to sample (FPS iterations)
-        cim_parallelism: CIM array parallelism per batch (default 128)
-        bit_slice: Bit-slice width for bit-serial computation (default 2)
-        points_per_axis_quant_width: Quantization bit width per coordinate axis
-        bitonic_sort_cycles: Fixed cycle count for bitonic sort stage
+    FPS 专用参数：继承 input_points；额外包括 sampled_points_num（采样点数/迭代次数）、
+    cim_parallelism、bit_slice、points_per_axis_quant_width、bitonic_sort_cycles。
     """
     sampled_points_num: int = 512
     cim_parallelism: int = 128

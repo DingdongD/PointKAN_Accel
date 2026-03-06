@@ -60,7 +60,7 @@ python -m pointkan_sim.main --network pointkan --no_layer_buffer
 - **SRAM-II**：距离计算专用，存 key 点云；每次激活 128 行，2bit 距离。周期公式：`(bits_per_axis/bit_slice)*ceil(N/128)` 每查询。配置见 `hw_config.sram_ii`。
 - **RRAM-CIM**：Conv/Linear 由 MNSIM 接口仿真（Tile/NoC）；输入/权 8bit，可选量化/反量化（`enable_w8a8_quant_dequant`）。
 - **RRAM-LUT**：KAN 等由 roofline/功耗模型手动定义（`rram_lut_macro`）。
-- **Phase1**：系统启动，从 DRAM 加载 1×N×3 点云（12bit/特征）到 SRAM-II，roofline + DRAM 功耗（`hw_config.dram`，可接 CACTI）。见 `gen_phase1_point_cloud_load_events` / 首层 `gen_first_layer_input_load_events`。
+- **Phase1**：系统启动，从 DRAM 加载 1×N×3 点云（12bit/特征）到 SRAM-II，roofline + DRAM 功耗（`hw_config.dram`，可接 CACTI）。见 `gen_first_layer_input_load_events`（首层/Phase1 唯一入口，调用方传入 input_bytes）。
 - **Phase2**：距离计算（每查询 1×1×3 从 DRAM 取，与 key 在 SRAM-II 上算距离）；算完 N 个距离后：(a) 喂入 FPS 引擎做最远点选择，或 (b) 喂入 KNN 引擎做 top-k 并写回 DRAM。Baseline 下 (a)(b) 串行（共享 bitonic）。
 - **FPS 引擎**：`distance_in_phase2=True` 时，stage1–4 归入 Phase2，FPS 只做 bitonic 部分；dispatcher 中每迭代先插 Phase2 距离事件再插 FPS bitonic。
 - **KNN 引擎**：同上，Phase2 距离 + bitonic top-k；fuse 模式（复用距离、粗筛+细筛）待扩展。

@@ -285,50 +285,6 @@ def log_conv_linear_shapes(
         log_info_fn("  indata = 输入激活字节数；rdata = 权重复用/读取字节数，符合 Conv1d/Linear 的矩阵乘数据量语义。")
 
 
-def build_netstruct_from_conv_linear_list(
-    conv_linear_list: List[ConvLinearLayerInfo],
-    input_bit: int = 8,
-    weight_bit: int = 8,
-    output_bit: int = 8,
-) -> Tuple[List[Any], List[Tuple[str, int]]]:
-    """
-    用真实前向得到的 conv/linear 层序与维度构建 MNSIM NetStruct。
-    返回 (netstruct, conv_linear_order)，与 mnsim_netstruct.run_mnsim_full 入参一致。
-    """
-    from .mnsim_netstruct import _layer_dict_conv, _layer_dict_fc
-
-    netstruct: List[Any] = []
-    conv_linear_order: List[Tuple[str, int]] = []
-    for idx, info in enumerate(conv_linear_list):
-        if info.layer_type == "conv":
-            ld = _layer_dict_conv(
-                info.in_channels,
-                info.out_channels,
-                max(1, info.length),
-                kernel_size=max(1, info.kernel_size),
-                layer_index=idx,
-                input_index=-1,
-                output_index=1,
-                input_bit=input_bit,
-                weight_bit=weight_bit,
-                output_bit=output_bit,
-            )
-        else:
-            ld = _layer_dict_fc(
-                max(1, info.in_features),
-                max(1, info.out_features),
-                layer_index=idx,
-                input_index=-1,
-                output_index=1,
-                input_bit=input_bit,
-                weight_bit=weight_bit,
-                output_bit=output_bit,
-            )
-        netstruct.append([(ld, None)])
-        conv_linear_order.append((info.name, 0))
-    return netstruct, conv_linear_order
-
-
 def run_real_inference_and_sim_over_dataset(
     net: Any,
     test_loader: Any,

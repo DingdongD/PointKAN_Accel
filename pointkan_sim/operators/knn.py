@@ -1,8 +1,10 @@
 """
-KNN Operator Model
-==================
+KNN 算子（K 近邻）
+=================
 
-K-Nearest Neighbors (KNN) using SRAM-CIM processing.
+基于 SRAM-CIM 的 K 近邻：k^2、-2qk、距离累加、SRAM 写回距离、Bitonic 排序五阶段，
+对每个 query 点按批算距离并写 SRAM，最后 Bitonic 排序取 k 近邻。
+生成事件时 operator 统一为 "KNN"（PascalCase），供 operator_sequence.txt 使用。
 
 Uses 5 sequential stages:
 1. k^2 computation (SRAM-CIM-array + shift-and-add, bit-serial)
@@ -48,20 +50,8 @@ if TYPE_CHECKING:
 @dataclass
 class KNNParams(OperatorParams):
     """
-    KNN-specific parameters.
-
-    Inherits from OperatorParams:
-        input_points: Total input points / search space (N), default 1024
-
-    Additional attributes:
-        query_points: Number of query points
-        k: Number of nearest neighbors to find
-        sampled_points_num: Number of FPS-sampled points (= query_points
-            in typical PointNet++ usage)
-        cim_parallelism: CIM array parallelism per batch (default 128)
-        bit_slice: Bit-slice width for bit-serial computation (default 2)
-        points_per_axis_quant_width: Quantization bit width per coordinate axis
-        bitonic_sort_cycles: Fixed cycle count for bitonic sort stage
+    KNN 专用参数：继承 input_points（搜索空间点数）；额外包括 query_points、k、
+    sampled_points_num、cim_parallelism、bit_slice、points_per_axis_quant_width、bitonic_sort_cycles。
     """
     query_points: int = 512
     k: int = 24

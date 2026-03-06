@@ -1,8 +1,10 @@
 """
-Event Model
-===========
+事件模型（Event Model）
+======================
 
-Event definitions for cycle-level simulation.
+周期级仿真所用的事件定义。每条事件对应硬件上的一次操作（如一次 buffer 写、一次 MNSIM 矩阵乘），
+含起始周期、持续周期、功耗、以及算子/阶段/操作名等，供调度器按周期推进并汇总能耗。
+与 main 中 operator_sequence 的键名对应关系见 pointkan_sim.constants。
 """
 
 from dataclasses import dataclass, field
@@ -11,34 +13,32 @@ from enum import Enum, auto
 
 
 class EventStatus(Enum):
-    """Event execution status."""
-    PENDING = auto()            # Not yet executed
-    EXECUTING = auto()          # Currently executing
-    COMPLETED = auto()          # Execution completed
-    CANCELLED = auto()          # Cancelled
+    """事件执行状态。"""
+    PENDING = auto()      # 未开始
+    EXECUTING = auto()    # 执行中
+    COMPLETED = auto()    # 已完成
+    CANCELLED = auto()    # 已取消
 
 
 @dataclass
 class Event:
     """
-    Simulation event.
-
-    Represents a single operation in the cycle-level simulation.
+    单条仿真事件：表示周期级仿真中的一次硬件操作。
 
     Attributes:
-        event_id: Unique event identifier
-        cycle: Cycle number when event occurs
-        operator: Operator name (FPS, KNN, etc.)
-        stage: Stage name
-        sub_stage: Sub-stage name (optional)
-        circuit_module: Circuit module involved
-        operation: Specific operation description
-        power: Power consumption (mW)
-        duration: Duration in cycles
-        data_size: Data size in bytes (optional)
-        clock_period_ns: Clock period in nanoseconds (from hw_config)
-        status: Event execution status
-        metadata: Additional metadata
+        event_id: 唯一事件 ID
+        cycle: 起始周期
+        operator: 算子名称（如 FPS, KNN, Conv1d, LayerBuffer）
+        stage: 阶段（如 buffer_io, quant, distance）
+        sub_stage: 子阶段（可选）
+        circuit_module: 涉及电路模块（如 DRAM, SRAM-II）
+        operation: 具体操作描述（如 buffer_write, phase1_point_cloud_to_sram_ii）
+        power: 功耗 (mW)
+        duration: 持续周期数
+        data_size: 数据量字节（可选）
+        clock_period_ns: 时钟周期 (ns)，来自 hw_config
+        status: 执行状态
+        metadata: 额外元数据（如 layer_name、layer_type，用于 breakdown 与 operator_sequence）
     """
     event_id: int
     cycle: int
@@ -56,51 +56,32 @@ class Event:
 
     @property
     def end_cycle(self) -> int:
-        """Get the cycle when this event completes."""
+        """事件结束周期（含）。"""
         return self.cycle + self.duration - 1
 
     @property
     def energy(self) -> float:
         """
-        Calculate event energy.
-
-        # REFACTORED: Task B - Hardware-semantic energy formula documentation.
-        # Uses the clock_period_ns field from hardware configuration.
-        # Formula: power(mW) × duration(cycles) × clock_period(ns/cycle) = pJ, then /1000 = nJ
-        #
-        # Example: ADC conversion at 16mW, 1 cycle, 100ns clock
-        #   energy = 16 × 1 × 100 / 1000 = 1.6 nJ
-        #
-        # Note: This is SINGLE-PE energy. For chip-level energy,
-        # multiply by total_pes (done in breakdown.py, Scheme A).
-
-        Returns:
-            Energy in nJ.
+        本事件的能耗 (nJ)。
+        公式：power(mW) × duration(cycles) × clock_period_ns / 1000 = nJ。
+        此为单 PE 能耗；芯片级需在 breakdown 中按 total_pes 缩放。
         """
         return self.power * self.duration * self.clock_period_ns / 1e3
     
     def is_active_at(self, cycle: int) -> bool:
-        """
-        Check if event is active at given cycle.
-        
-        Args:
-            cycle: Cycle number
-            
-        Returns:
-            True if event is active at this cycle.
-        """
+        """判断给定周期是否处于本事件执行区间内（含起止）。"""
         return self.cycle <= cycle <= self.end_cycle
-    
+
     def mark_executing(self) -> None:
-        """Mark event as executing."""
+        """标记为执行中。"""
         self.status = EventStatus.EXECUTING
-    
+
     def mark_completed(self) -> None:
-        """Mark event as completed."""
+        """标记为已完成。"""
         self.status = EventStatus.COMPLETED
-    
+
     def mark_cancelled(self) -> None:
-        """Mark event as cancelled."""
+        """标记为已取消。"""
         self.status = EventStatus.CANCELLED
     
     def __repr__(self) -> str:
@@ -110,17 +91,14 @@ class Event:
 
 class EventQueue:
     """
-    Event queue for managing simulation events.
-    
-    Events are stored and retrieved by cycle number.
-    
+    仿真事件队列：按周期管理事件，支持按周期查询、按算子/阶段筛选。
     Attributes:
-        events: List of all events
-        current_cycle: Current simulation cycle
+        events: 全部事件列表
+        current_cycle: 当前仿真周期
     """
-    
+
     def __init__(self):
-        """Initialize event queue."""
+        """初始化空事件队列。"""
         self._events: List[Event] = []
         self._next_id: int = 0
         self._current_cycle: int = 0
@@ -156,23 +134,10 @@ class EventQueue:
         metadata: Optional[Dict[str, Any]] = None
     ) -> Event:
         """
-        Add a new event to the queue.
-
-        Args:
-            cycle: Cycle when event starts
-            operator: Operator name
-            stage: Stage name
-            sub_stage: Sub-stage name
-            circuit_module: Circuit module
-            operation: Operation description
-            power: Power consumption (mW)
-            duration: Duration in cycles
-            data_size: Data size in bytes
-            clock_period_ns: Clock period in nanoseconds
-            metadata: Additional metadata
-
+        向队列添加一条事件（起始周期、算子名、阶段、操作、功耗、持续周期等）。
+        main 中会为事件 metadata 补全 layer_name/layer_type，用于 operator_sequence 与 breakdown。
         Returns:
-            Created Event instance.
+            新创建的 Event 实例。
         """
         event = Event(
             event_id=self._next_id,

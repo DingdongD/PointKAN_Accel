@@ -1,30 +1,24 @@
 """
-Operator Dispatcher
-====================
+算子派发器（Operator Dispatcher）
+==================================
 
-Pure bridge: maps op_type strings to Operator classes, instantiates them,
-and calls generate_events().
+纯桥接：根据 op_type 字符串查找 handler，调用后得到 List[Event]。
+不包含周期/功耗/事件的具体计算逻辑，计算细节在各算子类或 common_ops 中。
 
-Dispatcher does NOT contain any cycle/power/event logic itself.
-All computation details live in each Operator class.
+职责：
+    1. op_type（如 conv1d, linear, fps, knn）→ 对应 handler
+    2. 从 OperatorRef 取 params，构造 XxxParams，实例化 XxxOperator
+    3. 调用 generate_events() 或直接由 handler 生成事件
+    4. dispatch_layer：按层内算子顺序链式调用，累加 cycle 偏移
 
-Responsibilities:
-    1. op_type string → handler lookup
-    2. Extract params from OperatorRef → build XxxParams
-    3. Instantiate XxxOperator(params, hw_config)
-    4. Return operator.generate_events() → List[Event]
-    5. dispatch_layer: chain operators sequentially with cycle offsets
-
-Usage:
-    from operators.dispatcher import dispatch_operator, dispatch_layer
-
-    events = dispatch_operator(op_ref, hw_config)
-    layer_events = dispatch_layer(layer.operators, hw_config)
+Conv1d/Linear 的 MNSIM 全 NetStruct 事件使用 constants 中的 OP_NAME_CONV1D/OP_NAME_LINEAR，
+保证 operator_sequence.txt 中算子名统一为 PascalCase（Conv1d, Linear）。
 """
 
 import math
 from typing import Dict, Any, List, Callable, Optional, TYPE_CHECKING
 
+from ..constants import OP_NAME_CONV1D, OP_NAME_LINEAR
 from ..simulator.event import Event
 from .common_ops import (
     gen_conv1d_rram_cim_events,
@@ -59,7 +53,7 @@ def _gen_conv1d(
     hw_config: 'HardwareConfig',
     context: Optional[Dict[str, Any]] = None,
 ) -> List[Event]:
-    """Conv1d: MNSIM full NetStruct result if context provided, else PE-level adapter."""
+    """Conv1d：若有 mnsim_context 则用 MNSIM 全 NetStruct 的延迟/能耗生成事件（算子名 PascalCase）；否则走 PE 级 common_ops。"""
     if context and "mnsim_latency_ns" in context and "mnsim_energy_nj" in context:
         idx = context.get("mnsim_index", 0)
         lat_ns = context["mnsim_latency_ns"]
@@ -72,7 +66,7 @@ def _gen_conv1d(
             mnsim_ev = Event(
                 event_id=0,
                 cycle=0,
-                operator="conv1d",
+                operator=OP_NAME_CONV1D,
                 circuit_module="mnsim_tile_noc",
                 operation="conv1d_mnsim_full",
                 power=power_mw,
@@ -103,7 +97,7 @@ def _gen_linear(
     hw_config: 'HardwareConfig',
     context: Optional[Dict[str, Any]] = None,
 ) -> List[Event]:
-    """Linear: MNSIM full NetStruct result if context provided, else PE-level adapter."""
+    """Linear：若有 mnsim_context 则用 MNSIM 全 NetStruct 的延迟/能耗生成事件（算子名 PascalCase）；否则走 PE 级 common_ops。"""
     if context and "mnsim_latency_ns" in context and "mnsim_energy_nj" in context:
         idx = context.get("mnsim_index", 0)
         lat_ns = context["mnsim_latency_ns"]
@@ -116,7 +110,7 @@ def _gen_linear(
             mnsim_ev = Event(
                 event_id=0,
                 cycle=0,
-                operator="linear",
+                operator=OP_NAME_LINEAR,
                 circuit_module="mnsim_tile_noc",
                 operation="linear_mnsim_full",
                 power=power_mw,

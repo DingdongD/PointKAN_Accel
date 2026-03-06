@@ -81,6 +81,18 @@ from pointkan_sim.utils.logger import (
     log_separator,
     LogLevel,
 )
+from pointkan_sim.constants import (
+    KEY_IDX,
+    KEY_CYCLE,
+    KEY_END_CYCLE,
+    KEY_DURATION,
+    KEY_OPERATOR,
+    KEY_STAGE,
+    KEY_OPERATION,
+    KEY_LAYER_NAME,
+    KEY_ENERGY_NJ,
+    KEY_CIRCUIT_MODULE,
+)
 
 
 # =============================================================================
@@ -258,7 +270,10 @@ def _add_events_to_scheduler(
     layer_name: str,
     layer_type: str,
 ) -> None:
-    """将一批 Event 加入调度器，并打上层名与层类型。"""
+    """
+    将本层产生的一批仿真事件加入调度器，并统一打上当前层名与层类型。
+    用于后续按层聚合能耗、以及 operator_sequence 中的 layer_name 字段。
+    """
     for event in events:
         meta = dict(event.metadata or {})
         meta["layer_name"] = layer_name
@@ -287,24 +302,25 @@ def simulate_network(
     show_shapes: bool = False,
 ) -> Dict[str, Any]:
     """
-    对整网进行周期级仿真：按层派发算子生成事件，送入调度器执行。
+    对整网进行周期级仿真：按层顺序派发算子、生成事件并送入调度器执行。
 
-    - 若提供 mnsim_context，conv1d/linear 使用 MNSIM 全 NetStruct 结果。
-    - 若 enable_layer_buffer 且提供 activation_shapes，则在每层首尾插入层间 buffer 读写事件
-      （首层前：点云 N×3 输入加载；层间：buffer 读/写，超过 buffer_size 部分按 DRAM spill 建模）。
-    - 每个事件的 metadata 会写入当前层名与层类型，便于 breakdown 聚合。
+    - 若提供 mnsim_context，conv1d/linear 使用 MNSIM 全 NetStruct 的延迟与能耗。
+    - 若 enable_layer_buffer 且提供 activation_shapes，在每层首尾插入层间 buffer 读写事件
+      （首层前：点云 N×3 从 DRAM 加载；层间：buffer 读/写，超出 buffer 部分按 DRAM spill 建模）。
+    - 每个事件的 metadata 写入当前层名与层类型，供 breakdown 按层聚合及 operator_sequence 的 layer_name。
 
     Args:
-        layers: 网络层定义列表
-        hw_config: 硬件配置
+        layers: 网络层定义列表（如 embedding → GAM-stage0 → …）
+        hw_config: 硬件配置（时钟、CIM 并行度、层间 buffer、BN 融合等）
         show_layers: 是否在控制台打印每层周期与事件数
-        mnsim_context: 可选 MNSIM 全 NetStruct 结果上下文
+        mnsim_context: 可选 MNSIM 全 NetStruct 结果（mnsim_latency_ns / mnsim_energy_nj）
         activation_shapes: 每层激活 shape 与字节数（用于 buffer 事件与报告）
-        enable_layer_buffer: 是否启用层间 buffer 读写与 buffer size 约束
+        enable_layer_buffer: 是否启用层间 buffer 读写与 buffer 容量约束
         show_shapes: 是否打印每层激活 shape（input → output）
 
     Returns:
-        包含 total_cycles、total_energy_nJ、layer_results、sim_result、activation_shapes 等键的字典。
+        字典，含 total_cycles、total_energy_nJ、layer_results、sim_result、
+        operator_breakdown、operator_sequence（与 constants 键名一致）等。
     """
     scheduler = Scheduler(hw_config=hw_config)
     layer_results: List[Dict[str, Any]] = []
@@ -417,7 +433,7 @@ def simulate_network(
     latency_ms = latency_ns / 1e6
     avg_power = (total_energy / latency_ns * 1e3) if latency_ns > 0 else 0.0
 
-    # 按算子类型聚合 cycles 与 energy，供端到端 PPA breakdown（含 FPS/KNN/BN/Conv/Linear 等）
+    # 按算子类型聚合周期与能耗，供端到端 PPA 按算子类型统计（FPS/KNN/BN/Conv/Linear 等）
     operator_breakdown: Dict[str, Dict[str, float]] = {}
     for e in sim_result.events:
         op_name = (e.operator or e.operation or "other").strip() or "other"
@@ -426,22 +442,22 @@ def simulate_network(
         operator_breakdown[op_name]["cycles"] += e.duration
         operator_breakdown[op_name]["energy_nj"] += e.energy
 
-    # 按执行顺序的完整硬件算子序列（按 cycle 排序）
+    # 按执行顺序生成完整硬件算子序列（与 constants 中键名一致，便于导出 operator_sequence.txt）
     events_sorted = sorted(sim_result.events, key=lambda e: (e.cycle, getattr(e, "event_id", 0)))
     operator_sequence: List[Dict[str, Any]] = []
     for idx, e in enumerate(events_sorted):
         meta = getattr(e, "metadata", None) or {}
         operator_sequence.append({
-            "idx": idx,
-            "cycle": e.cycle,
-            "end_cycle": e.cycle + e.duration - 1,
-            "duration": e.duration,
-            "operator": (e.operator or "").strip() or "other",
-            "stage": (e.stage or "").strip(),
-            "operation": (e.operation or "").strip(),
-            "circuit_module": (e.circuit_module or "").strip(),
-            "layer_name": meta.get("layer_name", ""),
-            "energy_nj": round(e.energy, 4),
+            KEY_IDX: idx,
+            KEY_CYCLE: e.cycle,
+            KEY_END_CYCLE: e.cycle + e.duration - 1,
+            KEY_DURATION: e.duration,
+            KEY_OPERATOR: (e.operator or "").strip() or "other",
+            KEY_STAGE: (e.stage or "").strip(),
+            KEY_OPERATION: (e.operation or "").strip(),
+            KEY_CIRCUIT_MODULE: (e.circuit_module or "").strip(),
+            KEY_LAYER_NAME: meta.get("layer_name", ""),
+            KEY_ENERGY_NJ: round(e.energy, 4),
         })
 
     out: Dict[str, Any] = {

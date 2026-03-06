@@ -1,3 +1,11 @@
+"""
+MNSIM 适配器（PE 级延迟与功耗估算）
+====================================
+
+通过 MNSIM 的 PE 级接口估算 Conv1d/Linear 的延迟与功耗，供无全 NetStruct 时
+common_ops.gen_conv1d_rram_cim_events / gen_linear_rram_cim_events 使用。
+若 MNSIM 调用失败则回退到保守解析模型。
+"""
 from __future__ import annotations
 
 import math
@@ -9,6 +17,7 @@ from typing import Optional
 
 @dataclass
 class MNSIMEstimate:
+    """单次 MNSIM 或回退估算结果：周期、延迟(ns)、能耗(nJ)、平均功耗(mW)、来源标识。"""
     cycles: int
     latency_ns: float
     energy_nj: float
@@ -17,6 +26,7 @@ class MNSIMEstimate:
 
 
 def _ensure_mnsim_importable(mnsim_root: str) -> None:
+    """将 MNSIM 根目录加入 sys.path 以便 import MNSIM。"""
     if mnsim_root not in sys.path:
         sys.path.insert(0, mnsim_root)
 
@@ -34,7 +44,7 @@ def estimate_rram_cim_op(
     fallback_cycles_per_token: int = 8,
 ) -> MNSIMEstimate:
     """
-    Estimate Conv1d/Linear latency+energy via MNSIM hardware interfaces.
+    用 MNSIM PE 级接口估算 Conv1d/Linear 的延迟与能耗；失败时用回退解析模型。
 
     Uses MNSIM PE-level latency and power models:
       - MNSIM.Latency_Model.PE_latency.PE_latency_analysis

@@ -13,22 +13,6 @@ OP_TYPE_CONV = "conv"
 OP_TYPE_FC = "fc"
 
 
-def _get_op_type_from_netstruct(netstruct: List[Any], index: int) -> str:
-    """从 netstruct 取第 index 层的 type（conv -> conv1d, fc -> linear）。"""
-    if index < 0 or index >= len(netstruct):
-        return "unknown"
-    entry = netstruct[index]
-    if not entry or not entry[0]:
-        return "unknown"
-    ld = entry[0][0]
-    t = ld.get("type", "")
-    if t == "conv":
-        return "conv1d"
-    if t == "fc":
-        return "linear"
-    return t
-
-
 def build_ppa_report(
     eval_result: Any,
     clock_ns: float,

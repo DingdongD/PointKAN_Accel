@@ -1,22 +1,17 @@
 """
-Hardware Configuration Module — baseline & acc accelerators
-=============================================================
+硬件配置模块（baseline / acc 加速器）
+=====================================
 
-Flat module-based configuration for two CIM accelerators targeting
-point cloud neural networks (PointKAN / PointNet++ etc.).
+面向点云网络（PointKAN / PointNet++ 等）的两种 CIM 加速器扁平配置，
+无 Chip→Tile→PE 层级，单芯片由五大宏模块组成：
 
-Architecture: No Chip→Tile→PE hierarchy.
-Each accelerator is a single chip composed of five macro-level modules:
-  1. SRAM-CIM Macro   (sram-cim array + shift_add + min_distance_table)
-  2. RRAM-LUT Macro    (rram lut)
-  3. RRAM-CIM Macro    (placeholder, to be integrated with MNSIM)
-  4. Sorting Circuit    (baseline: bitonic sort; acc: two-stage comparator)
-  5. Logic Circuit      (ops + quant/dequant; acc adds interpolation)
+  1. SRAM-CIM 宏：sram-cim 阵列 + shift_add + 最小距离表
+  2. RRAM-LUT 宏：rram 查找表
+  3. RRAM-CIM 宏：占位，与 MNSIM 集成
+  4. 排序电路：baseline 为 Bitonic 排序，acc 为两阶段比较器
+  5. 逻辑电路：BN/LN/ReLU/量化反量化等，acc 增加插值
 
-Usage:
-    from configs.hw_config import get_accelerator_config
-    hw = get_accelerator_config("baseline")
-    hw = get_accelerator_config("acc")
+使用：get_accelerator_config("baseline") / get_accelerator_config("acc")
 """
 
 from dataclasses import dataclass, field
@@ -25,14 +20,13 @@ from enum import Enum, auto
 
 
 # =============================================================================
-# Circuit Module Enumeration
+# 电路模块枚举（用于阶段定义与事件归属）
 # =============================================================================
 
 class CircuitModule(Enum):
     """
-    Circuit module enumeration for stage definition and event tracking.
-
-    Each member corresponds to a hardware sub-module config in HardwareConfig.
+    电路模块枚举，与 HardwareConfig 中各子模块配置一一对应，
+    用于 Event 的 circuit_module 字段及 breakdown 按模块聚合。
     """
     # --- SRAM-CIM Macro ---
     SRAM_CIM_ARRAY = auto()           # SramCimArrayConfig
@@ -62,39 +56,24 @@ class CircuitModule(Enum):
 
 
 # =============================================================================
-# Accelerator Type
+# 加速器类型
 # =============================================================================
 
 class AcceleratorType(Enum):
-    """Accelerator architecture variant."""
+    """加速器架构变体：baseline / acc。"""
     BASELINE = auto()
     ACC = auto()
 
 
 # =============================================================================
-# 1. SRAM-CIM Macro  —  sub-modules
+# 1. SRAM-CIM 宏 — 子模块配置
 # =============================================================================
 
 @dataclass
 class SramCimArrayConfig:
     """
-    SRAM-CIM array configuration.
-
-    Physical structure: 128 LCUs, each 8 rows × 36 cols.
-    Global address decoding across LCUs → effectively 1024 rows × 36 cols.
-    All 128 LCUs operate in parallel (cim_parallelism = 128).
-
-    Attributes:
-        rows: Total row count (128 LCUs × 8 rows/LCU = 1024)
-        cols: Column count per LCU (bit-line width)
-        lcu_num: Number of Local Compute Units
-        lcu_rows: Rows per LCU (rows / lcu_num)
-        quantization_bits: Input activation quantization bit-width
-        bit_slice_bits: Bits processed per CIM cycle
-        bit_serial_cycles: quantization_bits / bit_slice_bits
-        cim_parallelism: Number of LCUs working in parallel
-        write_power: Write power for entire macro (mW)
-        cim_power: CIM compute power for entire macro (mW), 128 LCUs active
+    SRAM-CIM 阵列配置：128 个 LCU，每 LCU 8 行×36 列，等效 1024 行×36 列，128 路并行。
+    Attributes: rows/cols/lcu_num/lcu_rows, quantization_bits, bit_slice_bits, cim_parallelism, write_power, cim_power.
     """
     rows: int = 1024
     cols: int = 36
@@ -116,31 +95,29 @@ class SramCimArrayConfig:
 
 @dataclass
 class ShiftAddConfig:
-    """Shift-and-Add unit following SRAM-CIM array for bit-serial accumulation."""
-    power: float = 0.0                          # TODO: mW
-    cycles: int = 0                             # TODO: execution cycles
+    """SRAM-CIM 阵列后的移位累加单元，用于 bit-serial 累加。"""
+    power: float = 0.0
+    cycles: int = 0
 
 
 @dataclass
 class MinDistanceTableConfig:
-    """Min distance table used for distance bookkeeping in FPS/KNN."""
+    """FPS/KNN 中用于记录最小距离的查找表。"""
     power: float = 0.0                          # TODO: mW
     cycles: int = 0                             # TODO: execution cycles
 
 
 @dataclass
 class BufferConfig:
-    """Buffer/register for SRAM write-back and intermediate storage."""
-    power: float = 0.0                          # TODO: mW
-    cycles: int = 0                             # TODO: execution cycles
+    """SRAM 写回与中间存储用的 buffer/寄存器。"""
+    power: float = 0.0
+    cycles: int = 0
 
 
 @dataclass
 class SramCimMacroConfig:
     """
-    SRAM-CIM Macro = sram_cim_array + shift_add + min_distance_table + buffer.
-
-    Shared by both baseline and acc.
+    SRAM-CIM 宏 = array + shift_add + min_distance_table + buffer，baseline 与 acc 共用。
     """
     array: SramCimArrayConfig = field(default_factory=SramCimArrayConfig)
     shift_add: ShiftAddConfig = field(default_factory=ShiftAddConfig)
@@ -151,16 +128,12 @@ class SramCimMacroConfig:
 
 
 # =============================================================================
-# 2. RRAM-LUT Macro
+# 2. RRAM-LUT 宏
 # =============================================================================
 
 @dataclass
 class RramLutConfig:
-    """
-    Single RRAM look-up table unit.
-
-    TODO: Full characterization pending.
-    """
+    """单块 RRAM 查找表单元。"""
     power: float = 0.0                          # TODO: mW
     area: float = 0.0                           # TODO: mm²
     cycles: int = 0                             # TODO: execution cycles
@@ -180,16 +153,12 @@ class RramLutMacroConfig:
 
 
 # =============================================================================
-# 3. RRAM-CIM Macro  (placeholder, to be integrated with MNSIM)
+# 3. RRAM-CIM 宏（占位，待与 MNSIM 集成）
 # =============================================================================
 
 @dataclass
 class RramCimMacroConfig:
-    """
-    RRAM-CIM Macro — placeholder for MNSIM integration.
-
-    TODO: All parameters to be filled after MNSIM integration.
-    """
+    """RRAM-CIM 宏，占位，待 MNSIM 集成后填参。"""
     power: float = 0.0                          # TODO: mW
     area: float = 0.0                           # TODO: mm²
     cycles: int = 0                             # TODO: execution cycles
@@ -197,16 +166,12 @@ class RramCimMacroConfig:
 
 
 # =============================================================================
-# 4. Sorting Circuit
+# 4. 排序电路
 # =============================================================================
 
 @dataclass
 class CompTreeMaxConfig:
-    """
-    Comparator tree for 1024-element MAX selection (baseline).
-
-    Bitonic sort variant that finds the global maximum from 1024 inputs.
-    """
+    """1024 路比较树取 MAX（baseline），Bitonic 取全局最大值。"""
     power: float = 0.0                          # TODO: mW
     area: float = 0.0                           # TODO: mm²
     cycles: int = 0                             # TODO: execution cycles
@@ -384,15 +349,13 @@ class InterLayerBufferConfig:
 
 
 # =============================================================================
-# Top-Level Hardware Configuration
+# 顶层硬件配置（单芯片、五大宏模块扁平组合）
 # =============================================================================
 
 @dataclass
 class HardwareConfig:
     """
-    Top-level hardware configuration for a single accelerator chip.
-
-    No Chip→Tile→PE hierarchy — the chip is a flat composition of five macros.
+    单芯片加速器顶层配置，无 Chip→Tile→PE 层级，由五大宏 + 层间 buffer + 可选 DRAM/SRAM-II 组成。
 
     Attributes:
         accelerator_type: BASELINE or ACC

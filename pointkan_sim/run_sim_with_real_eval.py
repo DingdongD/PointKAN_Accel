@@ -23,6 +23,21 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from pointkan_sim.constants import (
+    KEY_CIRCUIT_MODULE,
+    KEY_CYCLE,
+    KEY_DURATION,
+    KEY_END_CYCLE,
+    KEY_ENERGY_NJ,
+    KEY_IDX,
+    KEY_LAYER_NAME,
+    KEY_OPERATION,
+    KEY_OPERATOR,
+    KEY_STAGE,
+    OPERATOR_SEQUENCE_HEADER,
+    MEMORY_TRANSACTIONS_HEADER,
+)
+
 # 工程根目录（PointKAN-pytorch）
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CLASSIFICATION_DIR = PROJECT_ROOT / "PointKAN-elite" / "classification_ModelNet40"
@@ -34,6 +49,7 @@ DEFAULT_NUM_CLASSES = 40
 
 
 def _parse_args() -> argparse.Namespace:
+    """解析命令行参数（网络、加速器、checkpoint、真实数据/仿真模式、BN/量化开关、导出选项等）。"""
     parser = argparse.ArgumentParser(
         description="使用真实 checkpoint 与 ModelNet40 配置运行 PPA 仿真，可选先跑真实推理",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -240,18 +256,27 @@ def main() -> int:
     )
 
     def _is_memory_transaction(item: Dict[str, Any]) -> bool:
-        """判断 operator_sequence 记录是否属于内存交互事务。"""
-        op = str(item.get("operator", "")).lower()
-        stage = str(item.get("stage", "")).lower()
-        opn = str(item.get("operation", "")).lower()
-        cm = str(item.get("circuit_module", "")).lower()
+        """
+        判断 operator_sequence 中的一条记录是否属于内存交互事务。
+        用于 --export_memory_transactions 时筛出 DRAM/SRAM-II/LayerBuffer 等读写事件。
+        """
+        op = str(item.get(KEY_OPERATOR, "")).lower()
+        stage = str(item.get(KEY_STAGE, "")).lower()
+        opn = str(item.get(KEY_OPERATION, "")).lower()
+        cm = str(item.get(KEY_CIRCUIT_MODULE, "")).lower()
 
-        # LayerBuffer / DRAM / SRAM-II / buffer_io / 读写关键字
+        # LayerBuffer 算子一律视为内存事务
         if op == "layerbuffer":
             return True
-        if stage in ("buffer_io", "distance") and any(k in opn for k in ("read", "write", "spill", "load", "sram", "dram", "phase1", "phase2_query")):
+        # buffer_io / distance 阶段且操作名含读写相关关键字
+        if stage in ("buffer_io", "distance") and any(
+            k in opn for k in ("read", "write", "spill", "load", "sram", "dram", "phase1", "phase2_query")
+        ):
             return True
-        if cm in ("dram", "inter_layer_buffer", "sram_ii", "buffer") and any(k in opn for k in ("read", "write", "spill", "load", "sram", "dram", "phase1", "phase2_query")):
+        # 电路模块为 DRAM/层间 buffer/SRAM-II 等且操作含读写关键字
+        if cm in ("dram", "inter_layer_buffer", "sram_ii", "buffer") and any(
+            k in opn for k in ("read", "write", "spill", "load", "sram", "dram", "phase1", "phase2_query")
+        ):
             return True
         return False
 
@@ -410,7 +435,7 @@ def main() -> int:
         full_operator_breakdown = sim_once.get("operator_breakdown") or {}
         operator_sequence = sim_once.get("operator_sequence") or []
 
-        # 端到端 latency/energy 与按层、按算子类型 PPA breakdown，写入 sim_results 并绘图
+        # 端到端 PPA 报告与算子级 breakdown 可视化：report.json + latency/energy 饼图（由 write_ppa_report_and_plots 统一写入 sim_results）
         from pointkan_sim.integration.ppa_report import build_ppa_report, write_ppa_report_and_plots
         mnsim_lat = mnsim_context["mnsim_latency_ns"] if mnsim_context else None
         mnsim_en = mnsim_context["mnsim_energy_nj"] if mnsim_context else None
@@ -436,48 +461,48 @@ def main() -> int:
             report_filename=report_filename,
             log_info_fn=log_info,
         )
-        # 按执行顺序输出完整硬件算子序列到 operator_sequence.txt
+        # 按执行顺序输出完整硬件算子序列到 operator_sequence.txt（列与 constants 键名一致）
         if operator_sequence:
             seq_path = sim_results_dir / "operator_sequence.txt"
             with open(seq_path, "w", encoding="utf-8") as f:
                 f.write("# 硬件算子执行顺序（按 cycle 排序）\n")
-                f.write("# idx\tcycle\tend_cycle\tduration\toperator\tstage\toperation\tlayer_name\tenergy_nj\n")
+                f.write(OPERATOR_SEQUENCE_HEADER)
                 for item in operator_sequence:
                     f.write(
                         "{idx}\t{cycle}\t{end_cycle}\t{duration}\t{operator}\t{stage}\t{operation}\t{layer_name}\t{energy_nj}\n".format(
-                            idx=item.get("idx", ""),
-                            cycle=item.get("cycle", ""),
-                            end_cycle=item.get("end_cycle", ""),
-                            duration=item.get("duration", ""),
-                            operator=item.get("operator", ""),
-                            stage=item.get("stage", ""),
-                            operation=item.get("operation", ""),
-                            layer_name=item.get("layer_name", ""),
-                            energy_nj=item.get("energy_nj", ""),
+                            idx=item.get(KEY_IDX, ""),
+                            cycle=item.get(KEY_CYCLE, ""),
+                            end_cycle=item.get(KEY_END_CYCLE, ""),
+                            duration=item.get(KEY_DURATION, ""),
+                            operator=item.get(KEY_OPERATOR, ""),
+                            stage=item.get(KEY_STAGE, ""),
+                            operation=item.get(KEY_OPERATION, ""),
+                            layer_name=item.get(KEY_LAYER_NAME, ""),
+                            energy_nj=item.get(KEY_ENERGY_NJ, ""),
                         )
                     )
             log_info(f"完整硬件算子序列已写入: {seq_path}（共 {len(operator_sequence)} 条）")
 
-        # 可选：导出内存交互事务，便于单独核对 DRAM/SRAM-II/LayerBuffer 行为
+        # 可选：导出内存交互事务序列，便于单独核对 DRAM/SRAM-II/LayerBuffer 行为
         if args.export_memory_transactions and operator_sequence:
             mem_txn = [it for it in operator_sequence if _is_memory_transaction(it)]
             mem_path = sim_results_dir / "memory_transactions.txt"
             with open(mem_path, "w", encoding="utf-8") as f:
                 f.write("# 内存交互事务序列（按 cycle 排序）\n")
-                f.write("# idx\tcycle\tend_cycle\tduration\toperator\tstage\toperation\tcircuit_module\tlayer_name\tenergy_nj\n")
+                f.write(MEMORY_TRANSACTIONS_HEADER)
                 for item in mem_txn:
                     f.write(
                         "{idx}\t{cycle}\t{end_cycle}\t{duration}\t{operator}\t{stage}\t{operation}\t{circuit_module}\t{layer_name}\t{energy_nj}\n".format(
-                            idx=item.get("idx", ""),
-                            cycle=item.get("cycle", ""),
-                            end_cycle=item.get("end_cycle", ""),
-                            duration=item.get("duration", ""),
-                            operator=item.get("operator", ""),
-                            stage=item.get("stage", ""),
-                            operation=item.get("operation", ""),
-                            circuit_module=item.get("circuit_module", ""),
-                            layer_name=item.get("layer_name", ""),
-                            energy_nj=item.get("energy_nj", ""),
+                            idx=item.get(KEY_IDX, ""),
+                            cycle=item.get(KEY_CYCLE, ""),
+                            end_cycle=item.get(KEY_END_CYCLE, ""),
+                            duration=item.get(KEY_DURATION, ""),
+                            operator=item.get(KEY_OPERATOR, ""),
+                            stage=item.get(KEY_STAGE, ""),
+                            operation=item.get(KEY_OPERATION, ""),
+                            circuit_module=item.get(KEY_CIRCUIT_MODULE, ""),
+                            layer_name=item.get(KEY_LAYER_NAME, ""),
+                            energy_nj=item.get(KEY_ENERGY_NJ, ""),
                         )
                     )
             log_info(f"内存交互事务已写入: {mem_path}（共 {len(mem_txn)} 条）")
