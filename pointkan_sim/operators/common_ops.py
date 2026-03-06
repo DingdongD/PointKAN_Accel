@@ -14,6 +14,11 @@ from typing import Dict, Any, List, Optional, TYPE_CHECKING
 from ..simulator.event import Event
 from ..utils.math_utils import safe_div_ceil
 from .mnsim_adapter import estimate_rram_cim_op
+from .neurosim_adapter import (
+    NeuroSimEstimate,
+    estimate_conv1d_neurosim,
+    estimate_linear_neurosim,
+)
 
 if TYPE_CHECKING:
     from ..configs.hw_config import HardwareConfig
@@ -279,7 +284,7 @@ def gen_kan_rram_lut_events(params: Dict[str, Any], hw_config: "HardwareConfig")
 
 
 def gen_conv1d_rram_cim_events(params: Dict[str, Any], hw_config: "HardwareConfig") -> List[Event]:
-    """Conv1d 的 PE 级 RRAM-CIM 事件（无 MNSIM 全 NetStruct 时使用）；可选前量化+后反量化。算子名用 Conv1d（PascalCase）。"""
+    """Conv1d 的 PE 级 RRAM-CIM 事件（无 MNSIM/NeuroSim 全 NetStruct 时使用）；可选前量化+后反量化。算子名用 Conv1d（PascalCase）。"""
     in_ch = int(params.get("in_channels", 1))
     out_ch = int(params.get("out_channels", 1))
     kernel = int(params.get("kernel_size", 1))
@@ -290,14 +295,27 @@ def gen_conv1d_rram_cim_events(params: Dict[str, Any], hw_config: "HardwareConfi
     if hasattr(hw_config, "rram_cim_macro"):
         fallback_power = float(getattr(hw_config.rram_cim_macro, "power", fallback_power) or fallback_power)
 
-    est = estimate_rram_cim_op(
-        in_features=max(1, in_ch * kernel),
-        out_features=max(1, out_ch),
-        tokens=max(1, num_points),
-        clock_period_ns=_clock(hw_config),
-        cim_parallelism=max(1, getattr(hw_config, "cim_parallelism", 128)),
-        fallback_power_mw=fallback_power,
-    )
+    cim_backend = getattr(hw_config, "cim_backend", "mnsim") or "mnsim"
+    if cim_backend == "neurosim":
+        est = estimate_conv1d_neurosim(
+            in_channels=in_ch,
+            out_channels=out_ch,
+            kernel_size=kernel,
+            num_points=num_points,
+            clock_period_ns=_clock(hw_config),
+            neurosim_root=getattr(hw_config, "neurosim_root", "/workspace/DNN_NeuroSim_V1.4/Inference_pytorch"),
+            fallback_power_mw=fallback_power,
+        )
+        assert isinstance(est, NeuroSimEstimate)
+    else:
+        est = estimate_rram_cim_op(
+            in_features=max(1, in_ch * kernel),
+            out_features=max(1, out_ch),
+            tokens=max(1, num_points),
+            clock_period_ns=_clock(hw_config),
+            cim_parallelism=max(1, getattr(hw_config, "cim_parallelism", 128)),
+            fallback_power_mw=fallback_power,
+        )
     compute_ev = _event(
         0, 0, "Conv1d", "rram_cim", "matrix_vector", "rram_cim", "conv1d_rram_cim",
         est.avg_power_mw, est.cycles, _clock(hw_config),
@@ -320,7 +338,7 @@ def gen_conv1d_rram_cim_events(params: Dict[str, Any], hw_config: "HardwareConfi
 
 
 def gen_linear_rram_cim_events(params: Dict[str, Any], hw_config: "HardwareConfig") -> List[Event]:
-    """Linear 的 PE 级 RRAM-CIM 事件（无 MNSIM 全 NetStruct 时使用）；可选前量化+后反量化。算子名用 Linear（PascalCase）。"""
+    """Linear 的 PE 级 RRAM-CIM 事件（无 MNSIM/NeuroSim 全 NetStruct 时使用）；可选前量化+后反量化。算子名用 Linear（PascalCase）。"""
     in_f = int(params.get("in_features", 1))
     out_f = int(params.get("out_features", 1))
     tokens = int(params.get("tokens", 1))
@@ -330,14 +348,26 @@ def gen_linear_rram_cim_events(params: Dict[str, Any], hw_config: "HardwareConfi
     if hasattr(hw_config, "rram_cim_macro"):
         fallback_power = float(getattr(hw_config.rram_cim_macro, "power", fallback_power) or fallback_power)
 
-    est = estimate_rram_cim_op(
-        in_features=in_f,
-        out_features=out_f,
-        tokens=max(1, tokens),
-        clock_period_ns=_clock(hw_config),
-        cim_parallelism=max(1, getattr(hw_config, "cim_parallelism", 128)),
-        fallback_power_mw=fallback_power,
-    )
+    cim_backend = getattr(hw_config, "cim_backend", "mnsim") or "mnsim"
+    if cim_backend == "neurosim":
+        est = estimate_linear_neurosim(
+            in_features=in_f,
+            out_features=out_f,
+            tokens=max(1, tokens),
+            clock_period_ns=_clock(hw_config),
+            neurosim_root=getattr(hw_config, "neurosim_root", "/workspace/DNN_NeuroSim_V1.4/Inference_pytorch"),
+            fallback_power_mw=fallback_power,
+        )
+        assert isinstance(est, NeuroSimEstimate)
+    else:
+        est = estimate_rram_cim_op(
+            in_features=in_f,
+            out_features=out_f,
+            tokens=max(1, tokens),
+            clock_period_ns=_clock(hw_config),
+            cim_parallelism=max(1, getattr(hw_config, "cim_parallelism", 128)),
+            fallback_power_mw=fallback_power,
+        )
     compute_ev = _event(
         0, 0, "Linear", "rram_cim", "matrix_vector", "rram_cim", "linear_rram_cim",
         est.avg_power_mw, est.cycles, _clock(hw_config),

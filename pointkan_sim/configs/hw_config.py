@@ -411,6 +411,10 @@ class HardwareConfig:
     bn_fuse_with_conv_linear: bool = True
     # W8A8：Conv/Linear 前插入量化(FP32→INT8)、后插入反量化(INT8→FP32)，供 BN/ReLU 等浮点非线性使用
     enable_w8a8_quant_dequant: bool = False
+    # CIM 后端：mnsim（PE 级/全 NetStruct）、neurosim（DNN_NeuroSim main）、fallback（解析回退）
+    cim_backend: str = "mnsim"
+    # NeuroSim 根目录（Inference_pytorch），用于 cim_backend=neurosim 时调用 NeuroSIM/main
+    neurosim_root: str = "/workspace/DNN_NeuroSim_V1.4/Inference_pytorch"
 
     # =========================================================================
     # Derived convenience properties

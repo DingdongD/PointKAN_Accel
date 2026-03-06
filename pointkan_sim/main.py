@@ -191,6 +191,19 @@ def parse_args() -> argparse.Namespace:
         help="禁用 MNSIM 全 NetStruct，仅使用 PE 级估算",
     )
     parser.add_argument(
+        "--cim_backend",
+        type=str,
+        default=None,
+        choices=["mnsim", "neurosim", "fallback"],
+        help="Conv/Linear 单层估算后端：mnsim、neurosim（DNN_NeuroSim）、fallback；无全 NetStruct 时生效",
+    )
+    parser.add_argument(
+        "--neurosim_root",
+        type=str,
+        default=None,
+        help="NeuroSim 根目录（Inference_pytorch），默认 /workspace/DNN_NeuroSim_V1.4/Inference_pytorch",
+    )
+    parser.add_argument(
         "--no_layer_buffer",
         action="store_true",
         help="禁用层间 buffer 读写（仅仿真计算单元，与旧行为一致）",
@@ -680,6 +693,10 @@ def run_network_simulation(args: argparse.Namespace) -> Dict[str, Any]:
     hw_config = get_accelerator_config(args.accelerator)
     hw_config.enable_w8a8_quant_dequant = getattr(args, "enable_w8a8_quant_dequant", False)
     hw_config.bn_fuse_with_conv_linear = bool(getattr(args, "bn_en", 1))
+    if getattr(args, "cim_backend", None):
+        hw_config.cim_backend = args.cim_backend
+    if getattr(args, "neurosim_root", None):
+        hw_config.neurosim_root = args.neurosim_root
     layers = load_network(network_name, args.input_points, args.num_classes)
     activation_shapes = compute_activation_shapes(layers, args.input_points, input_channels=3)
 

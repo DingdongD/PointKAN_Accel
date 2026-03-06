@@ -94,6 +94,24 @@ def _parse_args() -> argparse.Namespace:
         help="对 conv1d/linear 使用 MNSIM 全 NetStruct",
     )
     parser.add_argument(
+        "--neurosim_full",
+        action="store_true",
+        help="对 conv1d/linear 使用 NeuroSim 全网络仿真（DNN_NeuroSim main）；与 --mnsim_full 二选一时优先 NeuroSim",
+    )
+    parser.add_argument(
+        "--cim_backend",
+        type=str,
+        default=None,
+        choices=["mnsim", "neurosim", "fallback"],
+        help="Conv/Linear 单层估算后端：mnsim（默认）、neurosim（DNN_NeuroSim）、fallback（解析回退）；无全网络时生效",
+    )
+    parser.add_argument(
+        "--neurosim_root",
+        type=str,
+        default=None,
+        help="NeuroSim 根目录（Inference_pytorch），默认 /workspace/DNN_NeuroSim_V1.4/Inference_pytorch",
+    )
+    parser.add_argument(
         "--output",
         type=str,
         default=None,
@@ -288,9 +306,13 @@ def main() -> int:
 
         # 层定义（与后续 MNSIM、仿真共用）
         hw_config = get_accelerator_config(args.accelerator)
-        # 用户可控开关：BN 融合 / 量化反量化
+        # 用户可控开关：BN 融合 / 量化反量化 / CIM 后端
         hw_config.bn_fuse_with_conv_linear = bool(args.bn_en)
         hw_config.enable_w8a8_quant_dequant = bool(args.qd_en)
+        if getattr(args, "cim_backend", None):
+            hw_config.cim_backend = args.cim_backend
+        if getattr(args, "neurosim_root", None):
+            hw_config.neurosim_root = args.neurosim_root
         layers = load_network("pointkan-elite", args.num_points, args.num_classes)
 
         # 打印加速器与层间 buffer/量化配置（与 main.run_network_simulation 一致，便于对照）
@@ -324,13 +346,52 @@ def main() -> int:
                 log_info_fn=log_info,
             )
 
-        # MNSIM：用 LayerDef 构建 NetStruct，可选传入真实数据量驱动 conv/linear 的 indata/rdata
+        # MNSIM / NeuroSim 全网络：二选一注入 mnsim_context（dispatcher 用同一 context 键）
         activation_shapes = compute_activation_shapes(layers, args.num_points, input_channels=3)
 
-        from pointkan_sim.integration.mnsim_netstruct import build_netstruct_from_layers, run_mnsim_full
         mnsim_context = None
-        netstruct, conv_linear_order, mnsim_result = None, None, None
-        if args.mnsim_full:
+        n_mnsim = 0
+        netstruct = None
+        conv_linear_order = None
+        mnsim_result = None
+        used_neurosim_for_ppa = False
+        neurosim_result = None
+        neurosim_root = getattr(hw_config, "neurosim_root", "/workspace/DNN_NeuroSim_V1.4/Inference_pytorch")
+
+        if args.neurosim_full:
+            from pointkan_sim.integration.neurosim_full import run_neurosim_full
+            neurosim_result = run_neurosim_full(
+                conv_linear_list,
+                neurosim_root=neurosim_root,
+            )
+            if neurosim_result.success:
+                used_neurosim_for_ppa = True
+                mnsim_context = {
+                    "mnsim_latency_ns": neurosim_result.layer_latency_ns,
+                    "mnsim_energy_nj": neurosim_result.layer_energy_nj,
+                    "mnsim_index": 0,
+                }
+                n_mnsim = len(neurosim_result.layer_latency_ns)
+                log_info("已用 NeuroSim 全网络仿真（DNN_NeuroSim main）得到逐层 latency/energy")
+                log_info("以下层使用 NeuroSim 接口计算 PPA：")
+                clock_ns = hw_config.clock_period
+                from pointkan_sim.integration.real_data_eval import format_activation_weight_shapes
+                for idx, (lat_ns, en_nj) in enumerate(zip(neurosim_result.layer_latency_ns, neurosim_result.layer_energy_nj)):
+                    name = conv_linear_list[idx].name if idx < len(conv_linear_list) else f"layer_{idx}"
+                    cyc = max(1, int(math.ceil(lat_ns / clock_ns)))
+                    act_s, w_s = format_activation_weight_shapes(conv_linear_list[idx]) if idx < len(conv_linear_list) else ("?", "?")
+                    log_info(f"  NeuroSim [{name}] activation={act_s}, weight={w_s}  latency={lat_ns:.1f} ns, cycles={cyc}, energy={en_nj:.2f} nJ")
+                log_info(f"  （共 {n_mnsim} 层）")
+            else:
+                log_info(f"NeuroSim 全网络未启用: {neurosim_result.error}")
+                if neurosim_result.error and len(neurosim_result.error) > 200:
+                    for line in neurosim_result.error.split("\n")[:15]:
+                        if line.strip():
+                            log_info(f"  NeuroSim stderr: {line.strip()}")
+                log_info("  提示: 若为主进程崩溃(returncode≠0)，可检查 DNN_NeuroSim 是否支持当前层数/维度；层数较多时可尝试减少 batch 或先单独运行 NeuroSIM/main 排查。")
+
+        if mnsim_context is None and args.mnsim_full:
+            from pointkan_sim.integration.mnsim_netstruct import build_netstruct_from_layers, run_mnsim_full
             netstruct, conv_linear_order = build_netstruct_from_layers(
                 layers, real_data_overrides=real_data_overrides
             )
@@ -342,6 +403,7 @@ def main() -> int:
                         "mnsim_energy_nj": mnsim_result.layer_energy_nj,
                         "mnsim_index": 0,
                     }
+                    n_mnsim = len(mnsim_result.layer_latency_ns)
                     log_info("已用与 checkpoint 一致的层结构 + 真实按层 indata/rdata 驱动 MNSIM 全 NetStruct（Tile/NoC）")
                     clock_ns = hw_config.clock_period
                     from pointkan_sim.integration.real_data_eval import format_activation_weight_shapes
@@ -353,8 +415,9 @@ def main() -> int:
                 else:
                     log_info(f"MNSIM 未启用: {mnsim_result.error}")
 
-        n_mnsim = len(mnsim_context["mnsim_latency_ns"]) if mnsim_context else 0
-        log_info(f"真实前向共 {len(conv_linear_list)} 个 conv/linear；MNSIM 使用与 LayerDef 一致的 {n_mnsim} 层（含真实 indata/rdata）")
+        if mnsim_context is not None:
+            n_mnsim = len(mnsim_context["mnsim_latency_ns"])
+        log_info(f"真实前向共 {len(conv_linear_list)} 个 conv/linear；全网络 PPA 使用 {n_mnsim} 层")
         if len(conv_linear_list) != n_mnsim:
             log_info(f"  注意：真实前向层数({len(conv_linear_list)})与 LayerDef 层数({n_mnsim})不一致；overrides 按索引取前 {n_mnsim} 条对应到 MNSIM。建议使用 --show_shapes 核对。")
 
@@ -377,7 +440,12 @@ def main() -> int:
             return 1
 
         log_separator()
-        log_info("真实数据评估结果 (ModelNet40 测试集 + 对应层 MNSIM PPA)")
+        if used_neurosim_for_ppa:
+            log_info("真实数据评估结果 (ModelNet40 测试集 + 对应层 NeuroSim PPA)")
+        elif mnsim_context and args.mnsim_full:
+            log_info("真实数据评估结果 (ModelNet40 测试集 + 对应层 MNSIM PPA)")
+        else:
+            log_info("真实数据评估结果 (ModelNet40 测试集)")
         log_separator()
         log_info(f"  样本数:        {eval_result.num_samples}")
         log_info(f"  准确率:        {eval_result.accuracy:.2f}%")
@@ -428,6 +496,28 @@ def main() -> int:
         )
         sim_results_dir = Path(args.sim_results_dir)
         sim_results_dir.mkdir(parents=True, exist_ok=True)
+        # NeuroSim 模式：将参与计算的层名及 latency/energy/激活与权重 shape 写入 CSV
+        if used_neurosim_for_ppa and mnsim_context and conv_linear_list:
+            import csv
+            from pointkan_sim.integration.real_data_eval import format_activation_weight_shapes
+            lat_ns_list = mnsim_context["mnsim_latency_ns"]
+            en_nj_list = mnsim_context["mnsim_energy_nj"]
+            neurosim_csv_path = sim_results_dir / "neurosim_layer_ppa.csv"
+            with open(neurosim_csv_path, "w", newline="", encoding="utf-8") as f:
+                w = csv.writer(f)
+                w.writerow(["layer_name", "layer_type", "latency_ns", "energy_nj", "input_activation_shape", "weight_shape"])
+                for idx in range(min(len(lat_ns_list), len(en_nj_list), len(conv_linear_list))):
+                    info = conv_linear_list[idx]
+                    act_s, w_s = format_activation_weight_shapes(info)
+                    w.writerow([
+                        info.name,
+                        info.layer_type,
+                        f"{lat_ns_list[idx]:.4f}",
+                        f"{en_nj_list[idx]:.4f}",
+                        act_s,
+                        w_s,
+                    ])
+            log_info(f"NeuroSim 逐层 PPA 与 shape 已写入: {neurosim_csv_path}（共 {min(len(lat_ns_list), len(conv_linear_list))} 层）")
         report_filename = os.path.basename(args.output) if args.output else "report.json"
         write_ppa_report_and_plots(
             ppa_report,
@@ -511,6 +601,8 @@ def main() -> int:
         show_events = False
         enable_w8a8_quant_dequant = bool(args.qd_en)
         bn_en = int(args.bn_en)
+        cim_backend = getattr(args, "cim_backend", None)
+        neurosim_root = getattr(args, "neurosim_root", None)
         output_timeline_csv = None
         timeline_stride = 500
 
@@ -523,6 +615,10 @@ def main() -> int:
     hw_config = get_accelerator_config(sim_args.accelerator)
     hw_config.bn_fuse_with_conv_linear = bool(args.bn_en)
     hw_config.enable_w8a8_quant_dequant = bool(args.qd_en)
+    if getattr(sim_args, "cim_backend", None):
+        hw_config.cim_backend = sim_args.cim_backend
+    if getattr(sim_args, "neurosim_root", None):
+        hw_config.neurosim_root = sim_args.neurosim_root
 
     if args.output:
         out_path = sim_log_path / os.path.basename(args.output)
