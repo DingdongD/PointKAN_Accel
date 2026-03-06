@@ -650,6 +650,7 @@ def run_network_simulation(args: argparse.Namespace) -> Dict[str, Any]:
 
     hw_config = get_accelerator_config(args.accelerator)
     hw_config.enable_w8a8_quant_dequant = getattr(args, "enable_w8a8_quant_dequant", False)
+    hw_config.bn_fuse_with_conv_linear = bool(getattr(args, "bn_en", 1))
     layers = load_network(network_name, args.input_points, args.num_classes)
     activation_shapes = compute_activation_shapes(layers, args.input_points, input_channels=3)
 
