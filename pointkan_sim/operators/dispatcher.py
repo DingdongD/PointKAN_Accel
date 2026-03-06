@@ -216,7 +216,14 @@ def _gen_fps(
     all_events: List[Event] = []
     current_cycle = 0
     for i in range(sampled_points_num):
-        evs_d = gen_phase2_distance_events(1, input_points, hw_config, "FPS", clock_ns)
+        evs_d = gen_phase2_distance_events(
+            1,
+            input_points,
+            hw_config,
+            "FPS",
+            include_query_dram_read=getattr(hw_config, "distance_include_query_dram_read", True),
+            clock_period_ns=clock_ns,
+        )
         for e in evs_d:
             e.cycle += current_cycle
         all_events.extend(evs_d)
@@ -229,7 +236,7 @@ def _gen_fps(
 
 
 def _phase2_distance_cycles_per_query(num_keys: int, hw_config: 'HardwareConfig') -> int:
-    """Phase2 单查询距离计算周期数：(bits/bit_slice) * ceil(N/active_rows)。"""
+    """Phase2 单查询总周期（可含查询 DRAM 读取）。"""
     import math
     sram_ii = getattr(hw_config, "sram_ii", None)
     if sram_ii is not None:
@@ -238,7 +245,19 @@ def _phase2_distance_cycles_per_query(num_keys: int, hw_config: 'HardwareConfig'
         slice_bits = max(1, getattr(sram_ii, "bit_slice", 2))
     else:
         active, bits, slice_bits = 128, 12, 2
-    return (bits // slice_bits) * max(1, int(math.ceil(num_keys / active)))
+
+    dist_cycles = (bits // slice_bits) * max(1, int(math.ceil(num_keys / active)))
+    if not getattr(hw_config, "distance_include_query_dram_read", True):
+        return dist_cycles
+
+    # 查询点默认 1x1x3，每特征 12bit
+    num_features = 3
+    bits_per_feature = 12
+    query_bytes = int(math.ceil(num_features * bits_per_feature / 8.0))
+    dram = getattr(hw_config, "dram", None)
+    dram_bw = max(1, getattr(dram, "bandwidth_bytes_per_cycle", 32)) if dram is not None else 32
+    dram_cycles = max(1, int(math.ceil(query_bytes / dram_bw)))
+    return dist_cycles + dram_cycles
 
 
 def _gen_knn(
@@ -265,21 +284,37 @@ def _gen_knn(
     if not getattr(hw_config, "distance_in_phase2", False):
         return knn_op.generate_events()
 
-    # Phase2 + KNN 引擎交错：每查询 [距离计算] -> [bitonic top-k]
+    # Phase2 + KNN 引擎交错：每查询 [距离计算] -> [排序/筛选]
     clock_ns = getattr(hw_config, "clock_period", 1.0)
     per_query_cycles = _phase2_distance_cycles_per_query(input_points, hw_config)
+    knn_mode = str(getattr(hw_config, "knn_engine_mode", "baseline")).lower()
     all_events = []
     current_cycle = 0
     for q in range(query_points):
-        evs_d = gen_phase2_distance_events(1, input_points, hw_config, "KNN", clock_ns)
+        evs_d = gen_phase2_distance_events(
+            1,
+            input_points,
+            hw_config,
+            "KNN",
+            include_query_dram_read=getattr(hw_config, "distance_include_query_dram_read", True),
+            clock_period_ns=clock_ns,
+        )
         for e in evs_d:
             e.cycle += current_cycle
         all_events.extend(evs_d)
         current_cycle += per_query_cycles
-        one_bitonic = knn_op.generate_single_bitonic_event()
-        one_bitonic.cycle = current_cycle
-        all_events.append(one_bitonic)
-        current_cycle += one_bitonic.duration
+
+        if knn_mode == "fuse":
+            fuse_events = knn_op.generate_single_fuse_events()
+            for fe in fuse_events:
+                fe.cycle += current_cycle
+            all_events.extend(fuse_events)
+            current_cycle = max(fe.cycle + fe.duration for fe in fuse_events)
+        else:
+            one_bitonic = knn_op.generate_single_bitonic_event()
+            one_bitonic.cycle = current_cycle
+            all_events.append(one_bitonic)
+            current_cycle += one_bitonic.duration
     return all_events
 
 

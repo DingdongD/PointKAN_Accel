@@ -438,6 +438,12 @@ class HardwareConfig:
     # 架构开关
     # distance_in_phase2=True：FPS/KNN 的距离计算(stage1-4)归入 Phase2，引擎只做 bitonic/排序
     distance_in_phase2: bool = True
+    # distance_include_query_dram_read=True：Phase2 距离前，建模 query 点从 DRAM 读入
+    distance_include_query_dram_read: bool = True
+    # FPS 引擎模式：baseline/fuse（当前 fuse 先复用 baseline 排序路径，可继续扩展）
+    fps_engine_mode: str = "baseline"
+    # KNN 引擎模式：baseline/fuse（fuse 使用 coarse+fine 两级筛选事件模型）
+    knn_engine_mode: str = "baseline"
     # bn_fuse_with_conv_linear=True：推理时 BN 紧跟 Conv/Linear 则融合，不计 BN cycle/能耗
     bn_fuse_with_conv_linear: bool = True
     # W8A8：Conv/Linear 前插入量化(FP32→INT8)、后插入反量化(INT8→FP32)，供 BN/ReLU 等浮点非线性使用

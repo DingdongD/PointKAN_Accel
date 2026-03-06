@@ -16,6 +16,9 @@
 #   SIM_LOG_DIR       日志目录，默认 sim_log
 #   OUTPUT_JSON       报告 JSON 文件名，默认 report.json
 #   SHOW_SHAPES       1=打印 LayerDef 与真实前向每层 conv/linear 的 shape 与 indata/rdata（默认 0）
+#   BN_EN             1=启用 BN 融合（默认 1，BN 不单独计入）；0=关闭融合（保留 BN 事件）
+#   QD_EN             1=启用量化/反量化事件（默认 0）
+#   EXPORT_MEM_TXN    1=导出内存事务序列文件（默认 1）
 #   SIM_RESULTS_DIR   PPA 报告 JSON 与 breakdown 图表输出目录，默认 sim_results
 #
 # 示例：快速跑 2 个 batch
@@ -47,6 +50,9 @@ USE_REAL_DATA="${USE_REAL_DATA:-1}"
 MNSIM_FULL="${MNSIM_FULL:-1}"
 RUN_REAL_INFERENCE="${RUN_REAL_INFERENCE:-0}"
 SHOW_SHAPES="${SHOW_SHAPES:-0}"
+BN_EN="${BN_EN:-1}"
+QD_EN="${QD_EN:-0}"
+EXPORT_MEM_TXN="${EXPORT_MEM_TXN:-1}"
 
 build_args() {
     local args=(
@@ -63,6 +69,9 @@ build_args() {
     [[ "$RUN_REAL_INFERENCE" == "1" ]] && args+=(--run_real_inference --no_vis)
     [[ -n "$OUTPUT_JSON" ]] && args+=(--output "$OUTPUT_JSON")
     [[ "$SHOW_SHAPES" == "1" ]] && args+=(--show_shapes)
+    args+=(--bn_en "$BN_EN")
+    args+=(--qd_en "$QD_EN")
+    [[ "$EXPORT_MEM_TXN" == "1" ]] && args+=(--export_memory_transactions)
     args+=(--sim_results_dir "$SIM_RESULTS_DIR")
     printf '%s\n' "${args[@]}"
 }

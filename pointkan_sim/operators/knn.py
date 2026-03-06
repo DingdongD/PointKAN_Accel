@@ -256,7 +256,7 @@ class KNNOperator(BaseOperator):
     # --- Event generation ---
 
     def generate_single_bitonic_event(self, params: Optional[KNNParams] = None) -> Event:
-        """返回单次 KNN 查询的 bitonic top-k 事件（cycle=0），供 Phase2 与 KNN 引擎交错时使用。"""
+        """返回单次 KNN 查询的 baseline bitonic top-k 事件（cycle=0）。"""
         if params is not None:
             self.knn_params = params
         p = self.knn_params
@@ -273,8 +273,61 @@ class KNNOperator(BaseOperator):
             power=sort_power,
             duration=p.bitonic_sort_cycles,
             clock_period_ns=hw.clock_period,
-            metadata={"phase": "knn_engine_bitonic_only"},
+            metadata={
+                "phase": "knn_engine_bitonic_only",
+                # baseline 下可与 FPS 共享同一套 bitonic 比较器（由 Scheduler 做互斥仲裁）
+                "resource_id": "bitonic_shared",
+                "exclusive": True,
+            },
         )
+
+    def generate_single_fuse_events(self, params: Optional[KNNParams] = None) -> List[Event]:
+        """
+        返回单次 KNN 查询的 fuse 模式事件（粗筛 + 细筛）。
+
+        说明：
+        - fuse 模式下不再使用 baseline bitonic 网络；
+        - 采用 two-stage comparator（若配置不存在则回退到 bitonic power）。
+        """
+        if params is not None:
+            self.knn_params = params
+
+        p = self.knn_params
+        hw = self.hw_config
+        comp = getattr(hw.sorting_circuit, "two_stage_reconf_comparator", None)
+        power = float(getattr(comp, "power", 0.0) if comp is not None else hw.sorting_circuit.comp_bitonic_1024_min32.power)
+        total = max(1, p.bitonic_sort_cycles)
+        coarse_cycles = max(1, total // 3)
+        fine_cycles = max(1, total - coarse_cycles)
+
+        return [
+            Event(
+                event_id=0,
+                cycle=0,
+                operator="KNN",
+                stage="fuse_filter",
+                sub_stage="coarse_filter",
+                circuit_module="two_stage_reconf_comparator",
+                operation="knn_coarse_filter",
+                power=power,
+                duration=coarse_cycles,
+                clock_period_ns=hw.clock_period,
+                metadata={"phase": "knn_engine_fuse", "resource_id": "comparator_shared", "exclusive": True},
+            ),
+            Event(
+                event_id=1,
+                cycle=coarse_cycles,
+                operator="KNN",
+                stage="fuse_filter",
+                sub_stage="fine_filter",
+                circuit_module="two_stage_reconf_comparator",
+                operation="knn_fine_filter_topk",
+                power=power,
+                duration=fine_cycles,
+                clock_period_ns=hw.clock_period,
+                metadata={"phase": "knn_engine_fuse", "resource_id": "comparator_shared", "exclusive": True},
+            ),
+        ]
 
     def generate_events(self, params: Optional[KNNParams] = None) -> List[Event]:
         """

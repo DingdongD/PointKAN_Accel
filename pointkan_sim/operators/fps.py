@@ -254,7 +254,7 @@ class FPSOperator(BaseOperator):
     # --- Event generation ---
 
     def generate_single_bitonic_event(self, params: Optional[FPSParams] = None) -> Event:
-        """返回单次 FPS 迭代的 bitonic 排序事件（cycle=0），供 Phase2 与 FPS 引擎交错时使用。"""
+        """返回单次 FPS 迭代排序事件（cycle=0）。"""
         if params is not None:
             self.fps_params = params
         p = self.fps_params
@@ -271,7 +271,12 @@ class FPSOperator(BaseOperator):
             power=sort_power,
             duration=p.bitonic_sort_cycles,
             clock_period_ns=hw.clock_period,
-            metadata={"phase": "fps_engine_bitonic_only"},
+            metadata={
+                "phase": "fps_engine_bitonic_only",
+                # baseline 下与 KNN 共用 bitonic，比对器互斥由 Scheduler 统一处理
+                "resource_id": "bitonic_shared",
+                "exclusive": True,
+            },
         )
 
     def generate_events(self, params: Optional[FPSParams] = None) -> List[Event]:

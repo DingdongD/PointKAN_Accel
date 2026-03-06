@@ -223,11 +223,18 @@ def gen_phase2_distance_events(
     num_keys: int,
     hw_config: "HardwareConfig",
     operator_name: str = "DistanceCompute",
+    num_features: int = 3,
+    bits_per_feature: int = 12,
+    include_query_dram_read: bool = True,
     clock_period_ns: Optional[float] = None,
 ) -> List[Event]:
     """
     Phase2：距离计算。每查询点 (12/2)*ceil(N/128) 周期，128 行 SRAM-II 激活、2bit 距离。
     用于 FPS/KNN 前：每迭代/每查询先跑本阶段再喂入 FPS bitonic 或 KNN 排序。
+
+    增量改造：可选建模「查询点从 DRAM 读取」事件。
+    - 查询点大小：1*1*num_features（默认 xyz=3），每特征 bits_per_feature（默认 12bit）
+    - 若 include_query_dram_read=True，则每个 query 先插入 DRAM 读事件，再插入距离计算事件。
     """
     import math
     if num_queries <= 0 or num_keys <= 0:
@@ -242,11 +249,36 @@ def gen_phase2_distance_events(
     else:
         active, bits, slice_bits, power = 128, 12, 2, 0.0
     per_query_cycles = (bits // slice_bits) * max(1, int(math.ceil(num_keys / active)))
+    query_bytes = int(math.ceil(max(1, num_features) * max(1, bits_per_feature) / 8.0))
+    dram = getattr(hw_config, "dram", None)
+    dram_bw = max(1, getattr(dram, "bandwidth_bytes_per_cycle", 32)) if dram is not None else 32
+    dram_power = float(getattr(dram, "read_power_mw", 50.0)) if dram is not None else 50.0
+    dram_cycles = _safe_div_ceil(query_bytes, dram_bw)
+
     events: List[Event] = []
     for i in range(num_queries):
+        base_cycle = i * (per_query_cycles + (dram_cycles if include_query_dram_read else 0))
+        event_id = i * (2 if include_query_dram_read else 1)
+        if include_query_dram_read:
+            events.append(
+                _event(
+                    event_id, base_cycle,
+                    operator_name, "distance", "query_dram_read",
+                    "dram", "phase2_query_point_read",
+                    dram_power, dram_cycles, clk,
+                    {
+                        "query_index": i,
+                        "bytes": query_bytes,
+                        "phase": 2,
+                        "kind": "query_fetch",
+                    },
+                )
+            )
+            base_cycle += dram_cycles
+            event_id += 1
         events.append(
             _event(
-                i, i * per_query_cycles,
+                event_id, base_cycle,
                 operator_name, "distance", "sram_ii_128row_2bit",
                 "sram_ii", "phase2_distance_compute",
                 power, per_query_cycles, clk,

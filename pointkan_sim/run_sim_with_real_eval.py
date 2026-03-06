@@ -130,6 +130,25 @@ def _parse_args() -> argparse.Namespace:
         default="sim_results",
         help="--use_real_data 时 PPA 报告 JSON 与 breakdown 图表输出目录，默认 sim_results",
     )
+    parser.add_argument(
+        "--bn_en",
+        type=int,
+        default=1,
+        choices=[0, 1],
+        help="BN 融合开关：1=启用融合（BN 不单独计入），0=关闭融合（保留 BN 事件）",
+    )
+    parser.add_argument(
+        "--qd_en",
+        type=int,
+        default=0,
+        choices=[0, 1],
+        help="量化/反量化开关：1=插入 FP32↔INT8 量化事件，0=不插入",
+    )
+    parser.add_argument(
+        "--export_memory_transactions",
+        action="store_true",
+        help="导出内存交互事务序列（memory_transactions.txt）",
+    )
     return parser.parse_args()
 
 
@@ -220,6 +239,22 @@ def main() -> int:
         log_separator,
     )
 
+    def _is_memory_transaction(item: Dict[str, Any]) -> bool:
+        """判断 operator_sequence 记录是否属于内存交互事务。"""
+        op = str(item.get("operator", "")).lower()
+        stage = str(item.get("stage", "")).lower()
+        opn = str(item.get("operation", "")).lower()
+        cm = str(item.get("circuit_module", "")).lower()
+
+        # LayerBuffer / DRAM / SRAM-II / buffer_io / 读写关键字
+        if op == "layerbuffer":
+            return True
+        if stage in ("buffer_io", "distance") and any(k in opn for k in ("read", "write", "spill", "load", "sram", "dram", "phase1", "phase2_query")):
+            return True
+        if cm in ("dram", "inter_layer_buffer", "sram_ii", "buffer") and any(k in opn for k in ("read", "write", "spill", "load", "sram", "dram", "phase1", "phase2_query")):
+            return True
+        return False
+
     # -------------------------------------------------------------------------
     # 模式：用 ModelNet40 真实样本 + 真实权重 调度仿真，MNSIM 由真实前向得到的层维度驱动
     # -------------------------------------------------------------------------
@@ -254,6 +289,9 @@ def main() -> int:
 
         # 层定义（与后续 MNSIM、仿真共用）
         hw_config = get_accelerator_config(args.accelerator)
+        # 用户可控开关：BN 融合 / 量化反量化
+        hw_config.bn_fuse_with_conv_linear = bool(args.bn_en)
+        hw_config.enable_w8a8_quant_dequant = bool(args.qd_en)
         layers = load_network("pointkan-elite", args.num_points, args.num_classes)
 
         # 打印加速器与层间 buffer/量化配置（与 main.run_network_simulation 一致，便于对照）
@@ -268,7 +306,9 @@ def main() -> int:
         else:
             log_info("层间 buffer: 未配置（inter_layer_buffer 为空）")
         qd = getattr(hw_config, "enable_w8a8_quant_dequant", False)
+        bn_fuse = getattr(hw_config, "bn_fuse_with_conv_linear", True)
         log_info(f"层间量化/反量化: {'启用 (FP32↔INT8 计入 cycle/功耗)' if qd else '未启用 (默认，假定 W8A8 已就绪)'}")
+        log_info(f"BN 融合: {'启用 (BN 不单独计入)' if bn_fuse else '关闭 (保留 BN 事件)'}")
         log_info("")
 
         # 先做一次真实前向，收集 conv/linear 顺序与真实 indata/rdata 字节数，用于 MNSIM 按层矩阵乘适配
@@ -417,6 +457,30 @@ def main() -> int:
                         )
                     )
             log_info(f"完整硬件算子序列已写入: {seq_path}（共 {len(operator_sequence)} 条）")
+
+        # 可选：导出内存交互事务，便于单独核对 DRAM/SRAM-II/LayerBuffer 行为
+        if args.export_memory_transactions and operator_sequence:
+            mem_txn = [it for it in operator_sequence if _is_memory_transaction(it)]
+            mem_path = sim_results_dir / "memory_transactions.txt"
+            with open(mem_path, "w", encoding="utf-8") as f:
+                f.write("# 内存交互事务序列（按 cycle 排序）\n")
+                f.write("# idx\tcycle\tend_cycle\tduration\toperator\tstage\toperation\tcircuit_module\tlayer_name\tenergy_nj\n")
+                for item in mem_txn:
+                    f.write(
+                        "{idx}\t{cycle}\t{end_cycle}\t{duration}\t{operator}\t{stage}\t{operation}\t{circuit_module}\t{layer_name}\t{energy_nj}\n".format(
+                            idx=item.get("idx", ""),
+                            cycle=item.get("cycle", ""),
+                            end_cycle=item.get("end_cycle", ""),
+                            duration=item.get("duration", ""),
+                            operator=item.get("operator", ""),
+                            stage=item.get("stage", ""),
+                            operation=item.get("operation", ""),
+                            circuit_module=item.get("circuit_module", ""),
+                            layer_name=item.get("layer_name", ""),
+                            energy_nj=item.get("energy_nj", ""),
+                        )
+                    )
+            log_info(f"内存交互事务已写入: {mem_path}（共 {len(mem_txn)} 条）")
         return 0
 
     # -------------------------------------------------------------------------
@@ -446,7 +510,8 @@ def main() -> int:
         no_layer_buffer = False
         show_shapes = False
         show_events = False
-        enable_w8a8_quant_dequant = False
+        enable_w8a8_quant_dequant = bool(args.qd_en)
+        bn_en = int(args.bn_en)
         output_timeline_csv = None
         timeline_stride = 500
 
@@ -457,6 +522,8 @@ def main() -> int:
 
     results = run_network_simulation(sim_args)
     hw_config = get_accelerator_config(sim_args.accelerator)
+    hw_config.bn_fuse_with_conv_linear = bool(args.bn_en)
+    hw_config.enable_w8a8_quant_dequant = bool(args.qd_en)
 
     if args.output:
         out_path = sim_log_path / os.path.basename(args.output)
