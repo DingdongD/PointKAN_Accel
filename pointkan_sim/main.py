@@ -74,6 +74,10 @@ from pointkan_sim.analysis.timeline import (
     build_module_activity_segments,
     timeline_to_csv_rows,
 )
+from pointkan_sim.memory.transactions import (
+    extract_memory_transactions,
+    summarize_memory_transactions,
+)
 from pointkan_sim.utils.logger import (
     setup_logger,
     log_info,
@@ -460,6 +464,10 @@ def simulate_network(
             KEY_ENERGY_NJ: round(e.energy, 4),
         })
 
+    # 统一内存事务接口：将不同层级内存交互映射为 src/dst/kind，便于复用分析
+    memory_txns = extract_memory_transactions(operator_sequence)
+    memory_txn_summary = summarize_memory_transactions(memory_txns)
+
     out: Dict[str, Any] = {
         "total_cycles": total_cycles,
         "total_energy_nJ": total_energy,
@@ -472,6 +480,11 @@ def simulate_network(
         "sim_result": sim_result,
         "operator_breakdown": operator_breakdown,
         "operator_sequence": operator_sequence,
+        "memory_transactions": [tx.to_dict() for tx in memory_txns],
+        "memory_transactions_summary": [
+            {"src": src, "dst": dst, "kind": kind, "count": cnt}
+            for (src, dst, kind), cnt in sorted(memory_txn_summary.items(), key=lambda x: (-x[1], x[0]))
+        ],
     }
     if activation_shapes is not None:
         out["activation_shapes"] = [s.to_dict() for s in activation_shapes]
@@ -666,6 +679,7 @@ def run_network_simulation(args: argparse.Namespace) -> Dict[str, Any]:
 
     hw_config = get_accelerator_config(args.accelerator)
     hw_config.enable_w8a8_quant_dequant = getattr(args, "enable_w8a8_quant_dequant", False)
+    hw_config.bn_fuse_with_conv_linear = bool(getattr(args, "bn_en", 1))
     layers = load_network(network_name, args.input_points, args.num_classes)
     activation_shapes = compute_activation_shapes(layers, args.input_points, input_channels=3)
 

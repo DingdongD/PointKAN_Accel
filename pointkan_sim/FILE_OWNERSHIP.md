@@ -14,6 +14,15 @@
 
 ---
 
+## memory/
+
+| 文件 | 职责 |
+|------|------|
+| **transactions.py** | 统一内存事务：MemoryLevel、MemoryTxnKind、MemoryTransaction；**infer_memory_transaction** 从 operator_sequence 单条推断 src/dst/kind；**extract_memory_transactions** 批量提取；**summarize_memory_transactions** 按 (src, dst, kind) 统计。**归属**：DRAM/SRAM/LAYER_BUFFER/SRAM-II 事务抽象与统计。 |
+| **__init__.py** | 导出 MemoryLevel、MemoryTxnKind、MemoryTransaction、infer_memory_transaction、extract_memory_transactions、summarize_memory_transactions。 |
+
+---
+
 ## configs/
 
 | 文件 | 职责 |

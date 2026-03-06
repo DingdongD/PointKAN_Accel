@@ -24,7 +24,6 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from pointkan_sim.constants import (
-    KEY_CIRCUIT_MODULE,
     KEY_CYCLE,
     KEY_DURATION,
     KEY_END_CYCLE,
@@ -35,7 +34,6 @@ from pointkan_sim.constants import (
     KEY_OPERATOR,
     KEY_STAGE,
     OPERATOR_SEQUENCE_HEADER,
-    MEMORY_TRANSACTIONS_HEADER,
 )
 
 # 工程根目录（PointKAN-pytorch）
@@ -254,31 +252,7 @@ def main() -> int:
         log_section,
         log_separator,
     )
-
-    def _is_memory_transaction(item: Dict[str, Any]) -> bool:
-        """
-        判断 operator_sequence 中的一条记录是否属于内存交互事务。
-        用于 --export_memory_transactions 时筛出 DRAM/SRAM-II/LayerBuffer 等读写事件。
-        """
-        op = str(item.get(KEY_OPERATOR, "")).lower()
-        stage = str(item.get(KEY_STAGE, "")).lower()
-        opn = str(item.get(KEY_OPERATION, "")).lower()
-        cm = str(item.get(KEY_CIRCUIT_MODULE, "")).lower()
-
-        # LayerBuffer 算子一律视为内存事务
-        if op == "layerbuffer":
-            return True
-        # buffer_io / distance 阶段且操作名含读写相关关键字
-        if stage in ("buffer_io", "distance") and any(
-            k in opn for k in ("read", "write", "spill", "load", "sram", "dram", "phase1", "phase2_query")
-        ):
-            return True
-        # 电路模块为 DRAM/层间 buffer/SRAM-II 等且操作含读写关键字
-        if cm in ("dram", "inter_layer_buffer", "sram_ii", "buffer") and any(
-            k in opn for k in ("read", "write", "spill", "load", "sram", "dram", "phase1", "phase2_query")
-        ):
-            return True
-        return False
+    from pointkan_sim.memory.transactions import extract_memory_transactions, summarize_memory_transactions
 
     # -------------------------------------------------------------------------
     # 模式：用 ModelNet40 真实样本 + 真实权重 调度仿真，MNSIM 由真实前向得到的层维度驱动
@@ -483,29 +457,29 @@ def main() -> int:
                     )
             log_info(f"完整硬件算子序列已写入: {seq_path}（共 {len(operator_sequence)} 条）")
 
-        # 可选：导出内存交互事务序列，便于单独核对 DRAM/SRAM-II/LayerBuffer 行为
+        # 可选：导出内存交互事务（统一接口 src/dst/kind），并写聚合统计
         if args.export_memory_transactions and operator_sequence:
-            mem_txn = [it for it in operator_sequence if _is_memory_transaction(it)]
+            mem_txn = extract_memory_transactions(operator_sequence)
             mem_path = sim_results_dir / "memory_transactions.txt"
             with open(mem_path, "w", encoding="utf-8") as f:
-                f.write("# 内存交互事务序列（按 cycle 排序）\n")
-                f.write(MEMORY_TRANSACTIONS_HEADER)
-                for item in mem_txn:
+                f.write("# 内存交互事务序列（统一接口，按 cycle 排序）\n")
+                f.write("# idx\tcycle\tend_cycle\tduration\tkind\tsrc\tdst\toperator\toperation\tcircuit_module\tlayer_name\tenergy_nj\n")
+                for tx in mem_txn:
+                    row = tx.to_dict()
                     f.write(
-                        "{idx}\t{cycle}\t{end_cycle}\t{duration}\t{operator}\t{stage}\t{operation}\t{circuit_module}\t{layer_name}\t{energy_nj}\n".format(
-                            idx=item.get(KEY_IDX, ""),
-                            cycle=item.get(KEY_CYCLE, ""),
-                            end_cycle=item.get(KEY_END_CYCLE, ""),
-                            duration=item.get(KEY_DURATION, ""),
-                            operator=item.get(KEY_OPERATOR, ""),
-                            stage=item.get(KEY_STAGE, ""),
-                            operation=item.get(KEY_OPERATION, ""),
-                            circuit_module=item.get(KEY_CIRCUIT_MODULE, ""),
-                            layer_name=item.get(KEY_LAYER_NAME, ""),
-                            energy_nj=item.get(KEY_ENERGY_NJ, ""),
+                        "{idx}\t{cycle}\t{end_cycle}\t{duration}\t{kind}\t{src}\t{dst}\t{operator}\t{operation}\t{circuit_module}\t{layer_name}\t{energy_nj}\n".format(
+                            **row
                         )
                     )
+            route_counter = summarize_memory_transactions(mem_txn)
+            summary_path = sim_results_dir / "memory_transactions_summary.txt"
+            with open(summary_path, "w", encoding="utf-8") as f:
+                f.write("# 内存事务聚合统计（src->dst, kind）\n")
+                f.write("# src\tdst\tkind\tcount\n")
+                for (src, dst, kind), cnt in sorted(route_counter.items(), key=lambda x: (-x[1], x[0])):
+                    f.write(f"{src}\t{dst}\t{kind}\t{cnt}\n")
             log_info(f"内存交互事务已写入: {mem_path}（共 {len(mem_txn)} 条）")
+            log_info(f"内存交互聚合已写入: {summary_path}")
         return 0
 
     # -------------------------------------------------------------------------
