@@ -65,6 +65,17 @@ class ConvLinearLayerInfo:
 
 
 @dataclass
+class NonlinearActivationInfo:
+    """非线性/归一化/池化等算子的前向激活信息（hook 收集）。"""
+    name: str
+    op_type: str  # "batchnorm1d" | "batchnorm2d" | "layernorm" | "relu" | "adaptive_max_pool1d" | ...
+    input_shape: Tuple[int, ...]
+    output_shape: Tuple[int, ...]
+    numel: int
+    bytes_fp32: float = 0.0  # 输出 numel * 4（便于与 indata 对照）
+
+
+@dataclass
 class RealEvalResult:
     """真实数据评估结果：准确率 + 按 ModelNet40 调度后的 PPA。"""
     num_samples: int = 0
@@ -203,6 +214,124 @@ def collect_conv_linear_from_forward(
             h.remove()
 
     return order
+
+
+def collect_nonlinear_activations_from_forward(
+    net: Any,
+    device: str,
+    num_points: int,
+    batch_size: int = 2,
+) -> List[NonlinearActivationInfo]:
+    """
+    运行一次前向，用 hook 收集 BatchNorm、LayerNorm、ReLU、池化等非线性算子的
+    输入/输出激活 shape 与 numel，便于与 LayerDef 对照或分析数据流。
+    """
+    import torch
+    import torch.nn as nn
+
+    order: List[NonlinearActivationInfo] = []
+
+    def _make_hook(name: str, op_type: str):
+        def hook(module: nn.Module, inp: Any, out: Any) -> None:
+            x = inp[0] if inp and inp[0] is not None else None
+            y = out
+            if x is not None:
+                x = x.detach()
+            if y is not None:
+                y = y.detach()
+            in_shape = tuple(x.shape) if x is not None else ()
+            out_shape = tuple(y.shape) if y is not None else ()
+            numel = int(y.numel()) if y is not None else 0
+            bytes_fp32 = numel * 4.0
+            order.append(NonlinearActivationInfo(
+                name=name,
+                op_type=op_type,
+                input_shape=in_shape,
+                output_shape=out_shape,
+                numel=numel,
+                bytes_fp32=bytes_fp32,
+            ))
+        return hook
+
+    def _make_gam_spool_hook(name: str):
+        """Hook for Geometric_Affine_Module: forward 返回 (new_xyz, new_points, center)，
+        new_points 为 S-Pool 输入，center 为 S-Pool 输出。"""
+        def hook(module: nn.Module, inp: Any, out: Any) -> None:
+            if not isinstance(out, (tuple, list)) or len(out) < 3:
+                return
+            new_points = out[1].detach() if out[1] is not None else None
+            center = out[2].detach() if out[2] is not None else None
+            in_shape = tuple(new_points.shape) if new_points is not None else ()
+            out_shape = tuple(center.shape) if center is not None else ()
+            numel = int(center.numel()) if center is not None else 0
+            bytes_fp32 = numel * 4.0
+            order.append(NonlinearActivationInfo(
+                name=name,
+                op_type="s-pool",
+                input_shape=in_shape,
+                output_shape=out_shape,
+                numel=numel,
+                bytes_fp32=bytes_fp32,
+            ))
+        return hook
+
+    _OP_MAP = [
+        (nn.BatchNorm1d, "batchnorm1d"),
+        (nn.BatchNorm2d, "batchnorm2d"),
+        (nn.LayerNorm, "layernorm"),
+        (nn.ReLU, "relu"),
+        (nn.LeakyReLU, "leaky_relu"),
+        (nn.RReLU, "rrelu"),
+        (nn.AdaptiveMaxPool1d, "adaptive_max_pool1d"),
+        (nn.AdaptiveAvgPool1d, "adaptive_avg_pool1d"),
+        (nn.MaxPool1d, "max_pool1d"),
+        (nn.AvgPool1d, "avg_pool1d"),
+    ]
+
+    hooks = []
+    for name, m in net.named_modules():
+        # PointKAN-elite GAM: forward 返回 (new_xyz, new_points, center)，捕获 S-Pool 的输入 new_points 与输出 center
+        if type(m).__name__ == "Geometric_Affine_Module":
+            hooks.append(m.register_forward_hook(_make_gam_spool_hook(name)))
+            continue
+        for module_cls, op_type in _OP_MAP:
+            if isinstance(m, module_cls):
+                hooks.append(m.register_forward_hook(_make_hook(name, op_type)))
+                break
+
+    try:
+        with torch.no_grad():
+            x = torch.rand(batch_size, 3, num_points, device=device)
+            _ = net(x)
+    finally:
+        for h in hooks:
+            h.remove()
+
+    return order
+
+
+def log_nonlinear_activation_shapes(
+    nonlinear_list: List[NonlinearActivationInfo],
+    log_info_fn: Any = None,
+) -> None:
+    """
+    打印经 hook 收集的 BatchNorm / LayerNorm / ReLU / 池化 等算子的输入与输出激活 shape。
+    """
+    if log_info_fn is None:
+        log_info_fn = print
+    if not nonlinear_list:
+        log_info_fn("========== 非线性算子激活（BatchNorm / LayerNorm / ReLU / 池化 等）==========")
+        log_info_fn("  未收集到（未注册 hook 或前向未经过）。")
+        return
+    log_info_fn("========== 非线性算子激活（BatchNorm / LayerNorm / ReLU / 池化 等）==========")
+    log_info_fn(f"  共 {len(nonlinear_list)} 个算子（按前向顺序）")
+    for idx, info in enumerate(nonlinear_list):
+        in_s = "×".join(str(d) for d in info.input_shape) if info.input_shape else "?"
+        out_s = "×".join(str(d) for d in info.output_shape) if info.output_shape else "?"
+        log_info_fn(
+            f"  [{idx}] {info.name}  {info.op_type}  in={in_s}  out={out_s}  numel={info.numel}  ({info.bytes_fp32:.0f} B)"
+        )
+    log_info_fn("  in/out = 该算子输入/输出 tensor shape；numel/B 为输出元素数与 FP32 字节数。")
 
 
 def collect_conv_linear_tensors_from_forward(

@@ -12,6 +12,14 @@ run_inference_kan.sh 中模型权重、ModelNet40 数据一致，先（可选）
   python -m pointkan_sim.run_sim_with_real_eval
   python -m pointkan_sim.run_sim_with_real_eval --checkpoint PointKAN-elite/classification_ModelNet40/checkpoints/pointKANElite-pointkan_elite_exp-42
   python -m pointkan_sim.run_sim_with_real_eval --run_real_inference --mnsim_full --output report.json
+
+完整 shape 分析（Conv/Linear + BN/LayerNorm/ReLU/池化/S-Pool 等）:
+  必须使用真实数据模式并开启 --show_shapes，会做一次真实前向并用 hook 收集各层维度后打印。
+  方式一（推荐）:
+    USE_REAL_DATA=1 SHOW_SHAPES=1 ./run_sim_with_real_eval.sh
+  方式二（仅 shape，不跑 MNSIM/NeuroSim）:
+    python -m pointkan_sim.run_sim_with_real_eval --use_real_data --show_shapes --batch_size 2
+  日志中会先后出现「Conv/Linear 层 shape」与「非线性算子激活」两段，含 in/out shape、numel、字节数。
 """
 
 from __future__ import annotations
@@ -291,8 +299,10 @@ def main() -> int:
         from pointkan_sim.integration.real_data_eval import (
             load_model_and_dataset,
             collect_conv_linear_from_forward,
+            collect_nonlinear_activations_from_forward,
             real_data_overrides_from_conv_linear_list,
             log_conv_linear_shapes,
+            log_nonlinear_activation_shapes,
             run_real_inference_and_sim_over_dataset,
             RealEvalResult,
         )
@@ -357,6 +367,10 @@ def main() -> int:
                 real_data_overrides=real_data_overrides,
                 log_info_fn=log_info,
             )
+            nonlinear_list = collect_nonlinear_activations_from_forward(
+                net, args.device, args.num_points, batch_size=min(2, args.batch_size)
+            )
+            log_nonlinear_activation_shapes(nonlinear_list, log_info_fn=log_info)
 
         # MNSIM / NeuroSim 全网络：二选一注入 mnsim_context（dispatcher 用同一 context 键）
         activation_shapes = compute_activation_shapes(layers, args.num_points, input_channels=3)
