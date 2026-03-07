@@ -446,18 +446,24 @@ def simulate_network(
     clock_period = hw_config.clock_period
     total_cycles = sim_result.total_cycles
     total_energy = sim_result.total_energy
-    latency_ns = total_cycles * clock_period
+    # 端到端延迟：按每个事件的 clock_period_ns 换算后累加（NeuroSim 与 1 GHz 模块混合时正确）
+    total_latency_ns = sum(
+        e.duration * getattr(e, "clock_period_ns", 1.0) for e in sim_result.events
+    )
+    latency_ns = total_latency_ns if total_latency_ns > 0 else (total_cycles * clock_period)
     latency_ms = latency_ns / 1e6
     avg_power = (total_energy / latency_ns * 1e3) if latency_ns > 0 else 0.0
 
-    # 按算子类型聚合周期与能耗，供端到端 PPA 按算子类型统计（FPS/KNN/BN/Conv/Linear 等）
+    # 按算子类型聚合周期、能耗与延迟(ns)，供端到端 PPA 按算子类型统计（FPS/KNN/BN/Conv/Linear 等）
     operator_breakdown: Dict[str, Dict[str, float]] = {}
     for e in sim_result.events:
         op_name = (e.operator or e.operation or "other").strip() or "other"
+        clk_ns = getattr(e, "clock_period_ns", 1.0)
         if op_name not in operator_breakdown:
-            operator_breakdown[op_name] = {"cycles": 0.0, "energy_nj": 0.0}
+            operator_breakdown[op_name] = {"cycles": 0.0, "energy_nj": 0.0, "latency_ns": 0.0}
         operator_breakdown[op_name]["cycles"] += e.duration
         operator_breakdown[op_name]["energy_nj"] += e.energy
+        operator_breakdown[op_name]["latency_ns"] += e.duration * clk_ns
 
     # 按执行顺序生成完整硬件算子序列（与 constants 中键名一致，便于导出 operator_sequence.txt）
     events_sorted = sorted(sim_result.events, key=lambda e: (e.cycle, getattr(e, "event_id", 0)))
@@ -484,6 +490,7 @@ def simulate_network(
     out: Dict[str, Any] = {
         "total_cycles": total_cycles,
         "total_energy_nJ": total_energy,
+        "total_latency_ns": total_latency_ns,
         "latency_ns": latency_ns,
         "latency_ms": latency_ms,
         "avg_power_mW": avg_power,

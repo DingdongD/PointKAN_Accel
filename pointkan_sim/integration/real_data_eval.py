@@ -2,12 +2,19 @@
 使用 ModelNet40 真实样本与 checkpoint 权重的硬件仿真评估
 =========================================================
 
-- **真实样本调度**：按 ModelNet40 测试集逐 batch 运行「真实前向」（算准确率）+「一次 PPA 仿真」（累加 cycles/能耗），
+- 真实样本调度：按 ModelNet40 测试集逐 batch 运行「真实前向」（算准确率）+「一次 PPA 仿真」（累加 cycles/能耗），
   得到与真实推理对应的总周期、总能耗及 per-sample 均值。
-- **真实权重**：加载 checkpoint 中的模型权重，前向使用真实权重；仿真器侧与 checkpoint 一致的网络结构（LayerDef）
+- 真实权重：加载 checkpoint 中的模型权重，前向使用真实权重；仿真器侧与 checkpoint 一致的网络结构（LayerDef）
   用于构建 MNSIM NetStruct，即 MNSIM 的 PPA 与「该结构下的 conv/linear 层」一一对应。
-- **MNSIM 接口说明**：MNSIM 当前仅接受**结构**（每层 in/out 维度、bit 宽），不接受逐层权重/激活张量；
+- MNSIM 接口说明：MNSIM 当前仅接受结构（每层 in/out 维度、bit 宽），不接受逐层权重/激活张量；
   本流程用与 checkpoint 一致的层结构驱动 MNSIM，实现对应层的 PPA 仿真。若 MNSIM 后续支持按权重/激活的接口，可在此接入。
+
+Tokens 说明：
+Linear 层：表示该层输入里「位置维」的长度。
+LFP：当前 stage 的点数，即 512 / 256 / 128 / 64。
+Classifier：全局池化后每样本一个向量，为 1。
+Conv1d：不用 tokens，用 length 表示空间长度 L（当前阶段的点数）。
+
 """
 
 from __future__ import annotations
@@ -47,11 +54,11 @@ class ConvLinearLayerInfo:
     in_channels: int = 0
     out_channels: int = 0
     kernel_size: int = 1
-    length: int = 0  # 空间长度 (L)
-    # fc
+    length: int = 0  # 空间长度 (L)，即输入序列长度（点云中为当前 stage 的点数）
+    # fc (Linear)
     in_features: int = 0
     out_features: int = 0
-    tokens: int = 0
+    tokens: int = 0  # Linear 输入的「位置数」：LFP 中为当前点数（如 512/256/128/64），Classifier 为 1
     # 真实数据量（字节），用于 MNSIM 按层 indata/rdata 适配
     indata_bytes: float = 0.0
     rdata_bytes: float = 0.0
@@ -66,8 +73,10 @@ class RealEvalResult:
     test_loss: float = 0.0
     total_cycles: int = 0
     total_energy_nj: float = 0.0
+    total_latency_ns: float = 0.0
     cycles_per_sample: float = 0.0
     energy_per_sample_nj: float = 0.0
+    latency_per_sample_ns: float = 0.0
     conv_linear_from_model: List[ConvLinearLayerInfo] = field(default_factory=list)
     success: bool = False
     error: Optional[str] = None
@@ -196,6 +205,86 @@ def collect_conv_linear_from_forward(
     return order
 
 
+def collect_conv_linear_tensors_from_forward(
+    net: Any,
+    device: str,
+    batch_x: Any,
+    input_bit: int = 8,
+    weight_bit: int = 8,
+) -> List[Tuple[ConvLinearLayerInfo, Any, Any]]:
+    """
+    运行一次前向（使用给定输入 batch_x），用 hook 收集所有 Conv1d/Linear 的
+    **层信息 + 该层输入激活张量 + 该层权重张量**，用于导出真实权重/激活到 NeuroSim CSV。
+
+    Args:
+        net: 已加载权重的模型（如 PointKAN-elite）
+        device: 运行设备
+        batch_x: 输入 [B, 3, num_points]，一般为从 DataLoader 取的一个 batch
+        input_bit / weight_bit: 仅用于计算 indata_bytes / rdata_bytes
+
+    Returns:
+        List[(ConvLinearLayerInfo, input_tensor, weight_tensor)]，顺序与前向一致。
+        input_tensor / weight_tensor 已 detach，可在 CPU 上 .numpy() 后写入 CSV。
+    """
+    import torch
+    import torch.nn as nn
+
+    order: List[Tuple[ConvLinearLayerInfo, Any, Any]] = []
+    inv_bit = 1.0 / 8.0 * input_bit
+    wv_bit = 1.0 / 8.0 * weight_bit
+
+    def _hook(name: str):
+        def hook(module: nn.Module, inp: Any, out: Any) -> None:
+            x = inp[0]
+            w = getattr(module, "weight", None)
+            if x is None or w is None:
+                return
+            x = x.detach()
+            w = w.detach()
+            indata_bytes = float(x.numel()) * inv_bit
+            rdata_bytes = float(w.numel()) * wv_bit
+            if x.dim() == 3 and w.dim() == 3:
+                _, c_in, length = x.shape
+                c_out = w.shape[0]
+                k = w.shape[2]
+                info = ConvLinearLayerInfo(
+                    name=name, layer_type="conv",
+                    in_channels=c_in, out_channels=c_out, kernel_size=k, length=length,
+                    indata_bytes=indata_bytes, rdata_bytes=rdata_bytes,
+                )
+                order.append((info, x, w))
+            elif w.dim() == 2:
+                in_f = w.shape[1]
+                out_f = w.shape[0]
+                tokens = 1
+                if x.dim() == 3:
+                    tokens = x.shape[1]
+                elif x.dim() == 2:
+                    tokens = x.shape[0]
+                info = ConvLinearLayerInfo(
+                    name=name, layer_type="fc",
+                    in_features=in_f, out_features=out_f, tokens=tokens,
+                    indata_bytes=indata_bytes, rdata_bytes=rdata_bytes,
+                )
+                order.append((info, x, w))
+        return hook
+
+    hooks = []
+    for name, m in net.named_modules():
+        if isinstance(m, (nn.Conv1d, nn.Linear)):
+            hooks.append(m.register_forward_hook(_hook(name)))
+
+    try:
+        with torch.no_grad():
+            batch_x = batch_x.permute(0, 2, 1)
+            _ = net(batch_x.to(device))
+    finally:
+        for h in hooks:
+            h.remove()
+
+    return order
+
+
 def format_activation_weight_shapes(info: "ConvLinearLayerInfo") -> Tuple[str, str]:
     """返回 (activation_shape_str, weight_shape_str) 便于日志/报告对照。"""
     if info.layer_type == "conv":
@@ -311,6 +400,7 @@ def run_real_inference_and_sim_over_dataset(
     total_loss = 0.0
     total_cycles = 0
     total_energy_nj = 0.0
+    total_latency_ns = 0.0
     num_samples = 0
     batch_count = 0
 
@@ -347,6 +437,7 @@ def run_real_inference_and_sim_over_dataset(
             )
             total_cycles += sim_result.get("total_cycles", 0) or 0
             total_energy_nj += sim_result.get("total_energy_nJ", 0.0) or 0.0
+            total_latency_ns += sim_result.get("total_latency_ns", 0.0) or sim_result.get("latency_ns", 0.0) or 0.0
         batch_count += 1
         break # 只跑一个batch
 
@@ -362,7 +453,9 @@ def run_real_inference_and_sim_over_dataset(
     result.balanced_accuracy = float(metrics.balanced_accuracy_score(test_true, test_pred) * 100.0)
     result.total_cycles = total_cycles
     result.total_energy_nj = total_energy_nj
+    result.total_latency_ns = total_latency_ns
     result.cycles_per_sample = total_cycles / num_samples if num_samples else 0
     result.energy_per_sample_nj = total_energy_nj / num_samples if num_samples else 0
+    result.latency_per_sample_ns = total_latency_ns / num_samples if num_samples else 0
     result.success = True
     return result

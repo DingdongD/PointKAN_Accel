@@ -1,0 +1,22 @@
+metric,value,unit_or_note
+total_latency,10397058.685,ns
+total_energy,101249.87914452002,nJ
+total_tiles,134,tiles
+clock_period_ns,8.70321,ns
+clock_frequency_MHz,114.90013454805755,MHz
+breakdown_adc_latency,1498624.414999999,ns
+breakdown_adc_energy,72223.17232,nJ
+breakdown_buffer_latency,4437516.76,ns
+breakdown_buffer_energy,255.82698752000002,nJ
+breakdown_accumulation_latency,23415.99203000001,ns
+breakdown_accumulation_energy,4320.6347080000005,nJ
+breakdown_other_peripheries_latency,4437516.76,ns
+breakdown_other_peripheries_energy,15492.98891,nJ
+breakdown_ic_energy,8957.263866999998,nJ
+breakdown_latency_sum,10397073.927029999,ns; 应=total_latency
+breakdown_energy_sum,101249.88679252,nJ; 应=total_energy
+neurosim_buffer_size_bits,524288,numBitInput*maxLayerInput*(2 if sync)
+neurosim_max_layer_input_elements,32768,elements
+neurosim_num_buffer_core,32,cores
+neurosim_total_buffer_capacity_bits,524288,bits
+neurosim_total_buffer_capacity_bytes,65536,bytes

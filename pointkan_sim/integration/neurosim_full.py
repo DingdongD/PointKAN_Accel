@@ -21,6 +21,7 @@ import numpy as np
 from ..operators.neurosim_adapter import (
     _parse_layer_results,
     _run_neurosim_main,
+    parse_clock_period_ns,
     _write_matrix_activation_conv,
     _write_matrix_weight,
 )
@@ -40,6 +41,7 @@ class NeuroSimFullResult:
     layer_energy_nj: List[float]
     success: bool
     error: Optional[str] = None
+    clock_period_ns: Optional[float] = None  # NeuroSim 实际工作时钟周期(ns)，用于 latency_ns -> cycles 换算
 
 
 def run_neurosim_full(
@@ -50,11 +52,15 @@ def run_neurosim_full(
     subarray: int = 128,
     parallel_read: int = 128,
     timeout_s: int = 300,
+    clk_freq_hz: Optional[float] = None,
+    technode: Optional[int] = None,
 ) -> NeuroSimFullResult:
     """
     对 conv_linear_list 中每一层生成 NeuroSim config 行与 weight/input CSV，
     调用 NeuroSIM/main 一次，解析每层 readLatency + buffer latency、readDynamicEnergy + buffer energy，
     转为 latency_ns 与 energy_nj 列表，供注入 mnsim_context。
+    clk_freq_hz: 可选，工作频率上限(Hz)，如 100e6=100MHz；传入 main 实现频率控制。
+    technode: 可选，工艺节点(nm)；NeuroSim Technology 仅支持 130/90/65/45/32/22/14/10/7，28 会自动改为 32。
     """
     if not conv_linear_list:
         return NeuroSimFullResult(
@@ -62,6 +68,10 @@ def run_neurosim_full(
             layer_energy_nj=[],
             success=True,
         )
+
+    # NeuroSim Technology.cpp 仅支持 130,90,65,45,32,22,14,10,7 nm；28nm 会触发 exit(-1)
+    if technode is not None and technode == 28:
+        technode = 32
 
     main_dir = os.path.join(neurosim_root, "NeuroSIM")
     if not os.path.isdir(main_dir):
@@ -135,6 +145,8 @@ def run_neurosim_full(
             subarray=subarray,
             parallel_read=parallel_read,
             timeout_s=timeout_s,
+            clk_freq_hz=clk_freq_hz,
+            technode=technode,
         )
 
         if not ok or not out:
@@ -160,10 +172,13 @@ def run_neurosim_full(
             layer_latency_ns.append(read_ns + buf_ns)
             layer_energy_nj.append((read_pj + buf_pj) / 1000.0)
 
+        clock_period_ns = parse_clock_period_ns(out)
+
         return NeuroSimFullResult(
             layer_latency_ns=layer_latency_ns,
             layer_energy_nj=layer_energy_nj,
             success=True,
+            clock_period_ns=clock_period_ns,
         )
     finally:
         if os.path.isdir(tmpdir):

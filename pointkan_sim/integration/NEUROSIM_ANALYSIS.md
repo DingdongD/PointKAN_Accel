@@ -103,4 +103,13 @@ VMM_CIM.ipynb 中 DGCNN 已用大量 `1,1,in_c,1,1,out_c,0,1` 的层，与 Conv1
   - `run_neurosim_full(conv_linear_list, neurosim_root, ...)`：按层生成 config 与 weight/input CSV，一次调用 main，解析每层 readLatency + buffer latency、readDynamicEnergy + buffer energy，返回 `NeuroSimFullResult(layer_latency_ns, layer_energy_nj)`。
   - 在 `run_sim_with_real_eval.py` 中通过 `--neurosim_full` 使用，结果注入 `mnsim_context`，与 MNSIM 全 NetStruct 共用同一 dispatcher 接口。
 - **配置**：`hw_config.cim_backend`（`"mnsim"` | `"neurosim"` | `"fallback"`）、`hw_config.neurosim_root`（Inference_pytorch 路径）。
-- **命令行**：`--cim_backend neurosim`、`--neurosim_root <path>`、`--neurosim_full`（真实数据评估时用 NeuroSim 全网络）。
+- **命令行**：`--cim_backend neurosim`、`--neurosim_root <path>`、`--neurosim_full`（真实数据评估时用 NeuroSim 全网络）；`--neurosim_clk_freq <Hz>`、`--neurosim_technode <nm>` 控制频率与工艺节点。
+
+---
+
+## 七、频率与工艺节点控制（与 standalone 一致）
+
+- **时钟解析**：优先使用 stdout 中的 `Chip clock period is: X ns`（用户设定后的周期），否则用 `clkPeriod: X`（秒），与 `test_neurosim_full_standalone.py` 一致。
+- **频率**：`run_neurosim_full(..., clk_freq_hz=100e6)` 或 `--neurosim_clk_freq 100000000`、环境变量 `NEUROSIM_CLK_FREQ=100000000`，传入 NeuroSim main 可选参数，实现 100 MHz 等降频仿真；总延迟会随用户周期变长（需 NeuroSim main 已打补丁）。
+- **工艺节点**：`technode=32` 或 `--neurosim_technode 32`、`NEUROSIM_TECHNODE=32`。NeuroSim Technology 仅支持 130/90/65/45/32/22/14/10/7 nm；若传 28 会自动改为 32，避免 exit(-1)。
+- **shell 示例**：`NEUROSIM_FULL=1 NEUROSIM_CLK_FREQ=100000000 NEUROSIM_TECHNODE=32 ./run_sim_with_real_eval.sh`

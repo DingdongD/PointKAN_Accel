@@ -13,6 +13,8 @@
 #   MNSIM_FULL        1=启用 MNSIM 全 NetStruct（默认），0=不启用
 #   NEUROSIM_FULL     1=启用 NeuroSim 全网络仿真（DNN_NeuroSim main），0=不启用（默认）；与 MNSIM_FULL 二选一时优先 NeuroSim
 #   NEUROSIM_ROOT    NeuroSim 根目录（Inference_pytorch），默认 /workspace/DNN_NeuroSim_V1.4/Inference_pytorch
+#   NEUROSIM_CLK_FREQ  NeuroSim 工作频率上限(Hz)，如 100000000=100MHz；不设则用关键路径频率
+#   NEUROSIM_TECHNODE  NeuroSim 工艺节点(nm)，如 32；仅支持 130/90/65/45/32/22/14/10/7
 #   RUN_REAL_INFERENCE 1=先跑 inference_and_kan_analysis 再仿真，0=不跑（默认）
 #   DEVICE            cuda（默认）或 cpu
 #   SIM_LOG_DIR       日志目录，默认 sim_log
@@ -30,7 +32,9 @@
 # 示例：打印 LayerDef 与真实前向每层 shape/indata/rdata（核对 36 vs 20 层）
 #   SHOW_SHAPES=1 ./run_sim_with_real_eval.sh
 # 示例：全网络 NeuroSim 仿真（真实数据 + 打印 shape + BN 不融合 + 量化 + 导出内存事务）
-#   SHOW_SHAPES=1 BN_EN=0 QD_EN=1 EXPORT_MEM_TXN=1 NEUROSIM_FULL=1 ./run_sim_with_real_eval.sh
+#   SHOW_SHAPES=1 BN_EN=0 QD_EN=1 EXPORT_MEM_TXN=1 NEUROSIM_FULL=1 MNSIM_FULL=0 ./run_sim_with_real_eval.sh
+# 示例：NeuroSim 100MHz + 32nm 工艺
+#   NEUROSIM_FULL=1 NEUROSIM_CLK_FREQ=100000000 NEUROSIM_TECHNODE=32 ./run_sim_with_real_eval.sh
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -54,6 +58,8 @@ USE_REAL_DATA="${USE_REAL_DATA:-1}"
 MNSIM_FULL="${MNSIM_FULL:-1}"
 NEUROSIM_FULL="${NEUROSIM_FULL:-0}"
 NEUROSIM_ROOT="${NEUROSIM_ROOT:-}"
+NEUROSIM_CLK_FREQ="${NEUROSIM_CLK_FREQ:-}"
+NEUROSIM_TECHNODE="${NEUROSIM_TECHNODE:-}"
 RUN_REAL_INFERENCE="${RUN_REAL_INFERENCE:-0}"
 SHOW_SHAPES="${SHOW_SHAPES:-0}"
 BN_EN="${BN_EN:-1}"
@@ -74,6 +80,8 @@ build_args() {
     [[ "$MNSIM_FULL" == "1" ]] && args+=(--mnsim_full)
     [[ "$NEUROSIM_FULL" == "1" ]] && args+=(--neurosim_full)
     [[ -n "$NEUROSIM_ROOT" ]] && args+=(--neurosim_root "$NEUROSIM_ROOT")
+    [[ -n "$NEUROSIM_CLK_FREQ" ]] && args+=(--neurosim_clk_freq "$NEUROSIM_CLK_FREQ")
+    [[ -n "$NEUROSIM_TECHNODE" ]] && args+=(--neurosim_technode "$NEUROSIM_TECHNODE")
     [[ "$RUN_REAL_INFERENCE" == "1" ]] && args+=(--run_real_inference --no_vis)
     [[ -n "$OUTPUT_JSON" ]] && args+=(--output "$OUTPUT_JSON")
     [[ "$SHOW_SHAPES" == "1" ]] && args+=(--show_shapes)
@@ -86,7 +94,7 @@ build_args() {
 
 echo "========== run_sim_with_real_eval =========="
 echo "  CKPT=$CKPT"
-echo "  USE_REAL_DATA=$USE_REAL_DATA MNSIM_FULL=$MNSIM_FULL NEUROSIM_FULL=$NEUROSIM_FULL RUN_REAL_INFERENCE=$RUN_REAL_INFERENCE"
+echo "  USE_REAL_DATA=$USE_REAL_DATA MNSIM_FULL=$MNSIM_FULL NEUROSIM_FULL=$NEUROSIM_FULL NEUROSIM_CLK_FREQ=${NEUROSIM_CLK_FREQ:-none} NEUROSIM_TECHNODE=${NEUROSIM_TECHNODE:-none}"
 echo "  BATCH_SIZE=$BATCH_SIZE MAX_BATCHES=${MAX_BATCHES:-all} DEVICE=$DEVICE"
 echo "  SHOW_SHAPES=$SHOW_SHAPES BN_EN=$BN_EN QD_EN=$QD_EN EXPORT_MEM_TXN=$EXPORT_MEM_TXN"
 echo "  SIM_LOG_DIR=$SIM_LOG_DIR SIM_RESULTS_DIR=$SIM_RESULTS_DIR OUTPUT=$OUTPUT_JSON"

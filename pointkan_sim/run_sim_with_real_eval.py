@@ -112,6 +112,18 @@ def _parse_args() -> argparse.Namespace:
         help="NeuroSim 根目录（Inference_pytorch），默认 /workspace/DNN_NeuroSim_V1.4/Inference_pytorch",
     )
     parser.add_argument(
+        "--neurosim_clk_freq",
+        type=float,
+        default=None,
+        help="NeuroSim 全网络仿真时工作频率上限(Hz)，如 100000000=100MHz；不设则使用 NeuroSim 关键路径频率",
+    )
+    parser.add_argument(
+        "--neurosim_technode",
+        type=int,
+        default=None,
+        help="NeuroSim 工艺节点(nm)，如 32；仅支持 130/90/65/45/32/22/14/10/7，28 会自动改为 32",
+    )
+    parser.add_argument(
         "--output",
         type=str,
         default=None,
@@ -363,9 +375,13 @@ def main() -> int:
             neurosim_result = run_neurosim_full(
                 conv_linear_list,
                 neurosim_root=neurosim_root,
+                clk_freq_hz=getattr(args, "neurosim_clk_freq", None),
+                technode=getattr(args, "neurosim_technode", None),
             )
             if neurosim_result.success:
                 used_neurosim_for_ppa = True
+                if getattr(args, "neurosim_clk_freq", None) is not None or getattr(args, "neurosim_technode", None) is not None:
+                    log_info(f"NeuroSim 频率/工艺: clk_freq_hz={getattr(args, 'neurosim_clk_freq', None)}, technode={getattr(args, 'neurosim_technode', None)}")
                 mnsim_context = {
                     "mnsim_latency_ns": neurosim_result.layer_latency_ns,
                     "mnsim_energy_nj": neurosim_result.layer_energy_nj,
@@ -373,6 +389,13 @@ def main() -> int:
                 }
                 n_mnsim = len(neurosim_result.layer_latency_ns)
                 log_info("已用 NeuroSim 全网络仿真（DNN_NeuroSim main）得到逐层 latency/energy")
+                # 使用 NeuroSim 实际时钟周期换算 cycle，不再用 1 GHz 默认
+                if getattr(neurosim_result, "clock_period_ns", None) is not None and neurosim_result.clock_period_ns > 0:
+                    hw_config.clock_period = neurosim_result.clock_period_ns
+                    freq_mhz = 1000.0 / neurosim_result.clock_period_ns
+                    log_info(f"使用 NeuroSim 实际时钟: clock_period_ns={neurosim_result.clock_period_ns:.4f} ns (频率={freq_mhz:.2f} MHz)，用于 latency->cycle 与端到端延迟换算")
+                else:
+                    log_info("未解析到 NeuroSim 时钟周期，使用 hw_config 默认 clock_period (1 ns = 1 GHz) 换算 cycle")
                 log_info("以下层使用 NeuroSim 接口计算 PPA：")
                 clock_ns = hw_config.clock_period
                 from pointkan_sim.integration.real_data_eval import format_activation_weight_shapes
@@ -452,10 +475,11 @@ def main() -> int:
         log_info(f"  平衡准确率:    {eval_result.balanced_accuracy:.2f}%")
         log_info(f"  Test Loss:     {eval_result.test_loss:.4f}")
         clock_ns = hw_config.clock_period
-        latency_ns = eval_result.cycles_per_sample * clock_ns
+        # 端到端延迟：各模块按自身 clock_period_ns 换算为 ns 后累加（NeuroSim 与 1 GHz 数字模块混合正确）
+        latency_per_sample_ns = getattr(eval_result, "latency_per_sample_ns", None) or (eval_result.cycles_per_sample * clock_ns)
         log_info(f"  总周期:        {eval_result.total_cycles:,} cycles")
         log_info(f"  总能耗:        {eval_result.total_energy_nj:.2f} nJ")
-        log_info(f"  端到端延迟:    {latency_ns/1e6:.4f} ms (每样本)")
+        log_info(f"  端到端延迟:    {latency_per_sample_ns/1e6:.4f} ms (每样本, 各模块按自身时钟换算 ns 后累加)")
         log_info(f"  每样本周期:    {eval_result.cycles_per_sample:.1f} cycles")
         log_info(f"  每样本能耗:    {eval_result.energy_per_sample_nj:.2f} nJ")
         log_separator()
@@ -477,6 +501,31 @@ def main() -> int:
         full_operator_breakdown = sim_once.get("operator_breakdown") or {}
         operator_sequence = sim_once.get("operator_sequence") or []
 
+        # 控制台打印：端到端延迟与能耗的具体构成（按算子类型）；延迟为各算子 duration×自身 clock_period_ns 累加
+        if full_operator_breakdown:
+            total_cy = sum(v.get("cycles", 0) for v in full_operator_breakdown.values())
+            total_en = sum(v.get("energy_nj", 0) for v in full_operator_breakdown.values())
+            latency_total_ns = sum(v.get("latency_ns", 0) for v in full_operator_breakdown.values())
+            if latency_total_ns <= 0:
+                latency_total_ns = total_cy * clock_ns
+            log_separator()
+            log_info("端到端延迟与能耗构成 (每样本，按算子类型；延迟=各模块 cycles×自身时钟周期 累加)")
+            log_separator()
+            log_info(f"  {'算子':<20} {'cycles':>12} {'cycles%':>8} {'latency(ns)':>14} {'latency%':>8} {'energy(nJ)':>12} {'energy%':>8}")
+            log_info("  " + "-" * 86)
+            for op_name, v in sorted(full_operator_breakdown.items(), key=lambda x: -x[1].get("latency_ns", x[1].get("cycles", 0))):
+                cy = v.get("cycles", 0)
+                en = v.get("energy_nj", 0)
+                lat_ns = v.get("latency_ns", cy * clock_ns if clock_ns > 0 else 0)
+                cy_pct = (cy / total_cy * 100) if total_cy > 0 else 0
+                lat_pct = (lat_ns / latency_total_ns * 100) if latency_total_ns > 0 else 0
+                en_pct = (en / total_en * 100) if total_en > 0 else 0
+                log_info(f"  {op_name:<20} {cy:>12,.0f} {cy_pct:>7.1f}% {lat_ns:>14,.1f} {lat_pct:>7.1f}% {en:>12,.2f} {en_pct:>7.1f}%")
+            log_info("  " + "-" * 86)
+            log_info(f"  {'合计':<20} {total_cy:>12,.0f} {100.0:>7.1f}% {latency_total_ns:>14,.1f} {100.0:>7.1f}% {total_en:>12,.2f} {100.0:>7.1f}%")
+            log_info(f"  端到端延迟合计: {latency_total_ns/1e6:.4f} ms  |  能耗合计: {total_en:.2f} nJ")
+            log_separator()
+
         # 端到端 PPA 报告与算子级 breakdown 可视化：report.json + latency/energy 饼图（由 write_ppa_report_and_plots 统一写入 sim_results）
         from pointkan_sim.integration.ppa_report import build_ppa_report, write_ppa_report_and_plots
         mnsim_lat = mnsim_context["mnsim_latency_ns"] if mnsim_context else None
@@ -493,6 +542,7 @@ def main() -> int:
             mnsim_full=args.mnsim_full,
             rram_tile_stats=getattr(mnsim_result, "rram_tile_stats", None) if mnsim_result else None,
             operator_sequence=operator_sequence,
+            latency_per_sample_ns=getattr(eval_result, "latency_per_sample_ns", None),
         )
         sim_results_dir = Path(args.sim_results_dir)
         sim_results_dir.mkdir(parents=True, exist_ok=True)

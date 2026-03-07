@@ -1,0 +1,100 @@
+[2026-03-07 14:41:04] INFO     | Logger initialized: pointcloud_ppa_sim
+[2026-03-07 14:41:04] INFO     | Log level: INFO
+[2026-03-07 14:41:04] INFO     | Log file: sim_log/simulation_20260307_144104.log
+[2026-03-07 14:41:04] INFO     | ============================================================
+[2026-03-07 14:41:04] INFO     |  真实数据评估：ModelNet40 样本 + checkpoint 权重 + MNSIM 对应层 PPA
+[2026-03-07 14:41:04] INFO     | ============================================================
+[2026-03-07 14:41:04] INFO     | Checkpoint: /workspace/PointKAN-pytorch/PointKAN-elite/classification_ModelNet40/checkpoints/pointKANElite-pointkan_elite_exp-42
+[2026-03-07 14:41:04] INFO     | num_points=1024, num_classes=40, batch_size=1
+[2026-03-07 14:41:08] INFO     | 加速器: baseline (BASELINE)
+[2026-03-07 14:41:08] INFO     | CIM 并行度: 128
+[2026-03-07 14:41:08] INFO     | Bit-serial 周期: 6
+[2026-03-07 14:41:08] INFO     | 层间 buffer: size=65536 B, bandwidth=256 B/cycle, spill_to_dram=True
+[2026-03-07 14:41:08] INFO     | 层间量化/反量化: 未启用 (默认，假定 W8A8 已就绪)
+[2026-03-07 14:41:08] INFO     | BN 融合: 启用 (BN 不单独计入)
+[2026-03-07 14:41:08] INFO     | 
+[2026-03-07 14:42:05] INFO     | NeuroSim 频率/工艺: clk_freq_hz=100000000.0, technode=32
+[2026-03-07 14:42:05] INFO     | 已用 NeuroSim 全网络仿真（DNN_NeuroSim main）得到逐层 latency/energy
+[2026-03-07 14:42:05] INFO     | 使用 NeuroSim 实际时钟: clock_period_ns=10.0000 ns (频率=100.00 MHz)，用于 latency->cycle 与端到端延迟换算
+[2026-03-07 14:42:05] INFO     | 以下层使用 NeuroSim 接口计算 PPA：
+[2026-03-07 14:42:05] INFO     |   NeuroSim [embedding.net.0] activation=[B, 3, 1024], weight=[32, 3, 1]  latency=254376.1 ns, cycles=25438, energy=527.54 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [LFP_blocks_list.0.transfer1.net.0] activation=[B, 64, 24], weight=[64, 64, 1]  latency=18572.2 ns, cycles=1858, energy=52.49 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [LFP_blocks_list.0.operation1.0.fc1] activation=[B, 24, 64], weight=[64, 64]  latency=18572.2 ns, cycles=1858, energy=52.53 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [LFP_blocks_list.0.operation1.0.fc2] activation=[B, 24, 64], weight=[64, 64]  latency=18572.2 ns, cycles=1858, energy=52.28 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [LFP_blocks_list.0.transfer2.net.0] activation=[B, 64, 512], weight=[64, 64, 1]  latency=396208.0 ns, cycles=39621, energy=1117.89 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [LFP_blocks_list.0.operation2.0.fc1] activation=[B, 512, 64], weight=[64, 64]  latency=396208.0 ns, cycles=39621, energy=1116.00 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [LFP_blocks_list.0.operation2.0.fc2] activation=[B, 512, 64], weight=[64, 64]  latency=396208.0 ns, cycles=39621, energy=1116.82 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [GFP_blocks_list.0.operation.0.net1.0] activation=[B, 64, 512], weight=[64, 64, 1]  latency=396208.0 ns, cycles=39621, energy=1116.70 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [GFP_blocks_list.0.operation.0.net2.0] activation=[B, 64, 512], weight=[64, 64, 1]  latency=396208.0 ns, cycles=39621, energy=1117.16 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [LFP_blocks_list.1.transfer1.net.0] activation=[B, 128, 24], weight=[128, 128, 1]  latency=33244.4 ns, cycles=3325, energy=151.75 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [LFP_blocks_list.1.operation1.0.fc1] activation=[B, 24, 128], weight=[128, 128]  latency=33244.4 ns, cycles=3325, energy=152.14 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [LFP_blocks_list.1.operation1.0.fc2] activation=[B, 24, 128], weight=[128, 128]  latency=33244.4 ns, cycles=3325, energy=152.86 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [LFP_blocks_list.1.transfer2.net.0] activation=[B, 128, 256], weight=[128, 128, 1]  latency=354608.0 ns, cycles=35461, energy=1629.00 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [LFP_blocks_list.1.operation2.0.fc1] activation=[B, 256, 128], weight=[128, 128]  latency=354608.0 ns, cycles=35461, energy=1627.41 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [LFP_blocks_list.1.operation2.0.fc2] activation=[B, 256, 128], weight=[128, 128]  latency=354608.0 ns, cycles=35461, energy=1626.67 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [GFP_blocks_list.1.operation.0.net1.0] activation=[B, 128, 256], weight=[128, 128, 1]  latency=354608.0 ns, cycles=35461, energy=1631.19 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [GFP_blocks_list.1.operation.0.net2.0] activation=[B, 128, 256], weight=[128, 128, 1]  latency=354608.0 ns, cycles=35461, energy=1627.75 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [LFP_blocks_list.2.transfer1.net.0] activation=[B, 256, 24], weight=[256, 256, 1]  latency=66489.0 ns, cycles=6649, energy=561.25 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [LFP_blocks_list.2.operation1.0.fc1] activation=[B, 24, 256], weight=[256, 256]  latency=66489.0 ns, cycles=6649, energy=564.91 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [LFP_blocks_list.2.operation1.0.fc2] activation=[B, 24, 256], weight=[256, 256]  latency=66489.0 ns, cycles=6649, energy=561.62 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [LFP_blocks_list.2.transfer2.net.0] activation=[B, 256, 128], weight=[256, 256, 1]  latency=354608.0 ns, cycles=35461, energy=2987.85 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [LFP_blocks_list.2.operation2.0.fc1] activation=[B, 128, 256], weight=[256, 256]  latency=354608.0 ns, cycles=35461, energy=2995.42 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [LFP_blocks_list.2.operation2.0.fc2] activation=[B, 128, 256], weight=[256, 256]  latency=354608.0 ns, cycles=35461, energy=2984.76 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [GFP_blocks_list.2.operation.0.net1.0] activation=[B, 256, 128], weight=[256, 256, 1]  latency=354608.0 ns, cycles=35461, energy=2980.48 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [GFP_blocks_list.2.operation.0.net2.0] activation=[B, 256, 128], weight=[256, 256, 1]  latency=354608.0 ns, cycles=35461, energy=2992.27 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [LFP_blocks_list.3.transfer1.net.0] activation=[B, 512, 24], weight=[512, 512, 1]  latency=132978.0 ns, cycles=13298, energy=2148.35 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [LFP_blocks_list.3.operation1.0.fc1] activation=[B, 24, 512], weight=[512, 512]  latency=132978.0 ns, cycles=13298, energy=2140.11 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [LFP_blocks_list.3.operation1.0.fc2] activation=[B, 24, 512], weight=[512, 512]  latency=132978.0 ns, cycles=13298, energy=2138.32 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [LFP_blocks_list.3.transfer2.net.0] activation=[B, 512, 64], weight=[512, 512, 1]  latency=354608.0 ns, cycles=35461, energy=5717.24 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [LFP_blocks_list.3.operation2.0.fc1] activation=[B, 64, 512], weight=[512, 512]  latency=354608.0 ns, cycles=35461, energy=5715.55 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [LFP_blocks_list.3.operation2.0.fc2] activation=[B, 64, 512], weight=[512, 512]  latency=354608.0 ns, cycles=35461, energy=5702.31 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [GFP_blocks_list.3.operation.0.net1.0] activation=[B, 512, 64], weight=[512, 512, 1]  latency=354608.0 ns, cycles=35461, energy=5704.83 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [GFP_blocks_list.3.operation.0.net2.0] activation=[B, 512, 64], weight=[512, 512, 1]  latency=354608.0 ns, cycles=35461, energy=5711.02 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [classifier.0] activation=[B, 512], weight=[512, 512]  latency=5540.7 ns, cycles=555, energy=89.24 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [classifier.4] activation=[B, 512], weight=[256, 512]  latency=4318.1 ns, cycles=432, energy=45.99 nJ
+[2026-03-07 14:42:05] INFO     |   NeuroSim [classifier.8] activation=[B, 256], weight=[40, 256]  latency=1738.7 ns, cycles=174, energy=4.42 nJ
+[2026-03-07 14:42:05] INFO     |   （共 36 层）
+[2026-03-07 14:42:05] INFO     | 真实前向共 36 个 conv/linear；全网络 PPA 使用 36 层
+[2026-03-07 14:42:06] INFO     | 
+运行仿真: 5919 个事件, 约 966,802 周期...
+[2026-03-07 14:42:06] INFO     | ============================================================
+[2026-03-07 14:42:06] INFO     | 真实数据评估结果 (ModelNet40 测试集 + 对应层 NeuroSim PPA)
+[2026-03-07 14:42:06] INFO     | ============================================================
+[2026-03-07 14:42:06] INFO     |   样本数:        1
+[2026-03-07 14:42:06] INFO     |   准确率:        100.00%
+[2026-03-07 14:42:06] INFO     |   平衡准确率:    100.00%
+[2026-03-07 14:42:06] INFO     |   Test Loss:     1.3207
+[2026-03-07 14:42:06] INFO     |   总周期:        966,802 cycles
+[2026-03-07 14:42:06] INFO     |   总能耗:        87598.72 nJ
+[2026-03-07 14:42:06] INFO     |   端到端延迟:    9.6680 ms (每样本, 各模块按自身时钟换算 ns 后累加)
+[2026-03-07 14:42:06] INFO     |   每样本周期:    966802.0 cycles
+[2026-03-07 14:42:06] INFO     |   每样本能耗:    87598.72 nJ
+[2026-03-07 14:42:06] INFO     | ============================================================
+[2026-03-07 14:42:06] INFO     | 
+运行仿真: 5919 个事件, 约 966,802 周期...
+[2026-03-07 14:42:06] INFO     | ============================================================
+[2026-03-07 14:42:06] INFO     | 端到端延迟与能耗构成 (每样本，按算子类型；延迟=各模块 cycles×自身时钟周期 累加)
+[2026-03-07 14:42:06] INFO     | ============================================================
+[2026-03-07 14:42:06] INFO     |   算子                         cycles  cycles%    latency(ns) latency%   energy(nJ)  energy%
+[2026-03-07 14:42:06] INFO     |   --------------------------------------------------------------------------------------
+[2026-03-07 14:42:06] INFO     |   Conv1d                    488,580    50.5%    4,885,800.0    50.5%    37,774.78    43.1%
+[2026-03-07 14:42:06] INFO     |   Linear                    343,429    35.5%    3,434,290.0    35.5%    28,839.37    32.9%
+[2026-03-07 14:42:06] INFO     |   KNN                        49,920     5.2%      499,200.0     5.2%       480.00     0.5%
+[2026-03-07 14:42:06] INFO     |   LayerBuffer                39,590     4.1%      395,900.0     4.1%    17,687.80    20.2%
+[2026-03-07 14:42:06] INFO     |   FPS                        35,520     3.7%      355,200.0     3.7%       480.00     0.5%
+[2026-03-07 14:42:06] INFO     |   ADD                         8,704     0.9%       87,040.0     0.9%     2,336.77     2.7%
+[2026-03-07 14:42:06] INFO     |   AdaptiveMaxPool1d           1,024     0.1%       10,240.0     0.1%         0.00     0.0%
+[2026-03-07 14:42:06] INFO     |   ReLU                           19     0.0%          190.0     0.0%         0.00     0.0%
+[2026-03-07 14:42:06] INFO     |   LayerNorm                       8     0.0%           80.0     0.0%         0.00     0.0%
+[2026-03-07 14:42:06] INFO     |   AffineNorm                      4     0.0%           40.0     0.0%         0.00     0.0%
+[2026-03-07 14:42:06] INFO     |   SPool                           4     0.0%           40.0     0.0%         0.00     0.0%
+[2026-03-07 14:42:06] INFO     |   --------------------------------------------------------------------------------------
+[2026-03-07 14:42:06] INFO     |   合计                        966,802   100.0%    9,668,020.0   100.0%    87,598.72   100.0%
+[2026-03-07 14:42:06] INFO     |   端到端延迟合计: 9.6680 ms  |  能耗合计: 87598.72 nJ
+[2026-03-07 14:42:06] INFO     | ============================================================
+[2026-03-07 14:42:06] INFO     | NeuroSim 逐层 PPA 与 shape 已写入: sim_results/neurosim_layer_ppa.csv（共 36 层）
+[2026-03-07 14:42:06] INFO     | PPA 报告已写入: sim_results/report.json
+[2026-03-07 14:42:06] INFO     | PPA 图表已写入: sim_results (2 张)
+[2026-03-07 14:42:06] INFO     | 完整硬件算子序列已写入: sim_results/operator_sequence.txt（共 5919 条）
+[2026-03-07 14:42:06] INFO     | 内存交互事务已写入: sim_results/memory_transactions.txt（共 1988 条）
+[2026-03-07 14:42:06] INFO     | 内存交互聚合已写入: sim_results/memory_transactions_summary.txt

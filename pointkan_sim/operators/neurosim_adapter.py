@@ -35,6 +35,29 @@ _PATTERN_READ_ENERGY = re.compile(r"layer\d+'s readDynamicEnergy is:\s*([\d.eE+-
 _PATTERN_BUFFER_LATENCY = re.compile(r"layer\d+'s buffer latency is:\s*([\d.eE+-]+)\s*ns")
 _PATTERN_BUFFER_ENERGY = re.compile(r"layer\d+'s buffer readDynamicEnergy is:\s*([\d.eE+-]+)\s*pJ")
 _PATTERN_CLK_PERIOD = re.compile(r"clkPeriod:\s*([\d.eE+-]+)")
+_PATTERN_CHIP_CLK_PERIOD = re.compile(r"Chip clock period is:\s*([\d.eE+-]+)\s*ns")
+
+
+def parse_clock_period_ns(stdout: str) -> Optional[float]:
+    """
+    从 NeuroSim main 的 stdout 解析实际工作时钟周期（ns）。
+    优先使用 'Chip clock period is: X ns'（用户设定/最终周期），否则用 'clkPeriod: X'（秒，关键路径）。
+    未找到返回 None，调用方应用 hw_config 默认（如 1 ns = 1 GHz）并建议核对。
+    """
+    chip_period_ns: Optional[float] = None
+    clk_period_sec: Optional[float] = None
+    for line in stdout.splitlines():
+        m = _PATTERN_CHIP_CLK_PERIOD.search(line)
+        if m:
+            chip_period_ns = float(m.group(1))
+        m = _PATTERN_CLK_PERIOD.search(line)
+        if m:
+            clk_period_sec = float(m.group(1))
+    if chip_period_ns is not None:
+        return chip_period_ns
+    if clk_period_sec is not None:
+        return clk_period_sec * 1e9
+    return None
 
 
 def _write_matrix_weight(weight_matrix: np.ndarray, filepath: str) -> None:
@@ -114,10 +137,14 @@ def _run_neurosim_main(
     subarray: int = 128,
     parallel_read: int = 128,
     timeout_s: int = 120,
+    clk_freq_hz: Optional[float] = None,
+    technode: Optional[int] = None,
 ) -> Tuple[bool, str, str]:
     """
     调用 NeuroSIM/main，返回 (成功?, stdout, stderr)。
     neurosim_root: Inference_pytorch 目录，main 在 NeuroSIM 子目录下。
+    clk_freq_hz: 可选，工作频率上限(Hz)，传入 main 可选参数；与 standalone 一致。
+    technode: 可选，工艺节点(nm)，传入 main 可选参数；NeuroSim 仅支持 130/90/65/45/32/22/14/10/7，28 会由调用方映射为 32。
     """
     main_dir = os.path.join(neurosim_root, "NeuroSIM")
     main_exe = os.path.join(main_dir, "main")
@@ -135,6 +162,12 @@ def _run_neurosim_main(
     for wf, inf in weight_input_pairs:
         args.append(wf)
         args.append(inf)
+    # 可选参数顺序与 main 一致: argv[6+2*numLayers]=clkFreq(Hz), argv[6+2*numLayers+1]=technode(nm)
+    if technode is not None and technode > 0:
+        args.append(str(clk_freq_hz if (clk_freq_hz is not None and clk_freq_hz > 0) else 0))
+        args.append(str(technode))
+    elif clk_freq_hz is not None and clk_freq_hz > 0:
+        args.append(str(clk_freq_hz))
 
     try:
         proc = subprocess.run(
