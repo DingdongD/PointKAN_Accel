@@ -1,0 +1,75 @@
+{
+  "dataset": "waymo",
+  "data_dir": "/workspace/VoxelNet/Waymo_Mini/Waymo_mini/kitti_format/training/velodyne",
+  "n_total_frames": 595,
+  "max_samples_used": 20,
+  "num_points": 50000,
+  "fps_steps": 2048,
+  "k_neighbors": 32,
+  "min_candidates_ratio": 1.1,
+  "best_by_iou_coarse_fine": {
+    "init_threshold": 0.6,
+    "tol": 0.05,
+    "max_iter": 10,
+    "iou_coarse_fine_vs_vanilla": 0.9973438382148743,
+    "iou_adaptive_vs_vanilla": 0.9395273327827454
+  },
+  "grid": [
+    {
+      "init_threshold": 0.6,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.9973438382148743,
+      "iou_adaptive_vs_vanilla": 0.9395273327827454,
+      "time_sec": 485.8552
+    },
+    {
+      "init_threshold": 0.55,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.9970003962516785,
+      "iou_adaptive_vs_vanilla": 0.9373710751533508,
+      "time_sec": 482.5661
+    },
+    {
+      "init_threshold": 0.5,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.9966537356376648,
+      "iou_adaptive_vs_vanilla": 0.9359022378921509,
+      "time_sec": 479.6441
+    },
+    {
+      "init_threshold": 0.45,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.9958261251449585,
+      "iou_adaptive_vs_vanilla": 0.9333232641220093,
+      "time_sec": 478.1816
+    },
+    {
+      "init_threshold": 0.4,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.9948738217353821,
+      "iou_adaptive_vs_vanilla": 0.9312936663627625,
+      "time_sec": 508.199
+    },
+    {
+      "init_threshold": 0.35,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.9926458597183228,
+      "iou_adaptive_vs_vanilla": 0.9294949769973755,
+      "time_sec": 334.3155
+    },
+    {
+      "init_threshold": 0.3,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.9879127740859985,
+      "iou_adaptive_vs_vanilla": 0.9261310696601868,
+      "time_sec": 497.0046
+    }
+  ]
+}

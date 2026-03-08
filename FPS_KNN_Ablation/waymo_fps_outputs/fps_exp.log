@@ -1,0 +1,92 @@
+2026-03-08 11:49:12 [INFO] Collecting point counts and XYZ ranges (scanning 595 files)...
+2026-03-08 11:50:50 [INFO] Collecting point counts and XYZ ranges (scanning 595 files)...
+2026-03-08 11:51:09 [INFO] Stats over 595 frames: count range=[30886, 64778], mean=50087
+2026-03-08 11:51:09 [INFO] Histogram saved: ./waymo_fps_outputs/point_count_histogram.png
+2026-03-08 11:51:10 [INFO]   x: min across frames [0.00, 0.00], max across frames [25.82, 70.40]
+2026-03-08 11:51:10 [INFO]   y: min across frames [-40.00, -4.62], max across frames [5.68, 40.00]
+2026-03-08 11:51:10 [INFO]   z: min across frames [-3.00, -0.22], max across frames [1.00, 1.00]
+2026-03-08 11:51:10 [INFO] XYZ range histograms saved: ./waymo_fps_outputs/xyz_range_histograms.png
+2026-03-08 11:51:10 [INFO] [1/5] Processing: /workspace/VoxelNet/Waymo_Mini/Waymo_mini/kitti_format/training/velodyne/0000000.bin
+2026-03-08 11:51:12 [INFO] [2/5] Processing: /workspace/VoxelNet/Waymo_Mini/Waymo_mini/kitti_format/training/velodyne/0000001.bin
+2026-03-08 11:51:14 [INFO] [3/5] Processing: /workspace/VoxelNet/Waymo_Mini/Waymo_mini/kitti_format/training/velodyne/0000002.bin
+2026-03-08 11:51:15 [INFO] [4/5] Processing: /workspace/VoxelNet/Waymo_Mini/Waymo_mini/kitti_format/training/velodyne/0000003.bin
+2026-03-08 11:51:17 [INFO] [5/5] Processing: /workspace/VoxelNet/Waymo_Mini/Waymo_mini/kitti_format/training/velodyne/0000004.bin
+2026-03-08 11:51:18 [INFO] Summary over frames:
+2026-03-08 11:51:18 [INFO]   num_points_avg: 34064.400000
+2026-03-08 11:51:18 [INFO]   num_points_std: 166.568424
+2026-03-08 11:51:18 [INFO]   num_points_min: 33857.000000
+2026-03-08 11:51:18 [INFO]   num_points_max: 34258.000000
+2026-03-08 11:51:18 [INFO]   k_avg: 1024.000000
+2026-03-08 11:51:18 [INFO]   k_std: 0.000000
+2026-03-08 11:51:18 [INFO]   k_min: 1024.000000
+2026-03-08 11:51:18 [INFO]   k_max: 1024.000000
+2026-03-08 11:51:18 [INFO]   time_sec_avg: 0.876783
+2026-03-08 11:51:18 [INFO]   time_sec_std: 0.029602
+2026-03-08 11:51:18 [INFO]   time_sec_min: 0.847950
+2026-03-08 11:51:18 [INFO]   time_sec_max: 0.931503
+2026-03-08 11:51:18 [INFO]   cover_mean_avg: 0.214567
+2026-03-08 11:51:18 [INFO]   cover_mean_std: 0.002470
+2026-03-08 11:51:18 [INFO]   cover_mean_min: 0.211055
+2026-03-08 11:51:18 [INFO]   cover_mean_max: 0.217974
+2026-03-08 11:51:18 [INFO]   cover_max_avg: 0.436800
+2026-03-08 11:51:18 [INFO]   cover_max_std: 0.005570
+2026-03-08 11:51:18 [INFO]   cover_max_min: 0.428244
+2026-03-08 11:51:18 [INFO]   cover_max_max: 0.445411
+2026-03-08 11:51:18 [INFO]   cover_p95_avg: 0.365926
+2026-03-08 11:51:18 [INFO]   cover_p95_std: 0.003081
+2026-03-08 11:51:18 [INFO]   cover_p95_min: 0.361061
+2026-03-08 11:51:18 [INFO]   cover_p95_max: 0.369868
+2026-03-08 11:51:18 [INFO]   cover_p99_avg: 0.405370
+2026-03-08 11:51:18 [INFO]   cover_p99_std: 0.004579
+2026-03-08 11:51:18 [INFO]   cover_p99_min: 0.397665
+2026-03-08 11:51:18 [INFO]   cover_p99_max: 0.410663
+2026-03-08 11:51:18 [INFO]   sample_nn_mean_avg: 0.514086
+2026-03-08 11:51:18 [INFO]   sample_nn_mean_std: 0.006853
+2026-03-08 11:51:18 [INFO]   sample_nn_mean_min: 0.507309
+2026-03-08 11:51:18 [INFO]   sample_nn_mean_max: 0.526607
+2026-03-08 11:51:18 [INFO]   sample_nn_min_avg: 0.437121
+2026-03-08 11:51:18 [INFO]   sample_nn_min_std: 0.005391
+2026-03-08 11:51:18 [INFO]   sample_nn_min_min: 0.428876
+2026-03-08 11:51:18 [INFO]   sample_nn_min_max: 0.445486
+2026-03-08 11:51:18 [INFO]   sample_nn_std_avg: 0.286731
+2026-03-08 11:51:18 [INFO]   sample_nn_std_std: 0.170016
+2026-03-08 11:51:18 [INFO]   sample_nn_std_min: 0.065909
+2026-03-08 11:51:18 [INFO]   sample_nn_std_max: 0.483143
+2026-03-08 11:51:18 [INFO]   x_min_avg: 0.000562
+2026-03-08 11:51:18 [INFO]   x_min_std: 0.000544
+2026-03-08 11:51:18 [INFO]   x_min_min: 0.000122
+2026-03-08 11:51:18 [INFO]   x_min_max: 0.001343
+2026-03-08 11:51:18 [INFO]   x_max_avg: 28.548486
+2026-03-08 11:51:18 [INFO]   x_max_std: 2.815360
+2026-03-08 11:51:18 [INFO]   x_max_min: 26.509399
+2026-03-08 11:51:18 [INFO]   x_max_max: 34.114624
+2026-03-08 11:51:18 [INFO]   y_min_avg: -8.608128
+2026-03-08 11:51:18 [INFO]   y_min_std: 3.708968
+2026-03-08 11:51:18 [INFO]   y_min_min: -14.555664
+2026-03-08 11:51:18 [INFO]   y_min_max: -4.617188
+2026-03-08 11:51:18 [INFO]   y_max_avg: 20.633984
+2026-03-08 11:51:18 [INFO]   y_max_std: 0.348095
+2026-03-08 11:51:18 [INFO]   y_max_min: 19.956055
+2026-03-08 11:51:18 [INFO]   y_max_max: 20.922852
+2026-03-08 11:51:18 [INFO]   z_min_avg: -0.845283
+2026-03-08 11:51:18 [INFO]   z_min_std: 0.622849
+2026-03-08 11:51:18 [INFO]   z_min_min: -2.049263
+2026-03-08 11:51:18 [INFO]   z_min_max: -0.292217
+2026-03-08 11:51:18 [INFO]   z_max_avg: 0.999950
+2026-03-08 11:51:18 [INFO]   z_max_std: 0.000048
+2026-03-08 11:51:18 [INFO]   z_max_min: 0.999893
+2026-03-08 11:51:18 [INFO]   z_max_max: 1.000000
+2026-03-08 11:51:18 [INFO]   x_range_avg: 28.547925
+2026-03-08 11:51:18 [INFO]   x_range_std: 2.815553
+2026-03-08 11:51:18 [INFO]   x_range_min: 26.509277
+2026-03-08 11:51:18 [INFO]   x_range_max: 34.114502
+2026-03-08 11:51:18 [INFO]   y_range_avg: 29.242113
+2026-03-08 11:51:18 [INFO]   y_range_std: 3.857335
+2026-03-08 11:51:18 [INFO]   y_range_min: 25.458984
+2026-03-08 11:51:18 [INFO]   y_range_max: 35.320312
+2026-03-08 11:51:18 [INFO]   z_range_avg: 1.845232
+2026-03-08 11:51:18 [INFO]   z_range_std: 0.622851
+2026-03-08 11:51:18 [INFO]   z_range_min: 1.292217
+2026-03-08 11:51:18 [INFO]   z_range_max: 3.049225
+2026-03-08 11:51:18 [INFO] Summary saved: ./waymo_fps_outputs/summary.txt
+2026-03-08 11:51:18 [INFO] Visualizations saved to: ./waymo_fps_outputs

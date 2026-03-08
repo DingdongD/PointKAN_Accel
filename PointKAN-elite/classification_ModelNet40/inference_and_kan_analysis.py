@@ -867,7 +867,7 @@ def main():
         print(f"  原始 FPS 推理耗时: {t_vanilla:.3f}s  ({1000*t_vanilla/eval_result['num_samples']:.2f} ms/sample)")
     print("=" * 50 + "\n")
 
-    # 2b) 可选：FPS 优化版模型评估（预计算级联 FPS 索引，与原始数值一致，对比耗时）
+    # FPS 优化版模型评估（预计算级联 FPS 索引，与原始数值一致，对比耗时）
     if do_fps_opt:
         t0 = time.perf_counter()
         net_fps_opt = build_fps_optimized_model(checkpoint_path, device)

@@ -11,6 +11,12 @@
   4. 排序电路：baseline 为 Bitonic 排序，acc 为两阶段比较器
   5. 逻辑电路：BN/LN/ReLU/量化反量化等，acc 增加插值
 
+时钟说明（双时钟，端到端延迟按各模块自身时钟换算后累加）：
+  - 数字逻辑时钟（SPool/LayerNorm/ReLU/FPS/KNN 等）：由 HardwareConfig.clock_period 表示（单位 ns）。
+    接口：脚本通过 --logic_clk_freq / 环境变量 LOGIC_CLK_FREQ 传入频率(Hz)，不传则默认 1 GHz（1 ns）。
+  - NeuroSim 时钟（Conv/Linear 的 CIM 仿真）：由脚本 NEUROSIM_CLK_FREQ 传入(Hz)，可变，不限于 100 MHz；
+    不传时 NeuroSim 使用自身关键路径频率。Conv/Linear 事件单独带 mnsim_clock_period_ns，不改写 clock_period。
+
 使用：get_accelerator_config("baseline") / get_accelerator_config("acc")
 """
 
@@ -230,29 +236,37 @@ class BatchNorm1dConfig:
 @dataclass
 class LayerNormConfig:
     """LayerNorm hardware unit."""
-    power: float = 0.0                          # TODO: mW
-    cycles: int = 0                             # TODO: execution cycles
+    power: float = 180.0                        # mW @ parallelism=1
+    area: float = 177025.0                      # um^2
+    cycles: int = 0                             # shape-driven, 0 表示运行时按公式估算
+    parallelism: int = 1                        # 设计空间探索参数
 
 
 @dataclass
 class ReLUConfig:
     """ReLU activation hardware unit."""
-    power: float = 0.0                          # TODO: mW
-    cycles: int = 0                             # TODO: execution cycles
+    power: float = 0.45                         # mW @ parallelism=1
+    area: float = 22.0                          # um^2
+    cycles: int = 0                             # shape-driven, 0 表示运行时按公式估算
+    parallelism: int = 1                        # 设计空间探索参数
 
 
 @dataclass
 class SPoolConfig:
     """SPool (spatial pooling) hardware unit."""
-    power: float = 0.0                          # TODO: mW
-    cycles: int = 0                             # TODO: execution cycles
+    power: float = 17.0                         # mW @ parallelism=1
+    area: float = 34375.0                       # um^2
+    cycles: int = 0                             # shape-driven, 0 表示运行时按公式估算
+    parallelism: int = 1                        # 设计空间探索参数
 
 
 @dataclass
 class QuantDequantConfig:
     """Quantization / de-quantization hardware unit."""
-    power: float = 0.0                          # TODO: mW
-    cycles: int = 0                             # TODO: execution cycles
+    power: float = 2.59                         # mW @ parallelism=1
+    area: float = 6307.0                        # um^2
+    cycles: int = 1                             # 固定 1 cycle
+    parallelism: int = 1                        # 设计空间探索参数
 
 
 @dataclass
@@ -272,6 +286,10 @@ class LogicCircuitConfig:
 
     Shared ops: batchnorm1d, layernorm, relu, spool, quant_dequant.
     acc-only:   interpolation.
+
+    脚本中设置各模块并行度（设计空间探索）:
+      - 直接赋值: hw_config.logic_circuit.layernorm.parallelism = 4
+      - 或调用: set_logic_parallelism(hw_config, layernorm=4, relu=8, spool=2, quant_dequant=1)
     """
     # Shared ops
     batchnorm1d: BatchNorm1dConfig = field(default_factory=BatchNorm1dConfig)
@@ -360,7 +378,8 @@ class HardwareConfig:
     Attributes:
         accelerator_type: BASELINE or ACC
         accelerator_name: Human-readable name string
-        clock_period: Clock period in nanoseconds (1 ns = 1 GHz)
+        clock_period: 数字逻辑时钟周期 (ns)，用于 SPool/LayerNorm/ReLU/FPS/KNN 等数字模块；
+                      默认 1.0 ns = 1 GHz；可通过 --logic_clk_freq / LOGIC_CLK_FREQ 从脚本传入覆盖。
         sram_cim_macro: SRAM-CIM macro configuration
         rram_lut_macro: RRAM-LUT macro configuration
         rram_cim_macro: RRAM-CIM macro configuration (placeholder)
@@ -372,8 +391,8 @@ class HardwareConfig:
     accelerator_type: AcceleratorType = AcceleratorType.BASELINE
     accelerator_name: str = "baseline"
 
-    # Global timing
-    clock_period: float = 1.0                   # ns  (1 GHz)
+    # Global timing（数字逻辑时钟，Conv/Linear 若用 NeuroSim 则另有 mnsim_clock_period_ns）
+    clock_period: float = 1.0                   # ns，默认 1 GHz；脚本可设 --logic_clk_freq 覆盖
 
     # Five macro-level modules
     sram_cim_macro: SramCimMacroConfig = field(
@@ -582,10 +601,10 @@ def _build_baseline() -> HardwareConfig:
 
         logic_circuit=LogicCircuitConfig(
             batchnorm1d=BatchNorm1dConfig(power=0.0, cycles=0),    # TODO
-            layernorm=LayerNormConfig(power=0.0, cycles=0),        # TODO
-            relu=ReLUConfig(power=0.0, cycles=0),                  # TODO
-            spool=SPoolConfig(power=0.0, cycles=0),                # TODO
-            quant_dequant=QuantDequantConfig(power=0.0, cycles=0), # TODO
+            layernorm=LayerNormConfig(),
+            relu=ReLUConfig(),
+            spool=SPoolConfig(),
+            quant_dequant=QuantDequantConfig(),
             interpolation=None,                 # baseline: no interpolation
         ),
         
@@ -696,10 +715,10 @@ def _build_acc() -> HardwareConfig:
 
         logic_circuit=LogicCircuitConfig(
             batchnorm1d=BatchNorm1dConfig(power=0.0, cycles=0),    # TODO
-            layernorm=LayerNormConfig(power=0.0, cycles=0),        # TODO
-            relu=ReLUConfig(power=0.0, cycles=0),                  # TODO
-            spool=SPoolConfig(power=0.0, cycles=0),                # TODO
-            quant_dequant=QuantDequantConfig(power=0.0, cycles=0), # TODO
+            layernorm=LayerNormConfig(),
+            relu=ReLUConfig(),
+            spool=SPoolConfig(),
+            quant_dequant=QuantDequantConfig(),
             interpolation=InterpolationConfig(   # acc: has interpolation
                 power=0.0,                      # TODO
                 cycles=0,                       # TODO
@@ -760,3 +779,44 @@ def get_accelerator_config(name: str) -> HardwareConfig:
 def list_accelerator_configs() -> List[str]:
     """List all registered accelerator names."""
     return sorted(_ACCELERATOR_REGISTRY.keys())
+
+
+def set_digital_clock_freq_hz(hw_config: HardwareConfig, freq_hz: Optional[float] = None) -> None:
+    """
+    设置数字逻辑时钟频率（SPool/LayerNorm/ReLU/FPS/KNN 等），不改变 NeuroSim(Conv/Linear) 时钟。
+
+    Args:
+        hw_config: 硬件配置
+        freq_hz: 频率 (Hz)；None 或 ≤0 时设为默认 1e9 (1 GHz)，即 clock_period=1.0 ns
+    """
+    if freq_hz is None or freq_hz <= 0:
+        hw_config.clock_period = 1.0  # 默认 1 GHz
+        return
+    hw_config.clock_period = 1e9 / float(freq_hz)
+
+
+def set_logic_parallelism(
+    hw_config: HardwareConfig,
+    layernorm: Optional[int] = None,
+    relu: Optional[int] = None,
+    spool: Optional[int] = None,
+    quant_dequant: Optional[int] = None,
+) -> None:
+    """
+    设置 logic_circuit 各子模块的并行度；仅对传入的非 None 参数生效。
+
+    用法示例:
+      cfg = get_accelerator_config("baseline")
+      set_logic_parallelism(cfg, layernorm=4, relu=8, spool=2, quant_dequant=1)
+    """
+    lc = getattr(hw_config, "logic_circuit", None)
+    if lc is None:
+        return
+    if layernorm is not None and hasattr(lc, "layernorm") and lc.layernorm is not None:
+        lc.layernorm.parallelism = max(1, int(layernorm))
+    if relu is not None and hasattr(lc, "relu") and lc.relu is not None:
+        lc.relu.parallelism = max(1, int(relu))
+    if spool is not None and hasattr(lc, "spool") and lc.spool is not None:
+        lc.spool.parallelism = max(1, int(spool))
+    if quant_dequant is not None and hasattr(lc, "quant_dequant") and lc.quant_dequant is not None:
+        lc.quant_dequant.parallelism = max(1, int(quant_dequant))

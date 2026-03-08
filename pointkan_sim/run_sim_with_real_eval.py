@@ -20,6 +20,10 @@ run_inference_kan.sh 中模型权重、ModelNet40 数据一致，先（可选）
   方式二（仅 shape，不跑 MNSIM/NeuroSim）:
     python -m pointkan_sim.run_sim_with_real_eval --use_real_data --show_shapes --batch_size 2
   日志中会先后出现「Conv/Linear 层 shape」与「非线性算子激活」两段，含 in/out shape、numel、字节数。
+
+时钟（双时钟，可脚本配置）:
+  NeuroSim（Conv/Linear）：由 NEUROSIM_CLK_FREQ 传入频率(Hz)，可变（如 100M/200M），不设则用 NeuroSim 关键路径。
+  数字逻辑（SPool/LayerNorm/ReLU 等）：由 --logic_clk_freq / LOGIC_CLK_FREQ 传入频率(Hz)，默认 1 GHz。
 """
 
 from __future__ import annotations
@@ -30,19 +34,6 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
-
-from pointkan_sim.constants import (
-    KEY_CYCLE,
-    KEY_DURATION,
-    KEY_END_CYCLE,
-    KEY_ENERGY_NJ,
-    KEY_IDX,
-    KEY_LAYER_NAME,
-    KEY_OPERATION,
-    KEY_OPERATOR,
-    KEY_STAGE,
-    OPERATOR_SEQUENCE_HEADER,
-)
 
 # 工程根目录（PointKAN-pytorch）
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -132,6 +123,13 @@ def _parse_args() -> argparse.Namespace:
         help="NeuroSim 工艺节点(nm)，如 32；仅支持 130/90/65/45/32/22/14/10/7，28 会自动改为 32",
     )
     parser.add_argument(
+        "--logic_clk_freq",
+        type=float,
+        default=None,
+        metavar="Hz",
+        help="数字逻辑时钟频率(Hz)，用于 SPool/LayerNorm/ReLU 等；默认 1e9=1GHz；不设则用 hw_config 默认",
+    )
+    parser.add_argument(
         "--output",
         type=str,
         default=None,
@@ -200,6 +198,34 @@ def _parse_args() -> argparse.Namespace:
         "--export_memory_transactions",
         action="store_true",
         help="导出内存交互事务序列（memory_transactions.txt）",
+    )
+    parser.add_argument(
+        "--logic_par_layernorm",
+        type=int,
+        default=None,
+        metavar="N",
+        help="逻辑电路 LayerNorm 并行度（≥1），不设则用 hw_config 默认",
+    )
+    parser.add_argument(
+        "--logic_par_relu",
+        type=int,
+        default=None,
+        metavar="N",
+        help="逻辑电路 ReLU 并行度（≥1）",
+    )
+    parser.add_argument(
+        "--logic_par_spool",
+        type=int,
+        default=None,
+        metavar="N",
+        help="逻辑电路 SPool 并行度（≥1）",
+    )
+    parser.add_argument(
+        "--logic_par_quant_dequant",
+        type=int,
+        default=None,
+        metavar="N",
+        help="逻辑电路量化/反量化并行度（≥1）",
     )
     return parser.parse_args()
 
@@ -296,6 +322,19 @@ def main() -> int:
     # 模式：用 ModelNet40 真实样本 + 真实权重 调度仿真，MNSIM 由真实前向得到的层维度驱动
     # -------------------------------------------------------------------------
     if args.use_real_data:
+        from pointkan_sim.configs.hw_config import set_digital_clock_freq_hz, set_logic_parallelism
+        from pointkan_sim.constants import (
+            KEY_CYCLE,
+            KEY_DURATION,
+            KEY_END_CYCLE,
+            KEY_ENERGY_NJ,
+            KEY_IDX,
+            KEY_LAYER_NAME,
+            KEY_OPERATION,
+            KEY_OPERATOR,
+            KEY_STAGE,
+            OPERATOR_SEQUENCE_HEADER,
+        )
         from pointkan_sim.integration.real_data_eval import (
             load_model_and_dataset,
             collect_conv_linear_from_forward,
@@ -335,6 +374,15 @@ def main() -> int:
             hw_config.cim_backend = args.cim_backend
         if getattr(args, "neurosim_root", None):
             hw_config.neurosim_root = args.neurosim_root
+        logic_freq = getattr(args, "logic_clk_freq", None)
+        set_digital_clock_freq_hz(hw_config, logic_freq)  # 不传或≤0 时保持默认 1 GHz
+        set_logic_parallelism(
+            hw_config,
+            layernorm=getattr(args, "logic_par_layernorm", None),
+            relu=getattr(args, "logic_par_relu", None),
+            spool=getattr(args, "logic_par_spool", None),
+            quant_dequant=getattr(args, "logic_par_quant_dequant", None),
+        )
         layers = load_network("pointkan-elite", args.num_points, args.num_classes)
 
         # 打印加速器与层间 buffer/量化配置（与 main.run_network_simulation 一致，便于对照）
@@ -352,6 +400,18 @@ def main() -> int:
         bn_fuse = getattr(hw_config, "bn_fuse_with_conv_linear", True)
         log_info(f"层间量化/反量化: {'启用 (FP32↔INT8 计入 cycle/功耗)' if qd else '未启用 (默认，假定 W8A8 已就绪)'}")
         log_info(f"BN 融合: {'启用 (BN 不单独计入)' if bn_fuse else '关闭 (保留 BN 事件)'}")
+        log_info(f"数字逻辑时钟: {hw_config.clock_period:.4f} ns ({1000.0 / hw_config.clock_period:.2f} MHz){' (由 --logic_clk_freq 设置)' if logic_freq is not None and logic_freq > 0 else ' (默认 1 GHz)'}")
+        if any(
+            getattr(args, k, None) is not None
+            for k in ("logic_par_layernorm", "logic_par_relu", "logic_par_spool", "logic_par_quant_dequant")
+        ):
+            lc = getattr(hw_config, "logic_circuit", None)
+            if lc:
+                par_ln = getattr(lc.layernorm, "parallelism", 1) if lc.layernorm else 1
+                par_relu = getattr(lc.relu, "parallelism", 1) if lc.relu else 1
+                par_sp = getattr(lc.spool, "parallelism", 1) if lc.spool else 1
+                par_qd = getattr(lc.quant_dequant, "parallelism", 1) if lc.quant_dequant else 1
+                log_info(f"逻辑电路并行度: layernorm={par_ln} relu={par_relu} spool={par_sp} quant_dequant={par_qd}")
         log_info("")
 
         # 先做一次真实前向，收集 conv/linear 顺序与真实 indata/rdata 字节数，用于 MNSIM 按层矩阵乘适配
@@ -396,29 +456,46 @@ def main() -> int:
                 used_neurosim_for_ppa = True
                 if getattr(args, "neurosim_clk_freq", None) is not None or getattr(args, "neurosim_technode", None) is not None:
                     log_info(f"NeuroSim 频率/工艺: clk_freq_hz={getattr(args, 'neurosim_clk_freq', None)}, technode={getattr(args, 'neurosim_technode', None)}")
+                neurosim_clock_ns = getattr(neurosim_result, "clock_period_ns", None) or 0.0
                 mnsim_context = {
                     "mnsim_latency_ns": neurosim_result.layer_latency_ns,
                     "mnsim_energy_nj": neurosim_result.layer_energy_nj,
                     "mnsim_index": 0,
                 }
+                if neurosim_clock_ns > 0:
+                    mnsim_context["mnsim_clock_period_ns"] = float(neurosim_clock_ns)
+                if getattr(neurosim_result, "layer_area_um2", None) is not None:
+                    mnsim_context["mnsim_area_um2"] = neurosim_result.layer_area_um2
                 n_mnsim = len(neurosim_result.layer_latency_ns)
                 log_info("已用 NeuroSim 全网络仿真（DNN_NeuroSim main）得到逐层 latency/energy")
-                # 使用 NeuroSim 实际时钟周期换算 cycle，不再用 1 GHz 默认
-                if getattr(neurosim_result, "clock_period_ns", None) is not None and neurosim_result.clock_period_ns > 0:
-                    hw_config.clock_period = neurosim_result.clock_period_ns
-                    freq_mhz = 1000.0 / neurosim_result.clock_period_ns
-                    log_info(f"使用 NeuroSim 实际时钟: clock_period_ns={neurosim_result.clock_period_ns:.4f} ns (频率={freq_mhz:.2f} MHz)，用于 latency->cycle 与端到端延迟换算")
+                # 数字逻辑时钟由 hw_config.clock_period（可 --logic_clk_freq 设置，默认 1 GHz）；Conv/Linear 单独用 NeuroSim 时钟
+                if neurosim_clock_ns > 0:
+                    freq_mhz = 1000.0 / neurosim_clock_ns
+                    log_info(f"NeuroSim Conv/Linear 时钟: {neurosim_clock_ns:.4f} ns ({freq_mhz:.2f} MHz)，由 NEUROSIM_CLK_FREQ 传入（可变，不限于 100M）；数字逻辑时钟见上方")
                 else:
-                    log_info("未解析到 NeuroSim 时钟周期，使用 hw_config 默认 clock_period (1 ns = 1 GHz) 换算 cycle")
+                    log_info("未解析到 NeuroSim 时钟周期，Conv/Linear 亦使用数字逻辑时钟 (hw_config.clock_period)")
                 log_info("以下层使用 NeuroSim 接口计算 PPA：")
-                clock_ns = hw_config.clock_period
+                clock_ns_log = mnsim_context.get("mnsim_clock_period_ns") or hw_config.clock_period
                 from pointkan_sim.integration.real_data_eval import format_activation_weight_shapes
                 for idx, (lat_ns, en_nj) in enumerate(zip(neurosim_result.layer_latency_ns, neurosim_result.layer_energy_nj)):
                     name = conv_linear_list[idx].name if idx < len(conv_linear_list) else f"layer_{idx}"
-                    cyc = max(1, int(math.ceil(lat_ns / clock_ns)))
+                    cyc = max(1, int(math.ceil(lat_ns / clock_ns_log)))
                     act_s, w_s = format_activation_weight_shapes(conv_linear_list[idx]) if idx < len(conv_linear_list) else ("?", "?")
                     log_info(f"  NeuroSim [{name}] activation={act_s}, weight={w_s}  latency={lat_ns:.1f} ns, cycles={cyc}, energy={en_nj:.2f} nJ")
                 log_info(f"  （共 {n_mnsim} 层）")
+                # NeuroSim 模式：输出消耗的 tile/PE 与对应 size（占位或解析结果）
+                if getattr(neurosim_result, "rram_tile_stats", None):
+                    st = neurosim_result.rram_tile_stats
+                    log_info("NeuroSim Tile/PE 统计:")
+                    log_info(f"  总 Tile 数: {st.get('total_tile_count', 0)},  总 PE 数: {st.get('total_PE_count', 0)}")
+                    xbar = st.get("xbar_size") or {}
+                    log_info(f"  Crossbar size: {xbar.get('row', '?')} x {xbar.get('column', '?')}  (pe_per_tile={st.get('pe_per_tile', '?')})")
+                    if st.get("per_layer"):
+                        log_info(f"  逐层: 共 {len(st['per_layer'])} 层")
+                        for pl in st["per_layer"][:8]:
+                            log_info(f"    layer_{pl.get('layer_index', '?')} ({pl.get('layer_type', '')}): tilenum={pl.get('tilenum', 0)}, PE_count={pl.get('PE_count', 0)}, max_row={pl.get('max_row', 0)}, max_column={pl.get('max_column', 0)}")
+                        if len(st["per_layer"]) > 8:
+                            log_info(f"    ... 其余 {len(st['per_layer']) - 8} 层")
             else:
                 log_info(f"NeuroSim 全网络未启用: {neurosim_result.error}")
                 if neurosim_result.error and len(neurosim_result.error) > 200:
@@ -440,6 +517,8 @@ def main() -> int:
                         "mnsim_energy_nj": mnsim_result.layer_energy_nj,
                         "mnsim_index": 0,
                     }
+                    if getattr(mnsim_result, "layer_area_um2", None):
+                        mnsim_context["mnsim_area_um2"] = mnsim_result.layer_area_um2
                     n_mnsim = len(mnsim_result.layer_latency_ns)
                     log_info("已用与 checkpoint 一致的层结构 + 真实按层 indata/rdata 驱动 MNSIM 全 NetStruct（Tile/NoC）")
                     clock_ns = hw_config.clock_period
@@ -449,6 +528,15 @@ def main() -> int:
                         cyc = max(1, int(math.ceil(lat_ns / clock_ns)))
                         act_s, w_s = format_activation_weight_shapes(conv_linear_list[idx]) if idx < len(conv_linear_list) else ("?", "?")
                         log_info(f"  MNSIM [{name}] activation={act_s}, weight={w_s}  latency={lat_ns:.1f} ns, cycles={cyc}, energy={en_nj:.2f} nJ")
+                    # MNSIM 模式：输出 Tile/PE 与面积
+                    if getattr(mnsim_result, "rram_tile_stats", None):
+                        st = mnsim_result.rram_tile_stats
+                        log_info("MNSIM Tile/PE 统计:")
+                        log_info(f"  总 Tile 数: {st.get('total_tile_count', 0)},  总 PE 数: {st.get('total_PE_count', 0)}")
+                        xbar = st.get("xbar_size") or {}
+                        log_info(f"  Crossbar size: {xbar.get('row', '?')} x {xbar.get('column', '?')}  (pe_per_tile={st.get('pe_per_tile', '?')})")
+                    if getattr(mnsim_result, "total_area_um2", None) and mnsim_result.total_area_um2 > 0:
+                        log_info(f"  MNSIM Conv/Linear 总面积: {mnsim_result.total_area_um2:.2f} um^2")
                 else:
                     log_info(f"MNSIM 未启用: {mnsim_result.error}")
 
@@ -488,9 +576,12 @@ def main() -> int:
         log_info(f"  准确率:        {eval_result.accuracy:.2f}%")
         log_info(f"  平衡准确率:    {eval_result.balanced_accuracy:.2f}%")
         log_info(f"  Test Loss:     {eval_result.test_loss:.4f}")
-        clock_ns = hw_config.clock_period
-        # 端到端延迟：各模块按自身 clock_period_ns 换算为 ns 后累加（NeuroSim 与 1 GHz 数字模块混合正确）
-        latency_per_sample_ns = getattr(eval_result, "latency_per_sample_ns", None) or (eval_result.cycles_per_sample * clock_ns)
+        # 端到端延迟：各事件按自身 clock_period_ns 换算后累加（Conv/Linear 用 NeuroSim 时钟，数字逻辑用 1 ns）
+        latency_per_sample_ns = getattr(eval_result, "latency_per_sample_ns", None)
+        if latency_per_sample_ns is None or latency_per_sample_ns <= 0:
+            # 回退：若结果未带 latency_ns 则用单时钟近似（不准确）
+            clock_fallback = (mnsim_context.get("mnsim_clock_period_ns") if mnsim_context else None) or hw_config.clock_period
+            latency_per_sample_ns = eval_result.cycles_per_sample * clock_fallback
         log_info(f"  总周期:        {eval_result.total_cycles:,} cycles")
         log_info(f"  总能耗:        {eval_result.total_energy_nj:.2f} nJ")
         log_info(f"  端到端延迟:    {latency_per_sample_ns/1e6:.4f} ms (每样本, 各模块按自身时钟换算 ns 后累加)")
@@ -513,37 +604,84 @@ def main() -> int:
             show_shapes=False,
         )
         full_operator_breakdown = sim_once.get("operator_breakdown") or {}
+        operator_cycle_detail = sim_once.get("operator_cycle_detail") or []
         operator_sequence = sim_once.get("operator_sequence") or []
+        total_area_um2 = float(sim_once.get("total_area_um2", 0) or 0)
+        clock_ns = getattr(hw_config, "clock_period", 1.0)  # 数字逻辑 1 GHz；仅用于 fallback 与报告
 
-        # 控制台打印：端到端延迟与能耗的具体构成（按算子类型）；延迟为各算子 duration×自身 clock_period_ns 累加
+        # 控制台打印：端到端延迟、能耗与面积构成（按算子类型）；Quant/Dequant/BN 单独列出
         if full_operator_breakdown:
             total_cy = sum(v.get("cycles", 0) for v in full_operator_breakdown.values())
             total_en = sum(v.get("energy_nj", 0) for v in full_operator_breakdown.values())
+            total_area = sum(v.get("area_um2", 0) for v in full_operator_breakdown.values())
+            if total_area <= 0:
+                total_area = total_area_um2
             latency_total_ns = sum(v.get("latency_ns", 0) for v in full_operator_breakdown.values())
             if latency_total_ns <= 0:
-                latency_total_ns = total_cy * clock_ns
+                latency_total_ns = total_cy * (hw_config.clock_period or 1.0)
             log_separator()
-            log_info("端到端延迟与能耗构成 (每样本，按算子类型；延迟=各模块 cycles×自身时钟周期 累加)")
+            log_info("端到端延迟、能耗与面积构成 (每样本，按算子类型；面积来自 NeuroSim/MNSIM 或逻辑模块)")
+            log_info("  说明: Conv/Linear 用 NeuroSim 时钟（NEUROSIM_CLK_FREQ 传入，可变）；数字逻辑用 --logic_clk_freq/LOGIC_CLK_FREQ 接口，默认 1 GHz。")
+            log_info("  AffineNorm=GAM 仿射归一化（不含 BN）；BN 在 BN_EN=1 时融合进 Conv/Linear 不单独出现，BN_EN=0 时单独列出为 BN；QD_EN=1 时 Quant/Dequant 已单独列出。")
+            log_info("  查看入口: AffineNorm=pointkan_sim.operators.common_ops.gen_affine_norm_events；BN=gen_bn_events；BN 融合=dispatcher；Quant/Dequant=common_ops.gen_quant_events/gen_dequant_events。")
             log_separator()
-            log_info(f"  {'算子':<20} {'cycles':>12} {'cycles%':>8} {'latency(ns)':>14} {'latency%':>8} {'energy(nJ)':>12} {'energy%':>8}")
-            log_info("  " + "-" * 86)
+            log_info(f"  {'算子':<20} {'cycles':>12} {'cycles%':>8} {'latency(ns)':>14} {'latency%':>8} {'energy(nJ)':>12} {'energy%':>8} {'area(um2)':>12} {'area%':>8}")
+            log_info("  " + "-" * 110)
             for op_name, v in sorted(full_operator_breakdown.items(), key=lambda x: -x[1].get("latency_ns", x[1].get("cycles", 0))):
                 cy = v.get("cycles", 0)
                 en = v.get("energy_nj", 0)
+                area_u = v.get("area_um2", 0)
                 lat_ns = v.get("latency_ns", cy * clock_ns if clock_ns > 0 else 0)
                 cy_pct = (cy / total_cy * 100) if total_cy > 0 else 0
                 lat_pct = (lat_ns / latency_total_ns * 100) if latency_total_ns > 0 else 0
                 en_pct = (en / total_en * 100) if total_en > 0 else 0
-                log_info(f"  {op_name:<20} {cy:>12,.0f} {cy_pct:>7.1f}% {lat_ns:>14,.1f} {lat_pct:>7.1f}% {en:>12,.2f} {en_pct:>7.1f}%")
-            log_info("  " + "-" * 86)
-            log_info(f"  {'合计':<20} {total_cy:>12,.0f} {100.0:>7.1f}% {latency_total_ns:>14,.1f} {100.0:>7.1f}% {total_en:>12,.2f} {100.0:>7.1f}%")
-            log_info(f"  端到端延迟合计: {latency_total_ns/1e6:.4f} ms  |  能耗合计: {total_en:.2f} nJ")
+                area_pct = (area_u / total_area * 100) if total_area > 0 else 0
+                log_info(f"  {op_name:<20} {cy:>12,.0f} {cy_pct:>7.1f}% {lat_ns:>14,.1f} {lat_pct:>7.1f}% {en:>12,.2f} {en_pct:>7.1f}% {area_u:>12,.2f} {area_pct:>7.1f}%")
+            log_info("  " + "-" * 110)
+            log_info(f"  {'合计':<20} {total_cy:>12,.0f} {100.0:>7.1f}% {latency_total_ns:>14,.1f} {100.0:>7.1f}% {total_en:>12,.2f} {100.0:>7.1f}% {total_area:>12,.2f} {100.0:>7.1f}%")
+            log_info(f"  端到端延迟合计: {latency_total_ns/1e6:.4f} ms  |  能耗合计: {total_en:.2f} nJ  |  系统总面积: {total_area:.2f} um^2")
+            log_separator()
+
+        # 每个算子 cycle 的详细构成：按 (算子类型, 层名) 聚合并打印
+        if operator_cycle_detail:
+            from collections import defaultdict
+            by_op_layer: dict = defaultdict(lambda: {"cycles": 0, "latency_ns": 0.0, "energy_nj": 0.0})
+            for d in operator_cycle_detail:
+                op = d.get("operator", "other")
+                layer = d.get("layer_name", "")
+                key = (op, layer)
+                by_op_layer[key]["cycles"] += d.get("duration", 0)
+                by_op_layer[key]["latency_ns"] += d.get("latency_ns", 0.0)
+                by_op_layer[key]["energy_nj"] += d.get("energy_nj", 0.0)
+            log_separator()
+            log_info("每个算子 cycle 的详细构成（按算子类型 + 层名）")
+            log_info("  operator_cycle_detail 按 (算子, 层名) 聚合；以下按算子类型分组，组内按 cycles 降序。")
+            log_separator()
+            # 按算子类型分组
+            by_op: dict = defaultdict(list)
+            for (op, layer), v in by_op_layer.items():
+                by_op[op].append((layer, v["cycles"], v["latency_ns"], v["energy_nj"]))
+            for op_name in sorted(by_op.keys(), key=lambda o: (-sum(x[1] for x in by_op[o]), o)):
+                rows = by_op[op_name]
+                rows.sort(key=lambda x: -x[1])
+                total_op_cy = sum(r[1] for r in rows)
+                total_op_lat = sum(r[2] for r in rows)
+                total_op_en = sum(r[3] for r in rows)
+                log_info(f"  [{op_name}] 合计: cycles={total_op_cy:,.0f}, latency_ns={total_op_lat:,.1f}, energy_nJ={total_op_en:.2f}")
+                for layer_name, cy, lat_ns, en in rows:
+                    log_info(f"    layer={layer_name!r}  cycles={cy:,.0f}  latency_ns={lat_ns:,.1f}  energy_nJ={en:.2f}")
             log_separator()
 
         # 端到端 PPA 报告与算子级 breakdown 可视化：report.json + latency/energy 饼图（由 write_ppa_report_and_plots 统一写入 sim_results）
         from pointkan_sim.integration.ppa_report import build_ppa_report, write_ppa_report_and_plots
         mnsim_lat = mnsim_context["mnsim_latency_ns"] if mnsim_context else None
         mnsim_en = mnsim_context["mnsim_energy_nj"] if mnsim_context else None
+        # Tile/PE 统计：NeuroSim 与 MNSIM 均可能提供
+        rram_tile_stats = None
+        if used_neurosim_for_ppa and neurosim_result:
+            rram_tile_stats = getattr(neurosim_result, "rram_tile_stats", None)
+        if rram_tile_stats is None and mnsim_result:
+            rram_tile_stats = getattr(mnsim_result, "rram_tile_stats", None)
         ppa_report = build_ppa_report(
             eval_result,
             clock_ns,
@@ -554,9 +692,10 @@ def main() -> int:
             full_operator_breakdown=full_operator_breakdown,
             checkpoint=checkpoint_path,
             mnsim_full=args.mnsim_full,
-            rram_tile_stats=getattr(mnsim_result, "rram_tile_stats", None) if mnsim_result else None,
+            rram_tile_stats=rram_tile_stats,
             operator_sequence=operator_sequence,
             latency_per_sample_ns=getattr(eval_result, "latency_per_sample_ns", None),
+            total_area_um2=total_area_um2,
         )
         sim_results_dir = Path(args.sim_results_dir)
         sim_results_dir.mkdir(parents=True, exist_ok=True)
@@ -610,6 +749,29 @@ def main() -> int:
                         )
                     )
             log_info(f"完整硬件算子序列已写入: {seq_path}（共 {len(operator_sequence)} 条）")
+
+        # 写入每个算子 cycle 的详细构成（按算子+层名聚合）
+        if operator_cycle_detail:
+            from collections import defaultdict
+            by_op_layer_file = defaultdict(lambda: {"cycles": 0, "latency_ns": 0.0, "energy_nj": 0.0})
+            for d in operator_cycle_detail:
+                op = d.get("operator", "other")
+                layer = d.get("layer_name", "")
+                key = (op, layer)
+                by_op_layer_file[key]["cycles"] += d.get("duration", 0)
+                by_op_layer_file[key]["latency_ns"] += d.get("latency_ns", 0.0)
+                by_op_layer_file[key]["energy_nj"] += d.get("energy_nj", 0.0)
+            by_op_file = defaultdict(list)
+            for (op, layer), v in by_op_layer_file.items():
+                by_op_file[op].append((layer, v["cycles"], v["latency_ns"], v["energy_nj"]))
+            detail_path = sim_results_dir / "operator_cycle_detail.txt"
+            with open(detail_path, "w", encoding="utf-8") as f:
+                f.write("# 每个算子 cycle 的详细构成（按算子类型 + 层名聚合）\n")
+                f.write("# operator\tlayer_name\tcycles\tlatency_ns\tenergy_nJ\n")
+                for op_name in sorted(by_op_file.keys(), key=lambda o: (-sum(x[1] for x in by_op_file[o]), o)):
+                    for layer_name, cy, lat_ns, en in sorted(by_op_file[op_name], key=lambda x: -x[1]):
+                        f.write(f"{op_name}\t{layer_name}\t{cy:.0f}\t{lat_ns:.2f}\t{en:.2f}\n")
+            log_info(f"算子 cycle 构成明细已写入: {detail_path}")
 
         # 可选：导出内存交互事务（统一接口 src/dst/kind），并写聚合统计
         if args.export_memory_transactions and operator_sequence:

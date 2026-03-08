@@ -1,0 +1,42 @@
+{
+  "dataset": "waymo",
+  "data_dir": "/workspace/VoxelNet/Waymo_Mini/Waymo_mini/kitti_format/training/velodyne",
+  "n_frames_used": 50,
+  "n_total_frames": 595,
+  "num_points": 50000,
+  "fps_steps": 2048,
+  "k_neighbors": 32,
+  "do_roi": true,
+  "n_radius_samples": 102400,
+  "stats": {
+    "min": 0.04764183983206749,
+    "max": 45.22739791870117,
+    "mean": 0.5709118843078613,
+    "std": 1.0294859409332275,
+    "median": 0.3675197958946228,
+    "count": 102400,
+    "percentiles": {
+      "25": 0.24714556336402893,
+      "50": 0.3675197958946228,
+      "75": 0.5908647179603577,
+      "90": 1.0485964298248294,
+      "95": 1.5266193151474,
+      "99": 3.2285382008552452
+    },
+    "suggested_init_threshold_range_p50_p99": [
+      0.3675197958946228,
+      3.2285382008552452
+    ],
+    "suggested_init_threshold_range_p75_p95": [
+      0.5908647179603577,
+      1.5266193151474
+    ],
+    "suggested_init_threshold_range_p50_p95": [
+      0.3675197958946228,
+      1.5266193151474
+    ],
+    "suggested_init_threshold_median": 0.3675197958946228,
+    "suggested_init_threshold_p75": 0.5908647179603577,
+    "suggested_init_threshold_p90": 1.0485964298248294
+  }
+}

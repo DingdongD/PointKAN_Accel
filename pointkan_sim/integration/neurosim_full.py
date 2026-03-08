@@ -42,6 +42,11 @@ class NeuroSimFullResult:
     success: bool
     error: Optional[str] = None
     clock_period_ns: Optional[float] = None  # NeuroSim 实际工作时钟周期(ns)，用于 latency_ns -> cycles 换算
+    # 面积（um^2）：若 NeuroSim 输出则解析填入，否则为 None
+    layer_area_um2: Optional[List[float]] = None
+    total_area_um2: Optional[float] = None
+    # Tile/PE 统计：与 MNSIM rram_tile_stats 同构，便于报告；若 NeuroSim 输出则解析，否则可依 subarray/层数构造占位
+    rram_tile_stats: Optional[dict] = None
 
 
 def run_neurosim_full(
@@ -174,11 +179,35 @@ def run_neurosim_full(
 
         clock_period_ns = parse_clock_period_ns(out)
 
+        # 占位：NeuroSim 未直接输出 tile/PE，按「每层 1 个 tile、每 tile subarray 个 PE」构造，便于报告与 MNSIM 一致
+        n_layer = len(conv_linear_list)
+        per_layer = []
+        for i in range(n_layer):
+            info = conv_linear_list[i]
+            # 每层视为 1 个 tile，PE 数取 subarray（与 NeuroSim 单层 subarray 一致）
+            per_layer.append({
+                "layer_index": i,
+                "layer_type": info.layer_type,
+                "tilenum": 1,
+                "PE_count": subarray,
+                "max_row": subarray,
+                "max_column": subarray,
+            })
+        rram_tile_stats = {
+            "total_tile_count": n_layer,
+            "total_PE_count": n_layer * subarray,
+            "xbar_size": {"row": subarray, "column": subarray},
+            "pe_per_tile": subarray,
+            "per_layer": per_layer,
+            "source": "neurosim_placeholder",
+        }
+
         return NeuroSimFullResult(
             layer_latency_ns=layer_latency_ns,
             layer_energy_nj=layer_energy_nj,
             success=True,
             clock_period_ns=clock_period_ns,
+            rram_tile_stats=rram_tile_stats,
         )
     finally:
         if os.path.isdir(tmpdir):

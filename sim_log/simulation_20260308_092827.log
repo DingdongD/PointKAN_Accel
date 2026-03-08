@@ -1,0 +1,359 @@
+[2026-03-08 09:28:27] INFO     | Logger initialized: pointcloud_ppa_sim
+[2026-03-08 09:28:27] INFO     | Log level: INFO
+[2026-03-08 09:28:27] INFO     | Log file: sim_log/simulation_20260308_092827.log
+[2026-03-08 09:28:27] INFO     | ============================================================
+[2026-03-08 09:28:27] INFO     |  真实数据评估：ModelNet40 样本 + checkpoint 权重 + MNSIM 对应层 PPA
+[2026-03-08 09:28:27] INFO     | ============================================================
+[2026-03-08 09:28:27] INFO     | Checkpoint: /workspace/PointKAN-pytorch/PointKAN-elite/classification_ModelNet40/checkpoints/pointKANElite-pointkan_elite_exp-42
+[2026-03-08 09:28:27] INFO     | num_points=1024, num_classes=40, batch_size=1
+[2026-03-08 09:28:32] INFO     | 加速器: baseline (BASELINE)
+[2026-03-08 09:28:32] INFO     | CIM 并行度: 128
+[2026-03-08 09:28:32] INFO     | Bit-serial 周期: 6
+[2026-03-08 09:28:32] INFO     | 层间 buffer: size=65536 B, bandwidth=256 B/cycle, spill_to_dram=True
+[2026-03-08 09:28:32] INFO     | 层间量化/反量化: 启用 (FP32↔INT8 计入 cycle/功耗)
+[2026-03-08 09:28:32] INFO     | BN 融合: 关闭 (保留 BN 事件)
+[2026-03-08 09:28:32] INFO     | 数字逻辑时钟: 1.0000 ns (1000.00 MHz) (默认 1 GHz)
+[2026-03-08 09:28:32] INFO     | 逻辑电路并行度: layernorm=4 relu=1 spool=1 quant_dequant=1
+[2026-03-08 09:28:32] INFO     | 
+[2026-03-08 09:28:33] INFO     | ========== LayerDef 中的 conv/linear（MNSIM 使用的层）==========
+[2026-03-08 09:28:33] INFO     |   共 36 层（仅 CIM 映射的 conv1d/linear，不含 KAN 内部等）
+[2026-03-08 09:28:33] INFO     |   [0] embedding op_idx=0 conv1d  in_ch=3, out_ch=32, L=1024, K=1  indata_bytes=3072  rdata_bytes=96
+[2026-03-08 09:28:33] INFO     |   [1] LFP-stage0 op_idx=0 conv1d  in_ch=64, out_ch=64, L=0, K=1  indata_bytes=786432  rdata_bytes=4096
+[2026-03-08 09:28:33] INFO     |   [2] LFP-stage0 op_idx=4 linear  in_f=64, out_f=64  indata_bytes=786432  rdata_bytes=4096
+[2026-03-08 09:28:33] INFO     |   [3] LFP-stage0 op_idx=5 linear  in_f=64, out_f=64  indata_bytes=786432  rdata_bytes=4096
+[2026-03-08 09:28:33] INFO     |   [4] LFP-stage0 op_idx=8 conv1d  in_ch=64, out_ch=64, L=0, K=1  indata_bytes=32768  rdata_bytes=4096
+[2026-03-08 09:28:33] INFO     |   [5] LFP-stage0 op_idx=12 linear  in_f=64, out_f=64  indata_bytes=32768  rdata_bytes=4096
+[2026-03-08 09:28:33] INFO     |   [6] LFP-stage0 op_idx=13 linear  in_f=64, out_f=64  indata_bytes=32768  rdata_bytes=4096
+[2026-03-08 09:28:33] INFO     |   [7] stage-0 op_idx=0 conv1d  in_ch=64, out_ch=64, L=0, K=1  indata_bytes=32768  rdata_bytes=4096
+[2026-03-08 09:28:33] INFO     |   [8] stage-0 op_idx=3 conv1d  in_ch=64, out_ch=64, L=0, K=1  indata_bytes=32768  rdata_bytes=4096
+[2026-03-08 09:28:33] INFO     |   [9] LFP-stage1 op_idx=0 conv1d  in_ch=128, out_ch=128, L=0, K=1  indata_bytes=786432  rdata_bytes=16384
+[2026-03-08 09:28:33] INFO     |   [10] LFP-stage1 op_idx=4 linear  in_f=128, out_f=128  indata_bytes=786432  rdata_bytes=16384
+[2026-03-08 09:28:33] INFO     |   [11] LFP-stage1 op_idx=5 linear  in_f=128, out_f=128  indata_bytes=786432  rdata_bytes=16384
+[2026-03-08 09:28:33] INFO     |   [12] LFP-stage1 op_idx=8 conv1d  in_ch=128, out_ch=128, L=0, K=1  indata_bytes=32768  rdata_bytes=16384
+[2026-03-08 09:28:33] INFO     |   [13] LFP-stage1 op_idx=12 linear  in_f=128, out_f=128  indata_bytes=32768  rdata_bytes=16384
+[2026-03-08 09:28:33] INFO     |   [14] LFP-stage1 op_idx=13 linear  in_f=128, out_f=128  indata_bytes=32768  rdata_bytes=16384
+[2026-03-08 09:28:33] INFO     |   [15] stage-1 op_idx=0 conv1d  in_ch=128, out_ch=128, L=0, K=1  indata_bytes=32768  rdata_bytes=16384
+[2026-03-08 09:28:33] INFO     |   [16] stage-1 op_idx=3 conv1d  in_ch=128, out_ch=128, L=0, K=1  indata_bytes=32768  rdata_bytes=16384
+[2026-03-08 09:28:33] INFO     |   [17] LFP-stage2 op_idx=0 conv1d  in_ch=256, out_ch=256, L=0, K=1  indata_bytes=786432  rdata_bytes=65536
+[2026-03-08 09:28:33] INFO     |   [18] LFP-stage2 op_idx=4 linear  in_f=256, out_f=256  indata_bytes=786432  rdata_bytes=65536
+[2026-03-08 09:28:33] INFO     |   [19] LFP-stage2 op_idx=5 linear  in_f=256, out_f=256  indata_bytes=786432  rdata_bytes=65536
+[2026-03-08 09:28:33] INFO     |   [20] LFP-stage2 op_idx=8 conv1d  in_ch=256, out_ch=256, L=0, K=1  indata_bytes=32768  rdata_bytes=65536
+[2026-03-08 09:28:33] INFO     |   [21] LFP-stage2 op_idx=12 linear  in_f=256, out_f=256  indata_bytes=32768  rdata_bytes=65536
+[2026-03-08 09:28:33] INFO     |   [22] LFP-stage2 op_idx=13 linear  in_f=256, out_f=256  indata_bytes=32768  rdata_bytes=65536
+[2026-03-08 09:28:33] INFO     |   [23] stage-2 op_idx=0 conv1d  in_ch=256, out_ch=256, L=0, K=1  indata_bytes=32768  rdata_bytes=65536
+[2026-03-08 09:28:33] INFO     |   [24] stage-2 op_idx=3 conv1d  in_ch=256, out_ch=256, L=0, K=1  indata_bytes=32768  rdata_bytes=65536
+[2026-03-08 09:28:33] INFO     |   [25] LFP-stage3 op_idx=0 conv1d  in_ch=512, out_ch=512, L=0, K=1  indata_bytes=786432  rdata_bytes=262144
+[2026-03-08 09:28:33] INFO     |   [26] LFP-stage3 op_idx=4 linear  in_f=512, out_f=512  indata_bytes=786432  rdata_bytes=262144
+[2026-03-08 09:28:33] INFO     |   [27] LFP-stage3 op_idx=5 linear  in_f=512, out_f=512  indata_bytes=786432  rdata_bytes=262144
+[2026-03-08 09:28:33] INFO     |   [28] LFP-stage3 op_idx=8 conv1d  in_ch=512, out_ch=512, L=0, K=1  indata_bytes=32768  rdata_bytes=262144
+[2026-03-08 09:28:33] INFO     |   [29] LFP-stage3 op_idx=12 linear  in_f=512, out_f=512  indata_bytes=32768  rdata_bytes=262144
+[2026-03-08 09:28:33] INFO     |   [30] LFP-stage3 op_idx=13 linear  in_f=512, out_f=512  indata_bytes=32768  rdata_bytes=262144
+[2026-03-08 09:28:33] INFO     |   [31] stage-3 op_idx=0 conv1d  in_ch=512, out_ch=512, L=0, K=1  indata_bytes=32768  rdata_bytes=262144
+[2026-03-08 09:28:33] INFO     |   [32] stage-3 op_idx=3 conv1d  in_ch=512, out_ch=512, L=0, K=1  indata_bytes=32768  rdata_bytes=262144
+[2026-03-08 09:28:33] INFO     |   [33] classifier op_idx=0 linear  in_f=512, out_f=512  indata_bytes=512  rdata_bytes=262144
+[2026-03-08 09:28:33] INFO     |   [34] classifier op_idx=3 linear  in_f=512, out_f=256  indata_bytes=512  rdata_bytes=131072
+[2026-03-08 09:28:33] INFO     |   [35] classifier op_idx=6 linear  in_f=256, out_f=40  indata_bytes=256  rdata_bytes=10240
+[2026-03-08 09:28:33] INFO     | ========== 真实前向收集的 conv/linear（模型中所有 nn.Conv1d/nn.Linear）==========
+[2026-03-08 09:28:33] INFO     |   共 36 层
+[2026-03-08 09:28:33] INFO     |   [0] embedding.net.0 conv  in_ch=3, out_ch=32, L=1024, K=1  indata_bytes=3072  rdata_bytes=96
+[2026-03-08 09:28:33] INFO     |   [1] LFP_blocks_list.0.transfer1.net.0 conv  in_ch=64, out_ch=64, L=24, K=1  indata_bytes=786432  rdata_bytes=4096
+[2026-03-08 09:28:33] INFO     |   [2] LFP_blocks_list.0.operation1.0.fc1 fc  in_f=64, out_f=64, tokens=24  indata_bytes=786432  rdata_bytes=4096
+[2026-03-08 09:28:33] INFO     |   [3] LFP_blocks_list.0.operation1.0.fc2 fc  in_f=64, out_f=64, tokens=24  indata_bytes=786432  rdata_bytes=4096
+[2026-03-08 09:28:33] INFO     |   [4] LFP_blocks_list.0.transfer2.net.0 conv  in_ch=64, out_ch=64, L=512, K=1  indata_bytes=32768  rdata_bytes=4096
+[2026-03-08 09:28:33] INFO     |   [5] LFP_blocks_list.0.operation2.0.fc1 fc  in_f=64, out_f=64, tokens=512  indata_bytes=32768  rdata_bytes=4096
+[2026-03-08 09:28:33] INFO     |   [6] LFP_blocks_list.0.operation2.0.fc2 fc  in_f=64, out_f=64, tokens=512  indata_bytes=32768  rdata_bytes=4096
+[2026-03-08 09:28:33] INFO     |   [7] GFP_blocks_list.0.operation.0.net1.0 conv  in_ch=64, out_ch=64, L=512, K=1  indata_bytes=32768  rdata_bytes=4096
+[2026-03-08 09:28:33] INFO     |   [8] GFP_blocks_list.0.operation.0.net2.0 conv  in_ch=64, out_ch=64, L=512, K=1  indata_bytes=32768  rdata_bytes=4096
+[2026-03-08 09:28:33] INFO     |   [9] LFP_blocks_list.1.transfer1.net.0 conv  in_ch=128, out_ch=128, L=24, K=1  indata_bytes=786432  rdata_bytes=16384
+[2026-03-08 09:28:33] INFO     |   [10] LFP_blocks_list.1.operation1.0.fc1 fc  in_f=128, out_f=128, tokens=24  indata_bytes=786432  rdata_bytes=16384
+[2026-03-08 09:28:33] INFO     |   [11] LFP_blocks_list.1.operation1.0.fc2 fc  in_f=128, out_f=128, tokens=24  indata_bytes=786432  rdata_bytes=16384
+[2026-03-08 09:28:33] INFO     |   [12] LFP_blocks_list.1.transfer2.net.0 conv  in_ch=128, out_ch=128, L=256, K=1  indata_bytes=32768  rdata_bytes=16384
+[2026-03-08 09:28:33] INFO     |   [13] LFP_blocks_list.1.operation2.0.fc1 fc  in_f=128, out_f=128, tokens=256  indata_bytes=32768  rdata_bytes=16384
+[2026-03-08 09:28:33] INFO     |   [14] LFP_blocks_list.1.operation2.0.fc2 fc  in_f=128, out_f=128, tokens=256  indata_bytes=32768  rdata_bytes=16384
+[2026-03-08 09:28:33] INFO     |   [15] GFP_blocks_list.1.operation.0.net1.0 conv  in_ch=128, out_ch=128, L=256, K=1  indata_bytes=32768  rdata_bytes=16384
+[2026-03-08 09:28:33] INFO     |   [16] GFP_blocks_list.1.operation.0.net2.0 conv  in_ch=128, out_ch=128, L=256, K=1  indata_bytes=32768  rdata_bytes=16384
+[2026-03-08 09:28:33] INFO     |   [17] LFP_blocks_list.2.transfer1.net.0 conv  in_ch=256, out_ch=256, L=24, K=1  indata_bytes=786432  rdata_bytes=65536
+[2026-03-08 09:28:33] INFO     |   [18] LFP_blocks_list.2.operation1.0.fc1 fc  in_f=256, out_f=256, tokens=24  indata_bytes=786432  rdata_bytes=65536
+[2026-03-08 09:28:33] INFO     |   [19] LFP_blocks_list.2.operation1.0.fc2 fc  in_f=256, out_f=256, tokens=24  indata_bytes=786432  rdata_bytes=65536
+[2026-03-08 09:28:33] INFO     |   [20] LFP_blocks_list.2.transfer2.net.0 conv  in_ch=256, out_ch=256, L=128, K=1  indata_bytes=32768  rdata_bytes=65536
+[2026-03-08 09:28:33] INFO     |   [21] LFP_blocks_list.2.operation2.0.fc1 fc  in_f=256, out_f=256, tokens=128  indata_bytes=32768  rdata_bytes=65536
+[2026-03-08 09:28:33] INFO     |   [22] LFP_blocks_list.2.operation2.0.fc2 fc  in_f=256, out_f=256, tokens=128  indata_bytes=32768  rdata_bytes=65536
+[2026-03-08 09:28:33] INFO     |   [23] GFP_blocks_list.2.operation.0.net1.0 conv  in_ch=256, out_ch=256, L=128, K=1  indata_bytes=32768  rdata_bytes=65536
+[2026-03-08 09:28:33] INFO     |   [24] GFP_blocks_list.2.operation.0.net2.0 conv  in_ch=256, out_ch=256, L=128, K=1  indata_bytes=32768  rdata_bytes=65536
+[2026-03-08 09:28:33] INFO     |   [25] LFP_blocks_list.3.transfer1.net.0 conv  in_ch=512, out_ch=512, L=24, K=1  indata_bytes=786432  rdata_bytes=262144
+[2026-03-08 09:28:33] INFO     |   [26] LFP_blocks_list.3.operation1.0.fc1 fc  in_f=512, out_f=512, tokens=24  indata_bytes=786432  rdata_bytes=262144
+[2026-03-08 09:28:33] INFO     |   [27] LFP_blocks_list.3.operation1.0.fc2 fc  in_f=512, out_f=512, tokens=24  indata_bytes=786432  rdata_bytes=262144
+[2026-03-08 09:28:33] INFO     |   [28] LFP_blocks_list.3.transfer2.net.0 conv  in_ch=512, out_ch=512, L=64, K=1  indata_bytes=32768  rdata_bytes=262144
+[2026-03-08 09:28:33] INFO     |   [29] LFP_blocks_list.3.operation2.0.fc1 fc  in_f=512, out_f=512, tokens=64  indata_bytes=32768  rdata_bytes=262144
+[2026-03-08 09:28:33] INFO     |   [30] LFP_blocks_list.3.operation2.0.fc2 fc  in_f=512, out_f=512, tokens=64  indata_bytes=32768  rdata_bytes=262144
+[2026-03-08 09:28:33] INFO     |   [31] GFP_blocks_list.3.operation.0.net1.0 conv  in_ch=512, out_ch=512, L=64, K=1  indata_bytes=32768  rdata_bytes=262144
+[2026-03-08 09:28:33] INFO     |   [32] GFP_blocks_list.3.operation.0.net2.0 conv  in_ch=512, out_ch=512, L=64, K=1  indata_bytes=32768  rdata_bytes=262144
+[2026-03-08 09:28:33] INFO     |   [33] classifier.0 fc  in_f=512, out_f=512, tokens=1  indata_bytes=512  rdata_bytes=262144
+[2026-03-08 09:28:33] INFO     |   [34] classifier.4 fc  in_f=512, out_f=256, tokens=1  indata_bytes=512  rdata_bytes=131072
+[2026-03-08 09:28:33] INFO     |   [35] classifier.8 fc  in_f=256, out_f=40, tokens=1  indata_bytes=256  rdata_bytes=10240
+[2026-03-08 09:28:33] INFO     | ========== 非线性算子激活（BatchNorm / LayerNorm / ReLU / 池化 等）==========
+[2026-03-08 09:28:33] INFO     |   共 50 个算子（按前向顺序）
+[2026-03-08 09:28:33] INFO     |   [0] embedding.net.1  batchnorm1d  in=1×32×1024 (32768 elem, 131072 B)  out=1×32×1024 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [1] embedding.act  relu  in=1×32×1024 (32768 elem, 131072 B)  out=1×32×1024 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [2] GAM_list.0  s-pool  in=1×512×24×64 (786432 elem, 3145728 B)  out=1×64×512 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [3] LFP_blocks_list.0.transfer1.net.1  batchnorm1d  in=512×64×24 (786432 elem, 3145728 B)  out=512×64×24 (786432 elem, 3145728 B)
+[2026-03-08 09:28:33] INFO     |   [4] LFP_blocks_list.0.transfer1.act  relu  in=512×64×24 (786432 elem, 3145728 B)  out=512×64×24 (786432 elem, 3145728 B)
+[2026-03-08 09:28:33] INFO     |   [5] LFP_blocks_list.0.norm1  layernorm  in=512×24×64 (786432 elem, 3145728 B)  out=512×24×64 (786432 elem, 3145728 B)
+[2026-03-08 09:28:33] INFO     |   [6] LFP_blocks_list.0.transfer2.net.1  batchnorm1d  in=1×64×512 (32768 elem, 131072 B)  out=1×64×512 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [7] LFP_blocks_list.0.transfer2.act  relu  in=1×64×512 (32768 elem, 131072 B)  out=1×64×512 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [8] LFP_blocks_list.0.norm2  layernorm  in=1×512×64 (32768 elem, 131072 B)  out=1×512×64 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [9] GFP_blocks_list.0.operation.0.net1.1  batchnorm1d  in=1×64×512 (32768 elem, 131072 B)  out=1×64×512 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [10] GFP_blocks_list.0.operation.0.act  relu  in=1×64×512 (32768 elem, 131072 B)  out=1×64×512 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [11] GFP_blocks_list.0.operation.0.net2.1  batchnorm1d  in=1×64×512 (32768 elem, 131072 B)  out=1×64×512 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [12] GFP_blocks_list.0.operation.0.act  relu  in=1×64×512 (32768 elem, 131072 B)  out=1×64×512 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [13] GAM_list.1  s-pool  in=1×256×24×128 (786432 elem, 3145728 B)  out=1×128×256 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [14] LFP_blocks_list.1.transfer1.net.1  batchnorm1d  in=256×128×24 (786432 elem, 3145728 B)  out=256×128×24 (786432 elem, 3145728 B)
+[2026-03-08 09:28:33] INFO     |   [15] LFP_blocks_list.1.transfer1.act  relu  in=256×128×24 (786432 elem, 3145728 B)  out=256×128×24 (786432 elem, 3145728 B)
+[2026-03-08 09:28:33] INFO     |   [16] LFP_blocks_list.1.norm1  layernorm  in=256×24×128 (786432 elem, 3145728 B)  out=256×24×128 (786432 elem, 3145728 B)
+[2026-03-08 09:28:33] INFO     |   [17] LFP_blocks_list.1.transfer2.net.1  batchnorm1d  in=1×128×256 (32768 elem, 131072 B)  out=1×128×256 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [18] LFP_blocks_list.1.transfer2.act  relu  in=1×128×256 (32768 elem, 131072 B)  out=1×128×256 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [19] LFP_blocks_list.1.norm2  layernorm  in=1×256×128 (32768 elem, 131072 B)  out=1×256×128 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [20] GFP_blocks_list.1.operation.0.net1.1  batchnorm1d  in=1×128×256 (32768 elem, 131072 B)  out=1×128×256 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [21] GFP_blocks_list.1.operation.0.act  relu  in=1×128×256 (32768 elem, 131072 B)  out=1×128×256 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [22] GFP_blocks_list.1.operation.0.net2.1  batchnorm1d  in=1×128×256 (32768 elem, 131072 B)  out=1×128×256 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [23] GFP_blocks_list.1.operation.0.act  relu  in=1×128×256 (32768 elem, 131072 B)  out=1×128×256 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [24] GAM_list.2  s-pool  in=1×128×24×256 (786432 elem, 3145728 B)  out=1×256×128 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [25] LFP_blocks_list.2.transfer1.net.1  batchnorm1d  in=128×256×24 (786432 elem, 3145728 B)  out=128×256×24 (786432 elem, 3145728 B)
+[2026-03-08 09:28:33] INFO     |   [26] LFP_blocks_list.2.transfer1.act  relu  in=128×256×24 (786432 elem, 3145728 B)  out=128×256×24 (786432 elem, 3145728 B)
+[2026-03-08 09:28:33] INFO     |   [27] LFP_blocks_list.2.norm1  layernorm  in=128×24×256 (786432 elem, 3145728 B)  out=128×24×256 (786432 elem, 3145728 B)
+[2026-03-08 09:28:33] INFO     |   [28] LFP_blocks_list.2.transfer2.net.1  batchnorm1d  in=1×256×128 (32768 elem, 131072 B)  out=1×256×128 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [29] LFP_blocks_list.2.transfer2.act  relu  in=1×256×128 (32768 elem, 131072 B)  out=1×256×128 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [30] LFP_blocks_list.2.norm2  layernorm  in=1×128×256 (32768 elem, 131072 B)  out=1×128×256 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [31] GFP_blocks_list.2.operation.0.net1.1  batchnorm1d  in=1×256×128 (32768 elem, 131072 B)  out=1×256×128 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [32] GFP_blocks_list.2.operation.0.act  relu  in=1×256×128 (32768 elem, 131072 B)  out=1×256×128 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [33] GFP_blocks_list.2.operation.0.net2.1  batchnorm1d  in=1×256×128 (32768 elem, 131072 B)  out=1×256×128 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [34] GFP_blocks_list.2.operation.0.act  relu  in=1×256×128 (32768 elem, 131072 B)  out=1×256×128 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [35] GAM_list.3  s-pool  in=1×64×24×512 (786432 elem, 3145728 B)  out=1×512×64 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [36] LFP_blocks_list.3.transfer1.net.1  batchnorm1d  in=64×512×24 (786432 elem, 3145728 B)  out=64×512×24 (786432 elem, 3145728 B)
+[2026-03-08 09:28:33] INFO     |   [37] LFP_blocks_list.3.transfer1.act  relu  in=64×512×24 (786432 elem, 3145728 B)  out=64×512×24 (786432 elem, 3145728 B)
+[2026-03-08 09:28:33] INFO     |   [38] LFP_blocks_list.3.norm1  layernorm  in=64×24×512 (786432 elem, 3145728 B)  out=64×24×512 (786432 elem, 3145728 B)
+[2026-03-08 09:28:33] INFO     |   [39] LFP_blocks_list.3.transfer2.net.1  batchnorm1d  in=1×512×64 (32768 elem, 131072 B)  out=1×512×64 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [40] LFP_blocks_list.3.transfer2.act  relu  in=1×512×64 (32768 elem, 131072 B)  out=1×512×64 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [41] LFP_blocks_list.3.norm2  layernorm  in=1×64×512 (32768 elem, 131072 B)  out=1×64×512 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [42] GFP_blocks_list.3.operation.0.net1.1  batchnorm1d  in=1×512×64 (32768 elem, 131072 B)  out=1×512×64 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [43] GFP_blocks_list.3.operation.0.act  relu  in=1×512×64 (32768 elem, 131072 B)  out=1×512×64 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [44] GFP_blocks_list.3.operation.0.net2.1  batchnorm1d  in=1×512×64 (32768 elem, 131072 B)  out=1×512×64 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [45] GFP_blocks_list.3.operation.0.act  relu  in=1×512×64 (32768 elem, 131072 B)  out=1×512×64 (32768 elem, 131072 B)
+[2026-03-08 09:28:33] INFO     |   [46] classifier.1  batchnorm1d  in=1×512 (512 elem, 2048 B)  out=1×512 (512 elem, 2048 B)
+[2026-03-08 09:28:33] INFO     |   [47] act  relu  in=1×512 (512 elem, 2048 B)  out=1×512 (512 elem, 2048 B)
+[2026-03-08 09:28:33] INFO     |   [48] classifier.5  batchnorm1d  in=1×256 (256 elem, 1024 B)  out=1×256 (256 elem, 1024 B)
+[2026-03-08 09:28:33] INFO     |   [49] act  relu  in=1×256 (256 elem, 1024 B)  out=1×256 (256 elem, 1024 B)
+[2026-03-08 09:28:33] INFO     |   in/out = 输入/输出 shape；括号内为输入/输出元素数与 FP32 字节数（SPool 等可见输入激活大小）。
+[2026-03-08 09:29:32] INFO     | NeuroSim 频率/工艺: clk_freq_hz=100000000.0, technode=32
+[2026-03-08 09:29:32] INFO     | 已用 NeuroSim 全网络仿真（DNN_NeuroSim main）得到逐层 latency/energy
+[2026-03-08 09:29:32] INFO     | NeuroSim Conv/Linear 时钟: 10.0000 ns (100.00 MHz)，由 NEUROSIM_CLK_FREQ 传入（可变，不限于 100M）；数字逻辑时钟见上方
+[2026-03-08 09:29:32] INFO     | 以下层使用 NeuroSim 接口计算 PPA：
+[2026-03-08 09:29:32] INFO     |   NeuroSim [embedding.net.0] activation=[B, 3, 1024], weight=[32, 3, 1]  latency=254376.1 ns, cycles=25438, energy=528.33 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [LFP_blocks_list.0.transfer1.net.0] activation=[B, 64, 24], weight=[64, 64, 1]  latency=18572.2 ns, cycles=1858, energy=52.30 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [LFP_blocks_list.0.operation1.0.fc1] activation=[B, 24, 64], weight=[64, 64]  latency=18572.2 ns, cycles=1858, energy=52.60 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [LFP_blocks_list.0.operation1.0.fc2] activation=[B, 24, 64], weight=[64, 64]  latency=18572.2 ns, cycles=1858, energy=52.08 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [LFP_blocks_list.0.transfer2.net.0] activation=[B, 64, 512], weight=[64, 64, 1]  latency=396208.0 ns, cycles=39621, energy=1114.87 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [LFP_blocks_list.0.operation2.0.fc1] activation=[B, 512, 64], weight=[64, 64]  latency=396208.0 ns, cycles=39621, energy=1116.00 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [LFP_blocks_list.0.operation2.0.fc2] activation=[B, 512, 64], weight=[64, 64]  latency=396208.0 ns, cycles=39621, energy=1116.82 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [GFP_blocks_list.0.operation.0.net1.0] activation=[B, 64, 512], weight=[64, 64, 1]  latency=396208.0 ns, cycles=39621, energy=1114.45 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [GFP_blocks_list.0.operation.0.net2.0] activation=[B, 64, 512], weight=[64, 64, 1]  latency=396208.0 ns, cycles=39621, energy=1115.85 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [LFP_blocks_list.1.transfer1.net.0] activation=[B, 128, 24], weight=[128, 128, 1]  latency=33244.4 ns, cycles=3325, energy=151.57 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [LFP_blocks_list.1.operation1.0.fc1] activation=[B, 24, 128], weight=[128, 128]  latency=33244.4 ns, cycles=3325, energy=154.96 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [LFP_blocks_list.1.operation1.0.fc2] activation=[B, 24, 128], weight=[128, 128]  latency=33244.4 ns, cycles=3325, energy=151.59 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [LFP_blocks_list.1.transfer2.net.0] activation=[B, 128, 256], weight=[128, 128, 1]  latency=354608.0 ns, cycles=35461, energy=1630.23 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [LFP_blocks_list.1.operation2.0.fc1] activation=[B, 256, 128], weight=[128, 128]  latency=354608.0 ns, cycles=35461, energy=1629.51 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [LFP_blocks_list.1.operation2.0.fc2] activation=[B, 256, 128], weight=[128, 128]  latency=354608.0 ns, cycles=35461, energy=1626.79 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [GFP_blocks_list.1.operation.0.net1.0] activation=[B, 128, 256], weight=[128, 128, 1]  latency=354608.0 ns, cycles=35461, energy=1635.11 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [GFP_blocks_list.1.operation.0.net2.0] activation=[B, 128, 256], weight=[128, 128, 1]  latency=354608.0 ns, cycles=35461, energy=1629.49 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [LFP_blocks_list.2.transfer1.net.0] activation=[B, 256, 24], weight=[256, 256, 1]  latency=66489.0 ns, cycles=6649, energy=562.05 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [LFP_blocks_list.2.operation1.0.fc1] activation=[B, 24, 256], weight=[256, 256]  latency=66489.0 ns, cycles=6649, energy=557.47 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [LFP_blocks_list.2.operation1.0.fc2] activation=[B, 24, 256], weight=[256, 256]  latency=66489.0 ns, cycles=6649, energy=558.04 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [LFP_blocks_list.2.transfer2.net.0] activation=[B, 256, 128], weight=[256, 256, 1]  latency=354608.0 ns, cycles=35461, energy=2989.72 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [LFP_blocks_list.2.operation2.0.fc1] activation=[B, 128, 256], weight=[256, 256]  latency=354608.0 ns, cycles=35461, energy=3002.79 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [LFP_blocks_list.2.operation2.0.fc2] activation=[B, 128, 256], weight=[256, 256]  latency=354608.0 ns, cycles=35461, energy=2987.40 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [GFP_blocks_list.2.operation.0.net1.0] activation=[B, 256, 128], weight=[256, 256, 1]  latency=354608.0 ns, cycles=35461, energy=2989.48 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [GFP_blocks_list.2.operation.0.net2.0] activation=[B, 256, 128], weight=[256, 256, 1]  latency=354608.0 ns, cycles=35461, energy=2997.65 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [LFP_blocks_list.3.transfer1.net.0] activation=[B, 512, 24], weight=[512, 512, 1]  latency=132978.0 ns, cycles=13298, energy=2150.29 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [LFP_blocks_list.3.operation1.0.fc1] activation=[B, 24, 512], weight=[512, 512]  latency=132978.0 ns, cycles=13298, energy=2149.66 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [LFP_blocks_list.3.operation1.0.fc2] activation=[B, 24, 512], weight=[512, 512]  latency=132978.0 ns, cycles=13298, energy=2131.46 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [LFP_blocks_list.3.transfer2.net.0] activation=[B, 512, 64], weight=[512, 512, 1]  latency=354608.0 ns, cycles=35461, energy=5734.80 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [LFP_blocks_list.3.operation2.0.fc1] activation=[B, 64, 512], weight=[512, 512]  latency=354608.0 ns, cycles=35461, energy=5709.46 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [LFP_blocks_list.3.operation2.0.fc2] activation=[B, 64, 512], weight=[512, 512]  latency=354608.0 ns, cycles=35461, energy=5731.55 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [GFP_blocks_list.3.operation.0.net1.0] activation=[B, 512, 64], weight=[512, 512, 1]  latency=354608.0 ns, cycles=35461, energy=5722.64 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [GFP_blocks_list.3.operation.0.net2.0] activation=[B, 512, 64], weight=[512, 512, 1]  latency=354608.0 ns, cycles=35461, energy=5705.46 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [classifier.0] activation=[B, 512], weight=[512, 512]  latency=5540.7 ns, cycles=555, energy=89.34 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [classifier.4] activation=[B, 512], weight=[256, 512]  latency=4318.1 ns, cycles=432, energy=45.35 nJ
+[2026-03-08 09:29:32] INFO     |   NeuroSim [classifier.8] activation=[B, 256], weight=[40, 256]  latency=1738.7 ns, cycles=174, energy=4.52 nJ
+[2026-03-08 09:29:32] INFO     |   （共 36 层）
+[2026-03-08 09:29:32] INFO     | 真实前向共 36 个 conv/linear；全网络 PPA 使用 36 层
+[2026-03-08 09:29:33] INFO     | 
+运行仿真: 6014 个事件, 约 21,750,614 周期...
+[2026-03-08 09:29:33] INFO     | ============================================================
+[2026-03-08 09:29:33] INFO     | 真实数据评估结果 (ModelNet40 测试集 + 对应层 NeuroSim PPA)
+[2026-03-08 09:29:33] INFO     | ============================================================
+[2026-03-08 09:29:33] INFO     |   样本数:        1
+[2026-03-08 09:29:33] INFO     |   准确率:        100.00%
+[2026-03-08 09:29:33] INFO     |   平衡准确率:    100.00%
+[2026-03-08 09:29:33] INFO     |   Test Loss:     1.3207
+[2026-03-08 09:29:33] INFO     |   总周期:        21,750,614 cycles
+[2026-03-08 09:29:33] INFO     |   总能耗:        884365.03 nJ
+[2026-03-08 09:29:33] INFO     |   端到端延迟:    29.2387 ms (每样本, 各模块按自身时钟换算 ns 后累加)
+[2026-03-08 09:29:33] INFO     |   每样本周期:    21750614.0 cycles
+[2026-03-08 09:29:33] INFO     |   每样本能耗:    884365.03 nJ
+[2026-03-08 09:29:33] INFO     | ============================================================
+[2026-03-08 09:29:33] INFO     | 
+运行仿真: 6014 个事件, 约 21,750,614 周期...
+[2026-03-08 09:29:33] INFO     | ============================================================
+[2026-03-08 09:29:33] INFO     | 端到端延迟与能耗构成 (每样本，按算子类型；延迟=各模块 cycles×自身时钟周期 累加)
+[2026-03-08 09:29:33] INFO     |   说明: Conv/Linear 用 NeuroSim 时钟（NEUROSIM_CLK_FREQ 传入，可变）；数字逻辑用 --logic_clk_freq/LOGIC_CLK_FREQ 接口，默认 1 GHz。
+[2026-03-08 09:29:33] INFO     |   AffineNorm=GAM 仿射归一化（不含 BN）；BN 在 BN_EN=1 时融合进 Conv/Linear 不单独出现，BN_EN=0 时单独列出为 BN；QD_EN=1 时 Quant/Dequant 已单独列出。
+[2026-03-08 09:29:33] INFO     |   查看入口: AffineNorm=pointkan_sim.operators.common_ops.gen_affine_norm_events；BN=gen_bn_events；BN 融合=dispatcher；Quant/Dequant=common_ops.gen_quant_events/gen_dequant_events。
+[2026-03-08 09:29:33] INFO     | ============================================================
+[2026-03-08 09:29:33] INFO     |   算子                         cycles  cycles%    latency(ns) latency%   energy(nJ)  energy%
+[2026-03-08 09:29:33] INFO     |   --------------------------------------------------------------------------------------
+[2026-03-08 09:29:33] INFO     |   SPool                  19,922,944    91.6%   19,922,944.0    68.1%   338,690.05    38.3%
+[2026-03-08 09:29:33] INFO     |   Conv1d                    488,580     2.2%    4,885,800.0    16.7%    37,824.31     4.3%
+[2026-03-08 09:29:33] INFO     |   Linear                    343,429     1.6%    3,434,290.0    11.7%    28,867.41     3.3%
+[2026-03-08 09:29:33] INFO     |   LayerNorm                 658,304     3.0%      658,304.0     2.3%   473,978.88    53.6%
+[2026-03-08 09:29:33] INFO     |   AdaptiveMaxPool1d         163,840     0.8%      163,840.0     0.6%     2,785.28     0.3%
+[2026-03-08 09:29:33] INFO     |   KNN                        49,920     0.2%       49,920.0     0.2%        48.00     0.0%
+[2026-03-08 09:29:33] INFO     |   LayerBuffer                41,902     0.2%       41,902.0     0.1%     1,871.71     0.2%
+[2026-03-08 09:29:33] INFO     |   ReLU                       37,376     0.2%       37,376.0     0.1%        16.82     0.0%
+[2026-03-08 09:29:33] INFO     |   FPS                        35,520     0.2%       35,520.0     0.1%        48.00     0.0%
+[2026-03-08 09:29:33] INFO     |   ADD                         8,704     0.0%        8,704.0     0.0%       233.68     0.0%
+[2026-03-08 09:29:33] INFO     |   Quant                          36     0.0%           36.0     0.0%         0.09     0.0%
+[2026-03-08 09:29:33] INFO     |   Dequant                        36     0.0%           36.0     0.0%         0.09     0.0%
+[2026-03-08 09:29:33] INFO     |   BN                             19     0.0%           19.0     0.0%         0.00     0.0%
+[2026-03-08 09:29:33] INFO     |   AffineNorm                      4     0.0%            4.0     0.0%         0.72     0.0%
+[2026-03-08 09:29:33] INFO     |   --------------------------------------------------------------------------------------
+[2026-03-08 09:29:33] INFO     |   合计                     21,750,614   100.0%   29,238,695.0   100.0%   884,365.03   100.0%
+[2026-03-08 09:29:33] INFO     |   端到端延迟合计: 29.2387 ms  |  能耗合计: 884365.03 nJ
+[2026-03-08 09:29:33] INFO     | ============================================================
+[2026-03-08 09:29:33] INFO     | ============================================================
+[2026-03-08 09:29:33] INFO     | 每个算子 cycle 的详细构成（按算子类型 + 层名）
+[2026-03-08 09:29:33] INFO     |   operator_cycle_detail 按 (算子, 层名) 聚合；以下按算子类型分组，组内按 cycles 降序。
+[2026-03-08 09:29:33] INFO     | ============================================================
+[2026-03-08 09:29:33] INFO     |   [SPool] 合计: cycles=19,922,944, latency_ns=19,922,944.0, energy_nJ=338690.05
+[2026-03-08 09:29:33] INFO     |     layer='GAM-stage0'  cycles=4,980,736  latency_ns=4,980,736.0  energy_nJ=84672.51
+[2026-03-08 09:29:33] INFO     |     layer='GAM-stage1'  cycles=4,980,736  latency_ns=4,980,736.0  energy_nJ=84672.51
+[2026-03-08 09:29:33] INFO     |     layer='GAM-stage2'  cycles=4,980,736  latency_ns=4,980,736.0  energy_nJ=84672.51
+[2026-03-08 09:29:33] INFO     |     layer='GAM-stage3'  cycles=4,980,736  latency_ns=4,980,736.0  energy_nJ=84672.51
+[2026-03-08 09:29:33] INFO     |   [LayerNorm] 合计: cycles=658,304, latency_ns=658,304.0, energy_nJ=473978.88
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage3'  cycles=165,392  latency_ns=165,392.0  energy_nJ=119082.24
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage2'  cycles=164,624  latency_ns=164,624.0  energy_nJ=118529.28
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage1'  cycles=164,240  latency_ns=164,240.0  energy_nJ=118252.80
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage0'  cycles=164,048  latency_ns=164,048.0  energy_nJ=118114.56
+[2026-03-08 09:29:33] INFO     |   [Conv1d] 合计: cycles=488,580, latency_ns=4,885,800.0, energy_nJ=37824.31
+[2026-03-08 09:29:33] INFO     |     layer='stage-0'  cycles=79,242  latency_ns=792,420.0  energy_nJ=2230.31
+[2026-03-08 09:29:33] INFO     |     layer='stage-1'  cycles=70,922  latency_ns=709,220.0  energy_nJ=3264.60
+[2026-03-08 09:29:33] INFO     |     layer='stage-2'  cycles=70,922  latency_ns=709,220.0  energy_nJ=5987.14
+[2026-03-08 09:29:33] INFO     |     layer='stage-3'  cycles=70,922  latency_ns=709,220.0  energy_nJ=11428.09
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage3'  cycles=48,759  latency_ns=487,590.0  energy_nJ=7885.09
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage2'  cycles=42,110  latency_ns=421,100.0  energy_nJ=3551.78
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage0'  cycles=41,479  latency_ns=414,790.0  energy_nJ=1167.17
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage1'  cycles=38,786  latency_ns=387,860.0  energy_nJ=1781.80
+[2026-03-08 09:29:33] INFO     |     layer='embedding'  cycles=25,438  latency_ns=254,380.0  energy_nJ=528.33
+[2026-03-08 09:29:33] INFO     |   [Linear] 合计: cycles=343,429, latency_ns=3,434,290.0, energy_nJ=28867.41
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage3'  cycles=97,518  latency_ns=975,180.0  energy_nJ=15722.13
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage2'  cycles=84,220  latency_ns=842,200.0  energy_nJ=7105.71
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage0'  cycles=82,958  latency_ns=829,580.0  energy_nJ=2337.51
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage1'  cycles=77,572  latency_ns=775,720.0  energy_nJ=3562.85
+[2026-03-08 09:29:33] INFO     |     layer='classifier'  cycles=1,161  latency_ns=11,610.0  energy_nJ=139.21
+[2026-03-08 09:29:33] INFO     |   [AdaptiveMaxPool1d] 合计: cycles=163,840, latency_ns=163,840.0, energy_nJ=2785.28
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage0'  cycles=32,768  latency_ns=32,768.0  energy_nJ=557.06
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage1'  cycles=32,768  latency_ns=32,768.0  energy_nJ=557.06
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage2'  cycles=32,768  latency_ns=32,768.0  energy_nJ=557.06
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage3'  cycles=32,768  latency_ns=32,768.0  energy_nJ=557.06
+[2026-03-08 09:29:33] INFO     |     layer='global_maxpool'  cycles=32,768  latency_ns=32,768.0  energy_nJ=557.06
+[2026-03-08 09:29:33] INFO     |   [KNN] 合计: cycles=49,920, latency_ns=49,920.0, energy_nJ=48.00
+[2026-03-08 09:29:33] INFO     |     layer='GAM-stage0'  cycles=33,792  latency_ns=33,792.0  energy_nJ=25.60
+[2026-03-08 09:29:33] INFO     |     layer='GAM-stage1'  cycles=10,752  latency_ns=10,752.0  energy_nJ=12.80
+[2026-03-08 09:29:33] INFO     |     layer='GAM-stage2'  cycles=3,840  latency_ns=3,840.0  energy_nJ=6.40
+[2026-03-08 09:29:33] INFO     |     layer='GAM-stage3'  cycles=1,536  latency_ns=1,536.0  energy_nJ=3.20
+[2026-03-08 09:29:33] INFO     |   [LayerBuffer] 合计: cycles=41,902, latency_ns=41,902.0, energy_nJ=1871.71
+[2026-03-08 09:29:33] INFO     |     layer='GAM-stage0'  cycles=4,608  latency_ns=4,608.0  energy_nJ=205.82
+[2026-03-08 09:29:33] INFO     |     layer='GAM-stage1'  cycles=4,608  latency_ns=4,608.0  energy_nJ=205.82
+[2026-03-08 09:29:33] INFO     |     layer='GAM-stage2'  cycles=4,608  latency_ns=4,608.0  energy_nJ=205.82
+[2026-03-08 09:29:33] INFO     |     layer='GAM-stage3'  cycles=4,608  latency_ns=4,608.0  energy_nJ=205.82
+[2026-03-08 09:29:33] INFO     |     layer='embedding'  cycles=2,688  latency_ns=2,688.0  energy_nJ=122.11
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage3'  cycles=2,312  latency_ns=2,312.0  energy_nJ=102.93
+[2026-03-08 09:29:33] INFO     |     layer='stage-3'  cycles=2,312  latency_ns=2,312.0  energy_nJ=102.93
+[2026-03-08 09:29:33] INFO     |     layer='global_maxpool'  cycles=2,312  latency_ns=2,312.0  energy_nJ=102.93
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage2'  cycles=2,308  latency_ns=2,308.0  energy_nJ=102.92
+[2026-03-08 09:29:33] INFO     |     layer='stage-2'  cycles=2,308  latency_ns=2,308.0  energy_nJ=102.92
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage1'  cycles=2,306  latency_ns=2,306.0  energy_nJ=102.92
+[2026-03-08 09:29:33] INFO     |     layer='stage-1'  cycles=2,306  latency_ns=2,306.0  energy_nJ=102.92
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage0'  cycles=2,305  latency_ns=2,305.0  energy_nJ=102.91
+[2026-03-08 09:29:33] INFO     |     layer='stage-0'  cycles=2,305  latency_ns=2,305.0  energy_nJ=102.91
+[2026-03-08 09:29:33] INFO     |     layer='classifier'  cycles=8  latency_ns=8.0  energy_nJ=0.02
+[2026-03-08 09:29:33] INFO     |   [ReLU] 合计: cycles=37,376, latency_ns=37,376.0, energy_nJ=16.82
+[2026-03-08 09:29:33] INFO     |     layer='embedding'  cycles=32,768  latency_ns=32,768.0  energy_nJ=14.75
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage3'  cycles=1,024  latency_ns=1,024.0  energy_nJ=0.46
+[2026-03-08 09:29:33] INFO     |     layer='stage-3'  cycles=1,024  latency_ns=1,024.0  energy_nJ=0.46
+[2026-03-08 09:29:33] INFO     |     layer='classifier'  cycles=768  latency_ns=768.0  energy_nJ=0.35
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage2'  cycles=512  latency_ns=512.0  energy_nJ=0.23
+[2026-03-08 09:29:33] INFO     |     layer='stage-2'  cycles=512  latency_ns=512.0  energy_nJ=0.23
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage1'  cycles=256  latency_ns=256.0  energy_nJ=0.12
+[2026-03-08 09:29:33] INFO     |     layer='stage-1'  cycles=256  latency_ns=256.0  energy_nJ=0.12
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage0'  cycles=128  latency_ns=128.0  energy_nJ=0.06
+[2026-03-08 09:29:33] INFO     |     layer='stage-0'  cycles=128  latency_ns=128.0  energy_nJ=0.06
+[2026-03-08 09:29:33] INFO     |   [FPS] 合计: cycles=35,520, latency_ns=35,520.0, energy_nJ=48.00
+[2026-03-08 09:29:33] INFO     |     layer='GAM-stage0'  cycles=26,112  latency_ns=26,112.0  energy_nJ=25.60
+[2026-03-08 09:29:33] INFO     |     layer='GAM-stage1'  cycles=6,912  latency_ns=6,912.0  energy_nJ=12.80
+[2026-03-08 09:29:33] INFO     |     layer='GAM-stage2'  cycles=1,920  latency_ns=1,920.0  energy_nJ=6.40
+[2026-03-08 09:29:33] INFO     |     layer='GAM-stage3'  cycles=576  latency_ns=576.0  energy_nJ=3.20
+[2026-03-08 09:29:33] INFO     |   [ADD] 合计: cycles=8,704, latency_ns=8,704.0, energy_nJ=233.68
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage0'  cycles=1,536  latency_ns=1,536.0  energy_nJ=39.01
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage1'  cycles=1,536  latency_ns=1,536.0  energy_nJ=39.01
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage2'  cycles=1,536  latency_ns=1,536.0  energy_nJ=39.01
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage3'  cycles=1,536  latency_ns=1,536.0  energy_nJ=39.01
+[2026-03-08 09:29:33] INFO     |     layer='stage-0'  cycles=640  latency_ns=640.0  energy_nJ=19.40
+[2026-03-08 09:29:33] INFO     |     layer='stage-1'  cycles=640  latency_ns=640.0  energy_nJ=19.40
+[2026-03-08 09:29:33] INFO     |     layer='stage-2'  cycles=640  latency_ns=640.0  energy_nJ=19.40
+[2026-03-08 09:29:33] INFO     |     layer='stage-3'  cycles=640  latency_ns=640.0  energy_nJ=19.40
+[2026-03-08 09:29:33] INFO     |   [Dequant] 合计: cycles=36, latency_ns=36.0, energy_nJ=0.09
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage0'  cycles=6  latency_ns=6.0  energy_nJ=0.02
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage1'  cycles=6  latency_ns=6.0  energy_nJ=0.02
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage2'  cycles=6  latency_ns=6.0  energy_nJ=0.02
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage3'  cycles=6  latency_ns=6.0  energy_nJ=0.02
+[2026-03-08 09:29:33] INFO     |     layer='classifier'  cycles=3  latency_ns=3.0  energy_nJ=0.01
+[2026-03-08 09:29:33] INFO     |     layer='stage-0'  cycles=2  latency_ns=2.0  energy_nJ=0.01
+[2026-03-08 09:29:33] INFO     |     layer='stage-1'  cycles=2  latency_ns=2.0  energy_nJ=0.01
+[2026-03-08 09:29:33] INFO     |     layer='stage-2'  cycles=2  latency_ns=2.0  energy_nJ=0.01
+[2026-03-08 09:29:33] INFO     |     layer='stage-3'  cycles=2  latency_ns=2.0  energy_nJ=0.01
+[2026-03-08 09:29:33] INFO     |     layer='embedding'  cycles=1  latency_ns=1.0  energy_nJ=0.00
+[2026-03-08 09:29:33] INFO     |   [Quant] 合计: cycles=36, latency_ns=36.0, energy_nJ=0.09
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage0'  cycles=6  latency_ns=6.0  energy_nJ=0.02
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage1'  cycles=6  latency_ns=6.0  energy_nJ=0.02
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage2'  cycles=6  latency_ns=6.0  energy_nJ=0.02
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage3'  cycles=6  latency_ns=6.0  energy_nJ=0.02
+[2026-03-08 09:29:33] INFO     |     layer='classifier'  cycles=3  latency_ns=3.0  energy_nJ=0.01
+[2026-03-08 09:29:33] INFO     |     layer='stage-0'  cycles=2  latency_ns=2.0  energy_nJ=0.01
+[2026-03-08 09:29:33] INFO     |     layer='stage-1'  cycles=2  latency_ns=2.0  energy_nJ=0.01
+[2026-03-08 09:29:33] INFO     |     layer='stage-2'  cycles=2  latency_ns=2.0  energy_nJ=0.01
+[2026-03-08 09:29:33] INFO     |     layer='stage-3'  cycles=2  latency_ns=2.0  energy_nJ=0.01
+[2026-03-08 09:29:33] INFO     |     layer='embedding'  cycles=1  latency_ns=1.0  energy_nJ=0.00
+[2026-03-08 09:29:33] INFO     |   [BN] 合计: cycles=19, latency_ns=19.0, energy_nJ=0.00
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage0'  cycles=2  latency_ns=2.0  energy_nJ=0.00
+[2026-03-08 09:29:33] INFO     |     layer='stage-0'  cycles=2  latency_ns=2.0  energy_nJ=0.00
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage1'  cycles=2  latency_ns=2.0  energy_nJ=0.00
+[2026-03-08 09:29:33] INFO     |     layer='stage-1'  cycles=2  latency_ns=2.0  energy_nJ=0.00
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage2'  cycles=2  latency_ns=2.0  energy_nJ=0.00
+[2026-03-08 09:29:33] INFO     |     layer='stage-2'  cycles=2  latency_ns=2.0  energy_nJ=0.00
+[2026-03-08 09:29:33] INFO     |     layer='LFP-stage3'  cycles=2  latency_ns=2.0  energy_nJ=0.00
+[2026-03-08 09:29:33] INFO     |     layer='stage-3'  cycles=2  latency_ns=2.0  energy_nJ=0.00
+[2026-03-08 09:29:33] INFO     |     layer='classifier'  cycles=2  latency_ns=2.0  energy_nJ=0.00
+[2026-03-08 09:29:33] INFO     |     layer='embedding'  cycles=1  latency_ns=1.0  energy_nJ=0.00
+[2026-03-08 09:29:33] INFO     |   [AffineNorm] 合计: cycles=4, latency_ns=4.0, energy_nJ=0.72
+[2026-03-08 09:29:33] INFO     |     layer='GAM-stage0'  cycles=1  latency_ns=1.0  energy_nJ=0.18
+[2026-03-08 09:29:33] INFO     |     layer='GAM-stage1'  cycles=1  latency_ns=1.0  energy_nJ=0.18
+[2026-03-08 09:29:33] INFO     |     layer='GAM-stage2'  cycles=1  latency_ns=1.0  energy_nJ=0.18
+[2026-03-08 09:29:33] INFO     |     layer='GAM-stage3'  cycles=1  latency_ns=1.0  energy_nJ=0.18
+[2026-03-08 09:29:33] INFO     | ============================================================
+[2026-03-08 09:29:33] INFO     | NeuroSim 逐层 PPA 与 shape 已写入: sim_results/neurosim_layer_ppa.csv（共 36 层）
+[2026-03-08 09:29:33] INFO     | PPA 报告已写入: sim_results/report.json
+[2026-03-08 09:29:34] INFO     | PPA 图表已写入: sim_results (2 张)
+[2026-03-08 09:29:34] INFO     | 完整硬件算子序列已写入: sim_results/operator_sequence.txt（共 6014 条）
+[2026-03-08 09:29:34] INFO     | 算子 cycle 构成明细已写入: sim_results/operator_cycle_detail.txt
+[2026-03-08 09:29:34] INFO     | 内存交互事务已写入: sim_results/memory_transactions.txt（共 1991 条）
+[2026-03-08 09:29:34] INFO     | 内存交互聚合已写入: sim_results/memory_transactions_summary.txt

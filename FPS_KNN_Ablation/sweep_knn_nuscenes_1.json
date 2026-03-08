@@ -1,0 +1,75 @@
+{
+  "dataset": "nuscenes",
+  "data_dir": "/workspace/VoxelNet/Nuscenes_Mini/sweeps/LIDAR_TOP",
+  "n_total_frames": 3531,
+  "max_samples_used": 20,
+  "num_points": 50000,
+  "fps_steps": 2048,
+  "k_neighbors": 32,
+  "min_candidates_ratio": 1.1,
+  "best_by_iou_coarse_fine": {
+    "init_threshold": 0.6,
+    "tol": 0.05,
+    "max_iter": 10,
+    "iou_coarse_fine_vs_vanilla": 0.9272295236587524,
+    "iou_adaptive_vs_vanilla": 0.8886436223983765
+  },
+  "grid": [
+    {
+      "init_threshold": 0.6,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.9272295236587524,
+      "iou_adaptive_vs_vanilla": 0.8886436223983765,
+      "time_sec": 516.8942
+    },
+    {
+      "init_threshold": 0.55,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.9229946136474609,
+      "iou_adaptive_vs_vanilla": 0.8618572354316711,
+      "time_sec": 394.394
+    },
+    {
+      "init_threshold": 0.5,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.9172000885009766,
+      "iou_adaptive_vs_vanilla": 0.8761106729507446,
+      "time_sec": 202.0006
+    },
+    {
+      "init_threshold": 0.45,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.9093042612075806,
+      "iou_adaptive_vs_vanilla": 0.8473750948905945,
+      "time_sec": 206.618
+    },
+    {
+      "init_threshold": 0.4,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.8960856199264526,
+      "iou_adaptive_vs_vanilla": 0.8523295521736145,
+      "time_sec": 520.6482
+    },
+    {
+      "init_threshold": 0.35,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.844103991985321,
+      "iou_adaptive_vs_vanilla": 0.8040333986282349,
+      "time_sec": 524.6469
+    },
+    {
+      "init_threshold": 0.3,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.8267079591751099,
+      "iou_adaptive_vs_vanilla": 0.7860531806945801,
+      "time_sec": 532.9204
+    }
+  ]
+}

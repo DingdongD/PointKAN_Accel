@@ -41,6 +41,8 @@ from pointkan_sim.configs.hw_config import (
     get_accelerator_config,
     list_accelerator_configs,
     HardwareConfig,
+    set_digital_clock_freq_hz,
+    set_logic_parallelism,
 )
 from pointkan_sim.network.pointkan_net import (
     LayerDef,
@@ -236,6 +238,11 @@ def parse_args() -> argparse.Namespace:
         default=SIM_LOG_DIR,
         help="仿真日志与报告等输出统一保存目录，默认 sim_log",
     )
+    parser.add_argument("--logic_par_layernorm", type=int, default=None, metavar="N", help="逻辑电路 LayerNorm 并行度（≥1）")
+    parser.add_argument("--logic_par_relu", type=int, default=None, metavar="N", help="逻辑电路 ReLU 并行度（≥1）")
+    parser.add_argument("--logic_par_spool", type=int, default=None, metavar="N", help="逻辑电路 SPool 并行度（≥1）")
+    parser.add_argument("--logic_par_quant_dequant", type=int, default=None, metavar="N", help="逻辑电路量化/反量化并行度（≥1）")
+    parser.add_argument("--logic_clk_freq", type=float, default=None, metavar="Hz", help="数字逻辑时钟频率(Hz)，默认 1e9=1GHz")
 
     return parser.parse_args()
 
@@ -454,16 +461,36 @@ def simulate_network(
     latency_ms = latency_ns / 1e6
     avg_power = (total_energy / latency_ns * 1e3) if latency_ns > 0 else 0.0
 
-    # 按算子类型聚合周期、能耗与延迟(ns)，供端到端 PPA 按算子类型统计（FPS/KNN/BN/Conv/Linear 等）
+    # 按算子类型聚合周期、能耗与延迟(ns)；Quant/Dequant/BN 单独成行（stage 区分）
     operator_breakdown: Dict[str, Dict[str, float]] = {}
+    # 每个算子每次出现的 cycle 构成：(operator_display, layer_name) -> duration，用于打印明细
+    operator_cycle_detail: List[Dict[str, Any]] = []
     for e in sim_result.events:
-        op_name = (e.operator or e.operation or "other").strip() or "other"
+        stage = (e.stage or "").strip()
+        if stage == "quant":
+            op_name = "Quant"
+        elif stage == "dequant":
+            op_name = "Dequant"
+        else:
+            op_name = (e.operator or e.operation or "other").strip() or "other"
         clk_ns = getattr(e, "clock_period_ns", 1.0)
         if op_name not in operator_breakdown:
-            operator_breakdown[op_name] = {"cycles": 0.0, "energy_nj": 0.0, "latency_ns": 0.0}
+            operator_breakdown[op_name] = {"cycles": 0.0, "energy_nj": 0.0, "latency_ns": 0.0, "area_um2": 0.0}
         operator_breakdown[op_name]["cycles"] += e.duration
         operator_breakdown[op_name]["energy_nj"] += e.energy
         operator_breakdown[op_name]["latency_ns"] += e.duration * clk_ns
+        meta = getattr(e, "metadata", None) or {}
+        area_um2 = meta.get("area_um2")
+        if area_um2 is not None and isinstance(area_um2, (int, float)):
+            operator_breakdown[op_name]["area_um2"] = operator_breakdown[op_name].get("area_um2", 0) + float(area_um2)
+        layer_name = meta.get("layer_name", "")
+        operator_cycle_detail.append({
+            "operator": op_name,
+            "layer_name": layer_name,
+            "duration": e.duration,
+            "latency_ns": e.duration * clk_ns,
+            "energy_nj": e.energy,
+        })
 
     # 按执行顺序生成完整硬件算子序列（与 constants 中键名一致，便于导出 operator_sequence.txt）
     events_sorted = sorted(sim_result.events, key=lambda e: (e.cycle, getattr(e, "event_id", 0)))
@@ -483,6 +510,28 @@ def simulate_network(
             KEY_ENERGY_NJ: round(e.energy, 4),
         })
 
+    # 逻辑模块面积（共享模块只计一次）：未从 MNSIM/NeuroSim 得到面积的算子用 hw_config 对应模块面积
+    logic = getattr(hw_config, "logic_circuit", None)
+    if logic:
+        logic_area_map = {
+            "LayerNorm": float(getattr(getattr(logic, "layernorm", None), "area", 0) or 0),
+            "ReLU": float(getattr(getattr(logic, "relu", None), "area", 0) or 0),
+            "SPool": float(getattr(getattr(logic, "spool", None), "area", 0) or 0),
+            "AdaptiveMaxPool1d": float(getattr(getattr(logic, "spool", None), "area", 0) or 0),
+            "BN": float(getattr(getattr(logic, "batchnorm1d", None), "area", 0) or 0),
+            "AffineNorm": 0.0,
+            "Quant": float(getattr(getattr(logic, "quant_dequant", None), "area", 0) or 0),
+            "Dequant": float(getattr(getattr(logic, "quant_dequant", None), "area", 0) or 0),
+        }
+        for op_name, area in logic_area_map.items():
+            if op_name in operator_breakdown and operator_breakdown[op_name].get("area_um2", 0) == 0:
+                operator_breakdown[op_name]["area_um2"] = area
+    total_area_um2 = sum(v.get("area_um2", 0) for v in operator_breakdown.values())
+
+    # 确保所有条目有 area_um2 键（用于报告）
+    for v in operator_breakdown.values():
+        v.setdefault("area_um2", 0.0)
+
     # 统一内存事务接口：将不同层级内存交互映射为 src/dst/kind，便于复用分析
     memory_txns = extract_memory_transactions(operator_sequence)
     memory_txn_summary = summarize_memory_transactions(memory_txns)
@@ -499,12 +548,14 @@ def simulate_network(
         "layer_results": layer_results,
         "sim_result": sim_result,
         "operator_breakdown": operator_breakdown,
+        "operator_cycle_detail": operator_cycle_detail,
         "operator_sequence": operator_sequence,
         "memory_transactions": [tx.to_dict() for tx in memory_txns],
         "memory_transactions_summary": [
             {"src": src, "dst": dst, "kind": kind, "count": cnt}
             for (src, dst, kind), cnt in sorted(memory_txn_summary.items(), key=lambda x: (-x[1], x[0]))
         ],
+        "total_area_um2": total_area_um2,
     }
     if activation_shapes is not None:
         out["activation_shapes"] = [s.to_dict() for s in activation_shapes]
@@ -661,8 +712,16 @@ def run_demo(args: argparse.Namespace) -> Dict[str, Any]:
     """
     log_section("演示: PointKAN on baseline")
     hw_config = get_accelerator_config(args.accelerator)
+    set_digital_clock_freq_hz(hw_config, getattr(args, "logic_clk_freq", None))
     hw_config.enable_w8a8_quant_dequant = getattr(args, "enable_w8a8_quant_dequant", False)
     hw_config.bn_fuse_with_conv_linear = bool(getattr(args, "bn_en", 1))
+    set_logic_parallelism(
+        hw_config,
+        layernorm=getattr(args, "logic_par_layernorm", None),
+        relu=getattr(args, "logic_par_relu", None),
+        spool=getattr(args, "logic_par_spool", None),
+        quant_dequant=getattr(args, "logic_par_quant_dequant", None),
+    )
     layers = load_network("pointkan", args.input_points, args.num_classes)
     activation_shapes = compute_activation_shapes(layers, args.input_points, input_channels=3)
 
@@ -698,12 +757,20 @@ def run_network_simulation(args: argparse.Namespace) -> Dict[str, Any]:
     log_section(f"网络仿真: {network_name}")
 
     hw_config = get_accelerator_config(args.accelerator)
+    set_digital_clock_freq_hz(hw_config, getattr(args, "logic_clk_freq", None))
     hw_config.enable_w8a8_quant_dequant = getattr(args, "enable_w8a8_quant_dequant", False)
     hw_config.bn_fuse_with_conv_linear = bool(getattr(args, "bn_en", 1))
     if getattr(args, "cim_backend", None):
         hw_config.cim_backend = args.cim_backend
     if getattr(args, "neurosim_root", None):
         hw_config.neurosim_root = args.neurosim_root
+    set_logic_parallelism(
+        hw_config,
+        layernorm=getattr(args, "logic_par_layernorm", None),
+        relu=getattr(args, "logic_par_relu", None),
+        spool=getattr(args, "logic_par_spool", None),
+        quant_dequant=getattr(args, "logic_par_quant_dequant", None),
+    )
     layers = load_network(network_name, args.input_points, args.num_classes)
     activation_shapes = compute_activation_shapes(layers, args.input_points, input_channels=3)
 

@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class MNSIMFullResult:
-    """Per-layer results from MNSIM Model_latency + Model_energy."""
+    """Per-layer results from MNSIM Model_latency + Model_energy + Model_area."""
     layer_latency_ns: List[float] = field(default_factory=list)
     layer_energy_nj: List[float] = field(default_factory=list)
     conv_linear_order: List[Tuple[str, int]] = field(default_factory=list)  # (layer_name, op_index)
@@ -44,6 +44,9 @@ class MNSIMFullResult:
     error: Optional[str] = None
     # RRAM 阵列 / PE / Tile 统计（来自 TCG），仅当 success 且运行过 MNSIM 时非空
     rram_tile_stats: Optional[Dict[str, Any]] = None
+    # 面积（um^2）：来自 Model_area，与 netstruct 层序一致
+    layer_area_um2: List[float] = field(default_factory=list)
+    total_area_um2: float = 0.0
 
 
 def _mnsim_path() -> str:
@@ -206,6 +209,7 @@ def run_mnsim_full(
         from MNSIM.Latency_Model.Model_latency import Model_latency
         from MNSIM.Power_Model.Model_inference_power import Model_inference_power
         from MNSIM.Energy_Model.Model_energy import Model_energy
+        from MNSIM.Area_Model.Model_Area import Model_area
     except Exception as e:
         return MNSIMFullResult(success=False, error=str(e))
 
@@ -307,12 +311,30 @@ def run_mnsim_full(
             latency_ns.append(float(total_lat))
             energy_nj.append(float(model_energy.arch_energy[i]))
 
+        # 面积：Model_area 与 TCG 同序，得到每层面积与总面积
+        layer_area_um2: List[float] = []
+        total_area_um2 = 0.0
+        try:
+            model_area = Model_area(
+                NetStruct=netstruct,
+                SimConfig_path=simconfig_path,
+                TCG_mapping=tcg,
+            )
+            for i in range(n):
+                layer_area_um2.append(float(getattr(model_area, "arch_area", [0] * n)[i]))
+            total_area_um2 = float(getattr(model_area, "arch_total_area", 0) or 0)
+        except Exception:
+            layer_area_um2 = [0.0] * n
+            total_area_um2 = 0.0
+
         return MNSIMFullResult(
             layer_latency_ns=latency_ns,
             layer_energy_nj=energy_nj,
             conv_linear_order=conv_linear_order or [],
             success=True,
             rram_tile_stats=rram_tile_stats,
+            layer_area_um2=layer_area_um2,
+            total_area_um2=total_area_um2,
         )
     except Exception as e:
         return MNSIMFullResult(success=False, error=str(e))

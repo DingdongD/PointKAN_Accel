@@ -1,0 +1,94 @@
+================================================================================
+帧: 0000000
+文件: /workspace/VoxelNet/Waymo_Mini/Waymo_mini/kitti_format/training/velodyne/0000000.bin
+N=103349, K=1024, 耗时=3.206050s
+覆盖: mean=0.215183, max=0.449997, p95=0.352542, p99=0.393473
+均匀性: mean=0.534650, min=0.450008, std=0.231347
+XYZ 分布: x=[0.00, 27.78], y=[-4.60, 22.25], z=[-3.00, 1.00]
+径向保留:
+  0-10m: 原始=96239, 采样=397, 比例=0.004125
+  10-20m: 原始=6422, 采样=478, 比例=0.074432
+  20-30m: 原始=678, 采样=145, 比例=0.213864
+  30-40m: 原始=10, 采样=4, 比例=0.400000
+  40-50m: 原始=0, 采样=0, 比例=0.000000
+  50-60m: 原始=0, 采样=0, 比例=0.000000
+  60-80m: 原始=0, 采样=0, 比例=0.000000
+
+################################################################################
+各帧汇总
+num_points_avg: 103349.000000
+num_points_std: 0.000000
+num_points_min: 103349.000000
+num_points_max: 103349.000000
+k_avg: 1024.000000
+k_std: 0.000000
+k_min: 1024.000000
+k_max: 1024.000000
+time_sec_avg: 3.206050
+time_sec_std: 0.000000
+time_sec_min: 3.206050
+time_sec_max: 3.206050
+cover_mean_avg: 0.215183
+cover_mean_std: 0.000000
+cover_mean_min: 0.215183
+cover_mean_max: 0.215183
+cover_max_avg: 0.449997
+cover_max_std: 0.000000
+cover_max_min: 0.449997
+cover_max_max: 0.449997
+cover_p95_avg: 0.352542
+cover_p95_std: 0.000000
+cover_p95_min: 0.352542
+cover_p95_max: 0.352542
+cover_p99_avg: 0.393473
+cover_p99_std: 0.000000
+cover_p99_min: 0.393473
+cover_p99_max: 0.393473
+sample_nn_mean_avg: 0.534650
+sample_nn_mean_std: 0.000000
+sample_nn_mean_min: 0.534650
+sample_nn_mean_max: 0.534650
+sample_nn_min_avg: 0.450008
+sample_nn_min_std: 0.000000
+sample_nn_min_min: 0.450008
+sample_nn_min_max: 0.450008
+sample_nn_std_avg: 0.231347
+sample_nn_std_std: 0.000000
+sample_nn_std_min: 0.231347
+sample_nn_std_max: 0.231347
+x_min_avg: 0.000000
+x_min_std: 0.000000
+x_min_min: 0.000000
+x_min_max: 0.000000
+x_max_avg: 27.776001
+x_max_std: 0.000000
+x_max_min: 27.776001
+x_max_max: 27.776001
+y_min_avg: -4.600586
+y_min_std: 0.000000
+y_min_min: -4.600586
+y_min_max: -4.600586
+y_max_avg: 22.250000
+y_max_std: 0.000000
+y_max_min: 22.250000
+y_max_max: 22.250000
+z_min_avg: -2.996884
+z_min_std: 0.000000
+z_min_min: -2.996884
+z_min_max: -2.996884
+z_max_avg: 0.999893
+z_max_std: 0.000000
+z_max_min: 0.999893
+z_max_max: 0.999893
+x_range_avg: 27.776001
+x_range_std: 0.000000
+x_range_min: 27.776001
+x_range_max: 27.776001
+y_range_avg: 26.850586
+y_range_std: 0.000000
+y_range_min: 26.850586
+y_range_max: 26.850586
+z_range_avg: 3.996777
+z_range_std: 0.000000
+z_range_min: 3.996777
+z_range_max: 3.996777

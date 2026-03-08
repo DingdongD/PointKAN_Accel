@@ -1,0 +1,94 @@
+================================================================================
+帧: n008-2018-08-01-15-16-36-0400__LIDAR_TOP__1533151603597909
+文件: /workspace/VoxelNet/Nuscenes_Mini/sweeps/LIDAR_TOP/n008-2018-08-01-15-16-36-0400__LIDAR_TOP__1533151603597909.pcd.bin
+N=12796, K=1024, 耗时=0.448029s
+覆盖: mean=0.076416, max=0.250308, p95=0.198223, p99=0.232533
+均匀性: mean=0.573344, min=0.250400, std=0.531700
+XYZ 分布: x=[0.00, 67.00], y=[-39.99, 39.94], z=[-3.00, 1.00]
+径向保留:
+  0-10m: 原始=6495, 采样=411, 比例=0.063279
+  10-20m: 原始=1415, 采样=343, 比例=0.242403
+  20-30m: 原始=4664, 采样=153, 比例=0.032804
+  30-40m: 原始=86, 采样=53, 比例=0.616279
+  40-50m: 原始=25, 采样=20, 比例=0.800000
+  50-60m: 原始=31, 采样=18, 比例=0.580645
+  60-80m: 原始=80, 采样=26, 比例=0.325000
+
+################################################################################
+各帧汇总
+num_points_avg: 12796.000000
+num_points_std: 0.000000
+num_points_min: 12796.000000
+num_points_max: 12796.000000
+k_avg: 1024.000000
+k_std: 0.000000
+k_min: 1024.000000
+k_max: 1024.000000
+time_sec_avg: 0.448029
+time_sec_std: 0.000000
+time_sec_min: 0.448029
+time_sec_max: 0.448029
+cover_mean_avg: 0.076416
+cover_mean_std: 0.000000
+cover_mean_min: 0.076416
+cover_mean_max: 0.076416
+cover_max_avg: 0.250308
+cover_max_std: 0.000000
+cover_max_min: 0.250308
+cover_max_max: 0.250308
+cover_p95_avg: 0.198223
+cover_p95_std: 0.000000
+cover_p95_min: 0.198223
+cover_p95_max: 0.198223
+cover_p99_avg: 0.232533
+cover_p99_std: 0.000000
+cover_p99_min: 0.232533
+cover_p99_max: 0.232533
+sample_nn_mean_avg: 0.573344
+sample_nn_mean_std: 0.000000
+sample_nn_mean_min: 0.573344
+sample_nn_mean_max: 0.573344
+sample_nn_min_avg: 0.250400
+sample_nn_min_std: 0.000000
+sample_nn_min_min: 0.250400
+sample_nn_min_max: 0.250400
+sample_nn_std_avg: 0.531700
+sample_nn_std_std: 0.000000
+sample_nn_std_min: 0.531700
+sample_nn_std_max: 0.531700
+x_min_avg: 0.000000
+x_min_std: 0.000000
+x_min_min: 0.000000
+x_min_max: 0.000000
+x_max_avg: 67.000000
+x_max_std: 0.000000
+x_max_min: 67.000000
+x_max_max: 67.000000
+y_min_avg: -39.992676
+y_min_std: 0.000000
+y_min_min: -39.992676
+y_min_max: -39.992676
+y_max_avg: 39.935097
+y_max_std: 0.000000
+y_max_min: 39.935097
+y_max_max: 39.935097
+z_min_avg: -2.998615
+z_min_std: 0.000000
+z_min_min: -2.998615
+z_min_max: -2.998615
+z_max_avg: 1.000000
+z_max_std: 0.000000
+z_max_min: 1.000000
+z_max_max: 1.000000
+x_range_avg: 67.000000
+x_range_std: 0.000000
+x_range_min: 67.000000
+x_range_max: 67.000000
+y_range_avg: 79.927773
+y_range_std: 0.000000
+y_range_min: 79.927773
+y_range_max: 79.927773
+z_range_avg: 3.998615
+z_range_std: 0.000000
+z_range_min: 3.998615
+z_range_max: 3.998615

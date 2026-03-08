@@ -1,0 +1,59 @@
+{
+  "dataset": "kitti",
+  "data_dir": "/workspace/VoxelNet/KITTI_Mini/training/velodyne",
+  "n_total_frames": 7481,
+  "max_samples_used": 20,
+  "num_points": 50000,
+  "fps_steps": 2048,
+  "k_neighbors": 32,
+  "min_candidates_ratio": 1.1,
+  "best_by_iou_coarse_fine": {
+    "init_threshold": 1.7,
+    "tol": 0.05,
+    "max_iter": 10,
+    "iou_coarse_fine_vs_vanilla": 0.9781641960144043,
+    "iou_adaptive_vs_vanilla": 0.9302654266357422
+  },
+  "grid": [
+    {
+      "init_threshold": 1.7,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.9781641960144043,
+      "iou_adaptive_vs_vanilla": 0.9302654266357422,
+      "time_sec": 244.4587
+    },
+    {
+      "init_threshold": 1.6,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.9743135571479797,
+      "iou_adaptive_vs_vanilla": 0.9258750677108765,
+      "time_sec": 245.0653
+    },
+    {
+      "init_threshold": 1.5,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.9709552526473999,
+      "iou_adaptive_vs_vanilla": 0.9203340411186218,
+      "time_sec": 252.624
+    },
+    {
+      "init_threshold": 1.4,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.9661710858345032,
+      "iou_adaptive_vs_vanilla": 0.9135833978652954,
+      "time_sec": 412.4016
+    },
+    {
+      "init_threshold": 1.3,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.9609796404838562,
+      "iou_adaptive_vs_vanilla": 0.9100514650344849,
+      "time_sec": 520.3974
+    }
+  ]
+}

@@ -26,6 +26,7 @@ def build_ppa_report(
     rram_tile_stats: Optional[Dict[str, Any]] = None,
     operator_sequence: Optional[List[Dict[str, Any]]] = None,
     latency_per_sample_ns: Optional[float] = None,
+    total_area_um2: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
     构建包含端到端 PPA、按层与按算子类型 breakdown 的报告字典。
@@ -58,6 +59,7 @@ def build_ppa_report(
             "latency_ns": end_to_end_latency_ns,
             "latency_ms": end_to_end_latency_ms,
             "clock_period_ns": clock_ns,
+            "total_area_um2": float(total_area_um2) if total_area_um2 is not None else None,
         },
         "checkpoint": checkpoint,
         "mnsim_full": mnsim_full,
@@ -71,27 +73,36 @@ def build_ppa_report(
     if operator_sequence is not None:
         report["operator_sequence"] = operator_sequence
 
-    # 全算子 breakdown（FPS/KNN/BN/Conv/Linear/ReLU 等），用于饼图；含 latency_ns 时一并写入
+    # 全算子 breakdown（FPS/KNN/BN/Conv/Linear/ReLU 等），用于饼图；含 latency_ns、area_um2 时一并写入
     if full_operator_breakdown:
         total_cy = sum(v.get("cycles", 0) for v in full_operator_breakdown.values())
         total_en = sum(v.get("energy_nj", 0) for v in full_operator_breakdown.values())
         total_lat_ns = sum(v.get("latency_ns", 0) for v in full_operator_breakdown.values())
+        total_area = sum(v.get("area_um2", 0) for v in full_operator_breakdown.values())
         full_list: List[Dict[str, Any]] = []
         for op_name, v in sorted(full_operator_breakdown.items(), key=lambda x: -x[1].get("latency_ns", x[1].get("cycles", 0))):
             cy = v.get("cycles", 0)
             en = v.get("energy_nj", 0)
             lat_ns = v.get("latency_ns", 0)
+            area_u = v.get("area_um2", 0)
             full_list.append({
                 "operator": op_name,
                 "cycles": round(cy, 2),
                 "energy_nj": round(en, 2),
                 "latency_ns": round(lat_ns, 2),
+                "area_um2": round(area_u, 2),
                 "cycles_pct": round(cy / total_cy * 100, 2) if total_cy > 0 else 0,
                 "energy_pct": round(en / total_en * 100, 2) if total_en > 0 else 0,
                 "latency_pct": round(lat_ns / total_lat_ns * 100, 2) if total_lat_ns > 0 else 0,
+                "area_pct": round(area_u / total_area * 100, 2) if total_area > 0 else 0,
             })
         report["full_operator_breakdown"] = full_list
-        report["full_operator_totals"] = {"total_cycles": total_cy, "total_energy_nj": total_en, "total_latency_ns": total_lat_ns}
+        report["full_operator_totals"] = {
+            "total_cycles": total_cy,
+            "total_energy_nj": total_en,
+            "total_latency_ns": total_lat_ns,
+            "total_area_um2": total_area,
+        }
 
     return report
 

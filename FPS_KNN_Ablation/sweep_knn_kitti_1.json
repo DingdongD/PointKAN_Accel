@@ -1,0 +1,75 @@
+{
+  "dataset": "kitti",
+  "data_dir": "/workspace/VoxelNet/KITTI_Mini/training/velodyne",
+  "n_total_frames": 7481,
+  "max_samples_used": 20,
+  "num_points": 50000,
+  "fps_steps": 2048,
+  "k_neighbors": 32,
+  "min_candidates_ratio": 1.1,
+  "best_by_iou_coarse_fine": {
+    "init_threshold": 1.2,
+    "tol": 0.05,
+    "max_iter": 10,
+    "iou_coarse_fine_vs_vanilla": 0.9541566967964172,
+    "iou_adaptive_vs_vanilla": 0.9016300439834595
+  },
+  "grid": [
+    {
+      "init_threshold": 1.2,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.9541566967964172,
+      "iou_adaptive_vs_vanilla": 0.9016300439834595,
+      "time_sec": 520.1976
+    },
+    {
+      "init_threshold": 1.1,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.9451764225959778,
+      "iou_adaptive_vs_vanilla": 0.8929951786994934,
+      "time_sec": 524.2819
+    },
+    {
+      "init_threshold": 1.0,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.9327676892280579,
+      "iou_adaptive_vs_vanilla": 0.880897045135498,
+      "time_sec": 529.2603
+    },
+    {
+      "init_threshold": 0.9,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.915936291217804,
+      "iou_adaptive_vs_vanilla": 0.8654553294181824,
+      "time_sec": 468.1776
+    },
+    {
+      "init_threshold": 0.8,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.8960086703300476,
+      "iou_adaptive_vs_vanilla": 0.8451283574104309,
+      "time_sec": 545.2604
+    },
+    {
+      "init_threshold": 0.7,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.8665379285812378,
+      "iou_adaptive_vs_vanilla": 0.8180411458015442,
+      "time_sec": 554.8538
+    },
+    {
+      "init_threshold": 0.6,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.8278051614761353,
+      "iou_adaptive_vs_vanilla": 0.782018780708313,
+      "time_sec": 587.8397
+    }
+  ]
+}

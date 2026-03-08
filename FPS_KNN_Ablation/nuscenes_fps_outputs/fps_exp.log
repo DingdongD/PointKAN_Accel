@@ -1,0 +1,91 @@
+2026-03-08 11:45:21 [INFO] Collecting point counts and XYZ ranges (scanning 3531 files)...
+2026-03-08 11:46:11 [INFO] Stats over 3531 frames: count range=[8979, 15133], mean=10857
+2026-03-08 11:46:11 [INFO] Histogram saved: ./nuscenes_fps_outputs/point_count_histogram.png
+2026-03-08 11:46:13 [INFO]   x: min across frames [0.00, 0.00], max across frames [63.00, 70.00]
+2026-03-08 11:46:13 [INFO]   y: min across frames [-40.00, -17.81], max across frames [29.00, 40.00]
+2026-03-08 11:46:13 [INFO]   z: min across frames [-3.00, -2.98], max across frames [1.00, 1.00]
+2026-03-08 11:46:13 [INFO] XYZ range histograms saved: ./nuscenes_fps_outputs/xyz_range_histograms.png
+2026-03-08 11:46:13 [INFO] [1/5] Processing: /workspace/VoxelNet/Nuscenes_Mini/sweeps/LIDAR_TOP/n008-2018-08-01-15-16-36-0400__LIDAR_TOP__1533151603597909.pcd.bin
+2026-03-08 11:46:14 [INFO] [2/5] Processing: /workspace/VoxelNet/Nuscenes_Mini/sweeps/LIDAR_TOP/n008-2018-08-01-15-16-36-0400__LIDAR_TOP__1533151603647672.pcd.bin
+2026-03-08 11:46:15 [INFO] [3/5] Processing: /workspace/VoxelNet/Nuscenes_Mini/sweeps/LIDAR_TOP/n008-2018-08-01-15-16-36-0400__LIDAR_TOP__1533151603698009.pcd.bin
+2026-03-08 11:46:16 [INFO] [4/5] Processing: /workspace/VoxelNet/Nuscenes_Mini/sweeps/LIDAR_TOP/n008-2018-08-01-15-16-36-0400__LIDAR_TOP__1533151603747767.pcd.bin
+2026-03-08 11:46:17 [INFO] [5/5] Processing: /workspace/VoxelNet/Nuscenes_Mini/sweeps/LIDAR_TOP/n008-2018-08-01-15-16-36-0400__LIDAR_TOP__1533151603798066.pcd.bin
+2026-03-08 11:46:18 [INFO] Summary over frames:
+2026-03-08 11:46:18 [INFO]   num_points_avg: 12392.800000
+2026-03-08 11:46:18 [INFO]   num_points_std: 252.148686
+2026-03-08 11:46:18 [INFO]   num_points_min: 12186.000000
+2026-03-08 11:46:18 [INFO]   num_points_max: 12796.000000
+2026-03-08 11:46:18 [INFO]   k_avg: 1024.000000
+2026-03-08 11:46:18 [INFO]   k_std: 0.000000
+2026-03-08 11:46:18 [INFO]   k_min: 1024.000000
+2026-03-08 11:46:18 [INFO]   k_max: 1024.000000
+2026-03-08 11:46:18 [INFO]   time_sec_avg: 0.392624
+2026-03-08 11:46:18 [INFO]   time_sec_std: 0.053485
+2026-03-08 11:46:18 [INFO]   time_sec_min: 0.319325
+2026-03-08 11:46:18 [INFO]   time_sec_max: 0.446929
+2026-03-08 11:46:18 [INFO]   cover_mean_avg: 0.075791
+2026-03-08 11:46:18 [INFO]   cover_mean_std: 0.000816
+2026-03-08 11:46:18 [INFO]   cover_mean_min: 0.074715
+2026-03-08 11:46:18 [INFO]   cover_mean_max: 0.076831
+2026-03-08 11:46:18 [INFO]   cover_max_avg: 0.249919
+2026-03-08 11:46:18 [INFO]   cover_max_std: 0.002819
+2026-03-08 11:46:18 [INFO]   cover_max_min: 0.246553
+2026-03-08 11:46:18 [INFO]   cover_max_max: 0.254804
+2026-03-08 11:46:18 [INFO]   cover_p95_avg: 0.199701
+2026-03-08 11:46:18 [INFO]   cover_p95_std: 0.004478
+2026-03-08 11:46:18 [INFO]   cover_p95_min: 0.193786
+2026-03-08 11:46:18 [INFO]   cover_p95_max: 0.205741
+2026-03-08 11:46:18 [INFO]   cover_p99_avg: 0.229063
+2026-03-08 11:46:18 [INFO]   cover_p99_std: 0.004997
+2026-03-08 11:46:18 [INFO]   cover_p99_min: 0.219492
+2026-03-08 11:46:18 [INFO]   cover_p99_max: 0.232919
+2026-03-08 11:46:18 [INFO]   sample_nn_mean_avg: 0.581714
+2026-03-08 11:46:18 [INFO]   sample_nn_mean_std: 0.009062
+2026-03-08 11:46:18 [INFO]   sample_nn_mean_min: 0.573344
+2026-03-08 11:46:18 [INFO]   sample_nn_mean_max: 0.597268
+2026-03-08 11:46:18 [INFO]   sample_nn_min_avg: 0.250054
+2026-03-08 11:46:18 [INFO]   sample_nn_min_std: 0.002911
+2026-03-08 11:46:18 [INFO]   sample_nn_min_min: 0.246657
+2026-03-08 11:46:18 [INFO]   sample_nn_min_max: 0.255148
+2026-03-08 11:46:18 [INFO]   sample_nn_std_avg: 0.534491
+2026-03-08 11:46:18 [INFO]   sample_nn_std_std: 0.018362
+2026-03-08 11:46:18 [INFO]   sample_nn_std_min: 0.502320
+2026-03-08 11:46:18 [INFO]   sample_nn_std_max: 0.552665
+2026-03-08 11:46:18 [INFO]   x_min_avg: 0.000000
+2026-03-08 11:46:18 [INFO]   x_min_std: 0.000000
+2026-03-08 11:46:18 [INFO]   x_min_min: 0.000000
+2026-03-08 11:46:18 [INFO]   x_min_max: 0.000000
+2026-03-08 11:46:18 [INFO]   x_max_avg: 69.000000
+2026-03-08 11:46:18 [INFO]   x_max_std: 1.264911
+2026-03-08 11:46:18 [INFO]   x_max_min: 67.000000
+2026-03-08 11:46:18 [INFO]   x_max_max: 70.000000
+2026-03-08 11:46:18 [INFO]   y_min_avg: -39.301177
+2026-03-08 11:46:18 [INFO]   y_min_std: 0.803120
+2026-03-08 11:46:18 [INFO]   y_min_min: -39.992676
+2026-03-08 11:46:18 [INFO]   y_min_max: -38.082741
+2026-03-08 11:46:18 [INFO]   y_max_avg: 39.600412
+2026-03-08 11:46:18 [INFO]   y_max_std: 0.364016
+2026-03-08 11:46:18 [INFO]   y_max_min: 38.984833
+2026-03-08 11:46:18 [INFO]   y_max_max: 39.944675
+2026-03-08 11:46:18 [INFO]   z_min_avg: -2.998966
+2026-03-08 11:46:18 [INFO]   z_min_std: 0.000685
+2026-03-08 11:46:18 [INFO]   z_min_min: -2.999944
+2026-03-08 11:46:18 [INFO]   z_min_max: -2.997894
+2026-03-08 11:46:18 [INFO]   z_max_avg: 1.000000
+2026-03-08 11:46:18 [INFO]   z_max_std: 0.000000
+2026-03-08 11:46:18 [INFO]   z_max_min: 1.000000
+2026-03-08 11:46:18 [INFO]   z_max_max: 1.000000
+2026-03-08 11:46:18 [INFO]   x_range_avg: 69.000000
+2026-03-08 11:46:18 [INFO]   x_range_std: 1.264911
+2026-03-08 11:46:18 [INFO]   x_range_min: 67.000000
+2026-03-08 11:46:18 [INFO]   x_range_max: 70.000000
+2026-03-08 11:46:18 [INFO]   y_range_avg: 78.901589
+2026-03-08 11:46:18 [INFO]   y_range_std: 1.158380
+2026-03-08 11:46:18 [INFO]   y_range_min: 77.067574
+2026-03-08 11:46:18 [INFO]   y_range_max: 79.927773
+2026-03-08 11:46:18 [INFO]   z_range_avg: 3.998966
+2026-03-08 11:46:18 [INFO]   z_range_std: 0.000685
+2026-03-08 11:46:18 [INFO]   z_range_min: 3.997894
+2026-03-08 11:46:18 [INFO]   z_range_max: 3.999944
+2026-03-08 11:46:18 [INFO] Summary saved: ./nuscenes_fps_outputs/summary.txt
+2026-03-08 11:46:18 [INFO] Visualizations saved to: ./nuscenes_fps_outputs

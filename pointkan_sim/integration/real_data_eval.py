@@ -68,11 +68,13 @@ class ConvLinearLayerInfo:
 class NonlinearActivationInfo:
     """非线性/归一化/池化等算子的前向激活信息（hook 收集）。"""
     name: str
-    op_type: str  # "batchnorm1d" | "batchnorm2d" | "layernorm" | "relu" | "adaptive_max_pool1d" | ...
+    op_type: str  # "batchnorm1d" | "batchnorm2d" | "layernorm" | "relu" | "s-pool" | "adaptive_max_pool1d" | ...
     input_shape: Tuple[int, ...]
     output_shape: Tuple[int, ...]
     numel: int
     bytes_fp32: float = 0.0  # 输出 numel * 4（便于与 indata 对照）
+    input_numel: int = 0  # 输入元素数（用于 SPool 等看输入激活大小）
+    input_bytes_fp32: float = 0.0  # 输入 FP32 字节数
 
 
 @dataclass
@@ -243,6 +245,8 @@ def collect_nonlinear_activations_from_forward(
             out_shape = tuple(y.shape) if y is not None else ()
             numel = int(y.numel()) if y is not None else 0
             bytes_fp32 = numel * 4.0
+            input_numel = int(x.numel()) if x is not None else 0
+            input_bytes_fp32 = input_numel * 4.0
             order.append(NonlinearActivationInfo(
                 name=name,
                 op_type=op_type,
@@ -250,6 +254,8 @@ def collect_nonlinear_activations_from_forward(
                 output_shape=out_shape,
                 numel=numel,
                 bytes_fp32=bytes_fp32,
+                input_numel=input_numel,
+                input_bytes_fp32=input_bytes_fp32,
             ))
         return hook
 
@@ -265,6 +271,8 @@ def collect_nonlinear_activations_from_forward(
             out_shape = tuple(center.shape) if center is not None else ()
             numel = int(center.numel()) if center is not None else 0
             bytes_fp32 = numel * 4.0
+            input_numel = int(new_points.numel()) if new_points is not None else 0
+            input_bytes_fp32 = input_numel * 4.0
             order.append(NonlinearActivationInfo(
                 name=name,
                 op_type="s-pool",
@@ -272,6 +280,8 @@ def collect_nonlinear_activations_from_forward(
                 output_shape=out_shape,
                 numel=numel,
                 bytes_fp32=bytes_fp32,
+                input_numel=input_numel,
+                input_bytes_fp32=input_bytes_fp32,
             ))
         return hook
 
@@ -328,10 +338,12 @@ def log_nonlinear_activation_shapes(
     for idx, info in enumerate(nonlinear_list):
         in_s = "×".join(str(d) for d in info.input_shape) if info.input_shape else "?"
         out_s = "×".join(str(d) for d in info.output_shape) if info.output_shape else "?"
+        in_size = f" ({info.input_numel} elem, {info.input_bytes_fp32:.0f} B)" if info.input_numel else ""
+        out_size = f" ({info.numel} elem, {info.bytes_fp32:.0f} B)"
         log_info_fn(
-            f"  [{idx}] {info.name}  {info.op_type}  in={in_s}  out={out_s}  numel={info.numel}  ({info.bytes_fp32:.0f} B)"
+            f"  [{idx}] {info.name}  {info.op_type}  in={in_s}{in_size}  out={out_s}{out_size}"
         )
-    log_info_fn("  in/out = 该算子输入/输出 tensor shape；numel/B 为输出元素数与 FP32 字节数。")
+    log_info_fn("  in/out = 输入/输出 shape；括号内为输入/输出元素数与 FP32 字节数（SPool 等可见输入激活大小）。")
 
 
 def collect_conv_linear_tensors_from_forward(

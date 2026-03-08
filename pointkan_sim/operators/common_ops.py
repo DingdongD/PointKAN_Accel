@@ -45,6 +45,21 @@ def _logic_cycles(hw_config: "HardwareConfig", key: str, default_cycles: int) ->
     return int(c if c is not None else default_cycles)
 
 
+def _logic_parallelism(hw_config: "HardwareConfig", key: str, default_parallelism: int = 1) -> int:
+    """从 hw_config.logic_circuit.<key> 取并行度。"""
+    logic = getattr(hw_config, "logic_circuit", None)
+    sub = getattr(logic, key, None) if logic is not None else None
+    par = getattr(sub, "parallelism", default_parallelism) if sub is not None else default_parallelism
+    return max(1, int(par if par is not None else default_parallelism))
+
+
+def _prod(values: List[int]) -> int:
+    out = 1
+    for v in values:
+        out *= max(1, int(v))
+    return out
+
+
 def _event(
     event_id: int,
     cycle: int,
@@ -85,16 +100,17 @@ def _resolve_numel(params: Dict[str, Any], default_features: int = 1, default_po
 
 
 def _quant_dequant_power_cycles(hw_config: "HardwareConfig", numel: int) -> tuple:
-    """从 hw_config.logic_circuit.quant_dequant 取 power/cycles；cycles 为 0 时按 numel/parallelism 估算。"""
+    """量化/反量化：默认 1 cycle，功耗按并行度线性放大。"""
     qd = getattr(
         getattr(hw_config, "logic_circuit", None),
         "quant_dequant",
         None,
     )
-    power = float(getattr(qd, "power", 0.0) or 0.0)
-    cycles_cfg = getattr(qd, "cycles", 0) or 0
-    vec = max(1, getattr(hw_config, "cim_parallelism", 128))
-    cycles = max(1, cycles_cfg) if cycles_cfg else max(1, safe_div_ceil(numel, vec))
+    power_base = float(getattr(qd, "power", 2.59) or 2.59)
+    cycles_cfg = int(getattr(qd, "cycles", 1) or 1)
+    par = max(1, int(getattr(qd, "parallelism", 1) or 1))
+    power = power_base * par
+    cycles = max(1, safe_div_ceil(cycles_cfg, par))
     return power, cycles
 
 
@@ -139,73 +155,102 @@ def gen_dequant_events(
 
 
 def gen_bn_events(params: Dict[str, Any], hw_config: "HardwareConfig") -> List[Event]:
-    """BatchNorm1d：按向量宽度与 logic_circuit.batchnorm1d 的 cycles/power 生成归一化事件；BN 融合时可由 dispatcher 跳过。"""
+    """BatchNorm1d：按向量宽度与 logic_circuit.batchnorm1d 的 cycles/power 生成归一化事件；BN 融合时可由 dispatcher 跳过。
+    vec（vector_width）：未传时默认用 hw_config.cim_parallelism，表示本逻辑电路一次处理的元素数（与 CIM 阵列并行度同名，此处仅作 BN 的“每向量”粒度）。
+    总周期 = ceil(numel/vec) * per_vector_cycles，其中 per_vector_cycles 来自 logic_circuit.batchnorm1d.cycles，默认 1。"""
     numel = _resolve_numel(params)
     vec = int(params.get("vector_width", getattr(hw_config, "cim_parallelism", 128)))
-    cycles = safe_div_ceil(numel, vec) * _logic_cycles(hw_config, "batchnorm1d", 1)
+    per_vec = _logic_cycles(hw_config, "batchnorm1d", 1)
+    cycles = safe_div_ceil(numel, vec) * per_vec
     power = _logic_power(hw_config, "batchnorm1d", 2.0)
     clk = _clock(hw_config)
     return [_event(0, 0, "BN", "normalize", "batchnorm1d", "batchnorm1d", "batchnorm1d_affine", power, cycles, clk, {"numel": numel})]
 
 
 def gen_layernorm_events(params: Dict[str, Any], hw_config: "HardwareConfig", op_name: str = "LayerNorm") -> List[Event]:
-    numel = _resolve_numel(params, default_features=int(params.get("normalized_shape", 1)))
-    vec = int(params.get("vector_width", getattr(hw_config, "cim_parallelism", 128)))
-    cycles = safe_div_ceil(numel, vec) * _logic_cycles(hw_config, "layernorm", 2)
-    power = _logic_power(hw_config, "layernorm", 3.0)
+    batch_size = int(params.get("batch_size", params.get("batch", 1)))
+    num_points = int(params.get("num_points", params.get("tokens", 1)))
+    features = int(params.get("num_features", params.get("normalized_shape", 1)))
+    n_vec = max(1, batch_size * num_points)
+    base_cycles = (6 * features + 32) + n_vec * 10 * features
+    if params.get("num_elements", 0):
+        numel = int(params["num_elements"])
+    else:
+        numel = max(1, batch_size * num_points * features)
+
+    par = _logic_parallelism(hw_config, "layernorm", 1)
+    cycles = max(1, safe_div_ceil(base_cycles, par))
+    power = _logic_power(hw_config, "layernorm", 180.0) * par
     clk = _clock(hw_config)
-    return [_event(0, 0, op_name, "normalize", "layernorm", "layernorm", "layernorm_affine", power, cycles, clk, {"numel": numel})]
+    return [_event(0, 0, op_name, "normalize", "layernorm", "layernorm", "layernorm_affine", power, cycles, clk, {"numel": numel, "parallelism": par})]
 
 
 def gen_relu_events(params: Dict[str, Any], hw_config: "HardwareConfig") -> List[Event]:
     numel = _resolve_numel(params)
-    vec = int(params.get("vector_width", getattr(hw_config, "cim_parallelism", 128)))
-    cycles = safe_div_ceil(numel, vec) * _logic_cycles(hw_config, "relu", 1)
-    power = _logic_power(hw_config, "relu", 1.0)
+    par = _logic_parallelism(hw_config, "relu", 1)
+    cycles = max(1, safe_div_ceil(numel, par))
+    power = _logic_power(hw_config, "relu", 0.45) * par
     clk = _clock(hw_config)
-    return [_event(0, 0, "ReLU", "activation", "relu", "relu", "relu", power, cycles, clk, {"numel": numel})]
+    return [_event(0, 0, "ReLU", "activation", "relu", "relu", "relu", power, cycles, clk, {"numel": numel, "parallelism": par})]
 
 
 def gen_spool_events(params: Dict[str, Any], hw_config: "HardwareConfig") -> List[Event]:
-    channels = int(params.get("in_channels", 1))
+    batch_size = int(params.get("batch_size", params.get("batch", 1)))
+    channels = int(params.get("in_channels", params.get("num_features", 1)))
     num_points = int(params.get("num_points", 1))
     k_neighbors = int(params.get("k_neighbors", 1))
-    work = max(1, channels * num_points * k_neighbors)
-    vec = int(params.get("vector_width", getattr(hw_config, "cim_parallelism", 128)))
-    cycles = safe_div_ceil(work, vec) * _logic_cycles(hw_config, "spool", 2)
-    power = _logic_power(hw_config, "spool", 2.5)
+
+    per_point_cycles = (max(1, k_neighbors) / 4.0) * 23.0 + 14.0
+    base_cycles = max(1, int(math.ceil(batch_size * channels * num_points * per_point_cycles)))
+    par = _logic_parallelism(hw_config, "spool", 1)
+    cycles = max(1, safe_div_ceil(base_cycles, par))
+    power = _logic_power(hw_config, "spool", 17.0) * par
     clk = _clock(hw_config)
     return [
         _event(
             0, 0, "SPool", "pool", "s_pool", "spool", "softmax_pool", power, cycles, clk,
-            {"channels": channels, "num_points": num_points, "k_neighbors": k_neighbors},
+            {"channels": channels, "num_points": num_points, "k_neighbors": k_neighbors, "parallelism": par},
         )
     ]
 
 
 def gen_affine_norm_events(params: Dict[str, Any], hw_config: "HardwareConfig") -> List[Event]:
-    p = dict(params)
-    p.setdefault("normalized_shape", int(p.get("num_features", 1)))
-    events = gen_layernorm_events(p, hw_config, op_name="AffineNorm")
-    events[0].sub_stage = "affine_norm"
-    events[0].operation = "groupnorm_affine"
-    return events
+    """GAM 内仿射归一化（源码中为 mean/std + (x-mean)/(std+eps) + affine_alpha*x+affine_beta），
+    并非简单 LayerNorm。暂按默认 1 cycle 占位，后续可再优化。"""
+    clk = _clock(hw_config)
+    power = _logic_power(hw_config, "layernorm", 1.0)
+    return [
+        _event(
+            0, 0, "AffineNorm", "normalize", "affine_norm", "affine_norm", "groupnorm_affine",
+            power, 1, clk,
+            {"num_features": int(params.get("num_features", 1)), "placeholder_cycles": 1},
+        )
+    ]
 
 
 def gen_adaptive_max_pool_events(params: Dict[str, Any], hw_config: "HardwareConfig") -> List[Event]:
-    num_features = int(params.get("num_features", 1))
-    num_points = int(params.get("num_points", params.get("input_points", 1)))
-    output_size = int(params.get("output_size", 1))
-    work = max(1, num_features * max(1, num_points // max(1, output_size)))
-    vec = int(params.get("vector_width", getattr(hw_config, "cim_parallelism", 128)))
-    cycles = safe_div_ceil(work, vec)
-    power = _logic_power(hw_config, "spool", 1.2)
+    """AdaptiveMaxPool1d：对 (B,C,L) 沿 L 做 max 到 1，工作量 B*C*L。"""
+    batch_size = int(params.get("batch_size", params.get("batch", 1)))
+    input_shape = params.get("input_shape")
+    if isinstance(input_shape, (list, tuple)) and len(input_shape) >= 2:
+        base_cycles = _prod([int(x) for x in input_shape[:-1]])
+    elif "num_elements" in params:
+        base_cycles = int(params.get("num_elements", 1))
+    else:
+        num_features = int(params.get("num_features", params.get("num_points", 1)))
+        num_points = int(params.get("num_points", params.get("input_points", 1)))
+        # 沿最后一维做 max，工作量 = B × C × L
+        base_cycles = max(1, batch_size * num_features * num_points)
+
+    par = _logic_parallelism(hw_config, "spool", 1)
+    cycles = max(1, safe_div_ceil(base_cycles, par))
+    power = _logic_power(hw_config, "spool", 13.2) * par
     clk = _clock(hw_config)
     return [
         _event(
             0, 0, "AdaptiveMaxPool1d", "pool", "adaptive_max_pool1d", "spool",
             "adaptive_max_pool1d", power, cycles, clk,
-            {"num_features": num_features, "num_points": num_points, "output_size": output_size},
+            {"base_cycles": base_cycles, "parallelism": par},
         )
     ]
 

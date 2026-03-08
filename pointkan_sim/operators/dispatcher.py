@@ -59,9 +59,15 @@ def _gen_conv1d(
         lat_ns = context["mnsim_latency_ns"]
         en_nj = context["mnsim_energy_nj"]
         if idx < len(lat_ns) and idx < len(en_nj):
-            clock_ns = getattr(hw_config, "clock_period", 1.0)
+            # NeuroSim 使用自身时钟(如 100MHz=10ns)；未提供时用数字逻辑 1GHz
+            clock_ns = context.get("mnsim_clock_period_ns") or getattr(hw_config, "clock_period", 1.0)
+            clock_ns = float(clock_ns)
             cycles = max(1, int(math.ceil(lat_ns[idx] / clock_ns)))
             power_mw = (en_nj[idx] * 1e3 / (cycles * clock_ns)) if (cycles * clock_ns) > 0 else 0.0
+            meta = {"source": "mnsim_full"}
+            area_list = context.get("mnsim_area_um2")
+            if isinstance(area_list, (list, tuple)) and idx < len(area_list):
+                meta["area_um2"] = float(area_list[idx])
             context["mnsim_index"] = idx + 1
             mnsim_ev = Event(
                 event_id=0,
@@ -72,7 +78,7 @@ def _gen_conv1d(
                 power=power_mw,
                 duration=cycles,
                 clock_period_ns=clock_ns,
-                metadata={"source": "mnsim_full"},
+                metadata=meta,
             )
             if getattr(hw_config, "enable_w8a8_quant_dequant", False):
                 p = op_ref.params
@@ -103,9 +109,14 @@ def _gen_linear(
         lat_ns = context["mnsim_latency_ns"]
         en_nj = context["mnsim_energy_nj"]
         if idx < len(lat_ns) and idx < len(en_nj):
-            clock_ns = getattr(hw_config, "clock_period", 1.0)
+            clock_ns = context.get("mnsim_clock_period_ns") or getattr(hw_config, "clock_period", 1.0)
+            clock_ns = float(clock_ns)
             cycles = max(1, int(math.ceil(lat_ns[idx] / clock_ns)))
             power_mw = (en_nj[idx] * 1e3 / (cycles * clock_ns)) if (cycles * clock_ns) > 0 else 0.0
+            meta = {"source": "mnsim_full"}
+            area_list = context.get("mnsim_area_um2")
+            if isinstance(area_list, (list, tuple)) and idx < len(area_list):
+                meta["area_um2"] = float(area_list[idx])
             context["mnsim_index"] = idx + 1
             mnsim_ev = Event(
                 event_id=0,
@@ -116,7 +127,7 @@ def _gen_linear(
                 power=power_mw,
                 duration=cycles,
                 clock_period_ns=clock_ns,
-                metadata={"source": "mnsim_full"},
+                metadata=meta,
             )
             if getattr(hw_config, "enable_w8a8_quant_dequant", False):
                 p = op_ref.params
