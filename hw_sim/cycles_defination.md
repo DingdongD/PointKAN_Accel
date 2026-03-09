@@ -13,14 +13,19 @@
 | **fp32_mul** | FP32 乘法器 | `1` (单次延迟) | 1 GHz | `2.5` | `2024` | 寄存器1拍输出 |
 | **fp32_add** | FP32 加法器 | `1` (单次延迟) | 1 GHz | `1.16` | `1273` | 寄存器1拍输出 |
 | **fp32_div** | FP32 除法器 (Newton-Raphson) | `~10` (单次延迟) | 1 GHz | `6307` | `2.59` | 3轮NR迭代 |
+| **baseline_bitonic_sort_1024_max_32min** | 双模式双调排序网络 (1024输入取max或32min) | max模式: `10`, 32min模式: `19`（固定延迟） | 1 GHz | `2097.4` | `2157561` | max模式和32min模式复用bitonic sort资源 |
+| **op_batch_norm_1d** | FP32 BatchNorm1d (推理模式, y=γx+β) | `T = N_elem + 1` | 1 GHz | `3.1718` | `3228` | 2级流水(fp32_mul→fp32_add)，延迟2cycles，吞吐1elem/cycle |
+| **affine_norm** | FP32 仿射归一化 (anchor模式, 双遍扫描) | `T = 2×(L/P + 1) + 46`, L=S×K×D, P=32 | 1 GHz | `212.7465` | `304976` | L=SxKxD=393216(对于网络模型所有该算子的调用处，均恒定)；P=32路并行 |
+| **quantize_pipeline (8bit)** | FP32→INT8 量化流水线 | `T = N + 6` | 1 GHz | `2.234` | `2460` | N=待量化元素数，6cycles流水线填充延迟 |
+| **quantize_pipeline (12bit)** | FP32→INT12 量化流水线 | `T = N + 6` | 1 GHz | `2.28` | `2525` | N=待量化元素数，6cycles流水线填充延迟 |
+| **dequantize_pipeline** | INT8→FP32 反量化流水线 | `T = N + 4` | 1 GHz | `2.30` | `2078` | N=待反量化元素数，4cycles流水线填充延迟 |
+| **grf** | GRF  | `19` (固定延迟) | 1 GHz | `23.7833` | `47887` | 无法流水，每次调用固定19cycles |
 
 
 ### 1.2 待实现模块
 
 | 模块名称 (Module) | 功能描述 | 周期数 (Cycles) | 频率 (Freq) | 功耗 (Power) | 面积 (Area) | 备注/优化点 |
 | :--- | :--- | :---: | :---: | :---: | :---: | :--- |
-| **De-Quantizer** | 反量化 (INT8->FP32) | `` | `` | `` | `` |  |
-| **Quant Engine** | 量化引擎 | `` | `` | `` | `` |  |
 | **Resampler** | 重采样单元 | `` | `` | `` | `` | 硬件插值 |
 | **FPS-KNN** | FPS-KNN排序规约 | `` | `` | `` | `` | *K=不同数值场景？ |
 
