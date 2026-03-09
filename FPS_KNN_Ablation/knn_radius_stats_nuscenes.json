@@ -1,0 +1,42 @@
+{
+  "dataset": "nuscenes",
+  "data_dir": "/workspace/VoxelNet/Nuscenes_Mini/sweeps/LIDAR_TOP",
+  "n_frames_used": 50,
+  "n_total_frames": 3531,
+  "num_points": 50000,
+  "fps_steps": 2048,
+  "k_neighbors": 32,
+  "do_roi": true,
+  "n_radius_samples": 102400,
+  "stats": {
+    "min": 0.0,
+    "max": 21.715303421020508,
+    "mean": 0.7021419405937195,
+    "std": 1.117637276649475,
+    "median": 0.29210811853408813,
+    "count": 102400,
+    "percentiles": {
+      "25": 0.12914277613162994,
+      "50": 0.29210811853408813,
+      "75": 0.8177135288715363,
+      "90": 1.746264100074768,
+      "95": 3.0,
+      "99": 5.180370268821713
+    },
+    "suggested_init_threshold_range_p50_p99": [
+      0.29210811853408813,
+      5.180370268821713
+    ],
+    "suggested_init_threshold_range_p75_p95": [
+      0.8177135288715363,
+      3.0
+    ],
+    "suggested_init_threshold_range_p50_p95": [
+      0.29210811853408813,
+      3.0
+    ],
+    "suggested_init_threshold_median": 0.29210811853408813,
+    "suggested_init_threshold_p75": 0.8177135288715363,
+    "suggested_init_threshold_p90": 1.746264100074768
+  }
+}

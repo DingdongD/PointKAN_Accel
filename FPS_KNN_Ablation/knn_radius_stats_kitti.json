@@ -1,0 +1,42 @@
+{
+  "dataset": "kitti",
+  "data_dir": "/workspace/VoxelNet/KITTI_Mini/training/velodyne",
+  "n_frames_used": 50,
+  "n_total_frames": 7481,
+  "num_points": 50000,
+  "fps_steps": 2048,
+  "k_neighbors": 32,
+  "do_roi": true,
+  "n_radius_samples": 102400,
+  "stats": {
+    "min": 0.04386929050087929,
+    "max": 38.78825759887695,
+    "mean": 1.2638946771621704,
+    "std": 1.492455244064331,
+    "median": 0.8120585680007935,
+    "count": 102400,
+    "percentiles": {
+      "25": 0.4508208632469177,
+      "50": 0.8120585381984711,
+      "75": 1.5157055854797363,
+      "90": 2.6671719074249287,
+      "95": 3.74844781160354,
+      "99": 7.434812703132627
+    },
+    "suggested_init_threshold_range_p50_p99": [
+      0.8120585381984711,
+      7.434812703132627
+    ],
+    "suggested_init_threshold_range_p75_p95": [
+      1.5157055854797363,
+      3.74844781160354
+    ],
+    "suggested_init_threshold_range_p50_p95": [
+      0.8120585381984711,
+      3.74844781160354
+    ],
+    "suggested_init_threshold_median": 0.8120585680007935,
+    "suggested_init_threshold_p75": 1.5157055854797363,
+    "suggested_init_threshold_p90": 2.6671719074249287
+  }
+}
