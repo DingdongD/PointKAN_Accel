@@ -1,0 +1,91 @@
+{
+  "dataset": "nuscenes",
+  "data_dir": "/workspace/VoxelNet/Nuscenes_Mini/sweeps/LIDAR_TOP",
+  "n_total_frames": 3531,
+  "max_samples_used": 20,
+  "num_points": 50000,
+  "fps_steps": 2048,
+  "k_neighbors": 32,
+  "min_candidates_ratio": 1.1,
+  "best_by_iou_coarse_fine": {
+    "init_threshold": 1.5,
+    "tol": 0.05,
+    "max_iter": 10,
+    "iou_coarse_fine_vs_vanilla": 0.9790134429931641,
+    "iou_adaptive_vs_vanilla": 0.9270766973495483
+  },
+  "grid": [
+    {
+      "init_threshold": 1.5,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.9790134429931641,
+      "iou_adaptive_vs_vanilla": 0.9270766973495483,
+      "time_sec": 224.6317
+    },
+    {
+      "init_threshold": 1.4,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.9785122871398926,
+      "iou_adaptive_vs_vanilla": 0.9413666725158691,
+      "time_sec": 227.5792
+    },
+    {
+      "init_threshold": 1.3,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.9769257307052612,
+      "iou_adaptive_vs_vanilla": 0.9368685483932495,
+      "time_sec": 447.2394
+    },
+    {
+      "init_threshold": 1.2,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.9754897356033325,
+      "iou_adaptive_vs_vanilla": 0.9220777750015259,
+      "time_sec": 504.0816
+    },
+    {
+      "init_threshold": 1.1,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.9672953486442566,
+      "iou_adaptive_vs_vanilla": 0.9292049407958984,
+      "time_sec": 504.5826
+    },
+    {
+      "init_threshold": 1.0,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.9632527232170105,
+      "iou_adaptive_vs_vanilla": 0.9067265391349792,
+      "time_sec": 506.6375
+    },
+    {
+      "init_threshold": 0.9,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.9583315849304199,
+      "iou_adaptive_vs_vanilla": 0.9176410436630249,
+      "time_sec": 507.5504
+    },
+    {
+      "init_threshold": 0.8,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.9531368017196655,
+      "iou_adaptive_vs_vanilla": 0.8975870013237,
+      "time_sec": 509.2444
+    },
+    {
+      "init_threshold": 0.7,
+      "tol": 0.05,
+      "max_iter": 10,
+      "iou_coarse_fine_vs_vanilla": 0.9361408352851868,
+      "iou_adaptive_vs_vanilla": 0.8790451884269714,
+      "time_sec": 511.5292
+    }
+  ]
+}
