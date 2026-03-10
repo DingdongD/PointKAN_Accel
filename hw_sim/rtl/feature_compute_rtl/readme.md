@@ -211,18 +211,37 @@ vvp tb_im2col_1d.vvp
 
 ## 7. 注意事项
 
-- **命名不一致**：`PE_reconfig_v3.v` 中实际模块名为 `PE_reconfig_v4`；`PE_array_reconfig_v3.v` 中阵列模块名为 `PE_array_reconfig_v4`，例化时以模块名为准。
 - **v3 顶层**：`top_reconfig_systolic_v3` 未实现完整控制器与 C 输出收集，仅对 MODE_EW 做使能/清零，不能直接替代 v2 做 OS/WS 验证。
 - **OS 阵列规模**：当 M、N 大于 ARR_R、ARR_C 时，需分块或多次运行，输出选择逻辑在 top_reconfig_systolic_v2 的 generate 块中已按 (r,c) 与 ARR_R、ARR_C 做了区分。
 - **符号与位宽**：所有 PE 与控制器按有符号 16 位输入、64 位累加设计；im2col 的 `DATA_WIDTH` 可配置，与后续 GEMM 接口时需注意位宽一致。
 
 ---
 
-## 8. 与 PointKAN 的关系
+## 8. 与周期仿真器 (reconfig_sim_proj) 的衔接
+
+本 RTL 工程与仓库内的 **周期级仿真器 reconfig_sim_proj** 对应同一套可重构脉动架构，二者关系如下：
+
+| 层级 | 路径 | 说明 |
+|------|------|------|
+| **周期仿真（Python）** | `hw_sim/cycle_simulator/reconfig_sim_proj/` | 分块、OS/WS 调度、周期-能耗估计、NoC 流量 trace 导出与 BookSim 适配 |
+| **RTL（本目录）** | `hw_sim/rtl/feature_compute_rtl/` | 可综合的 Verilog 实现：OS / WS_PRELOAD / WS_DIAG / EW 模式、im2col |
+
+**对应关系简要说明：**
+
+- **模式对应**：仿真器中的 **OS / WS** 与 RTL 的 **MODE_OS / MODE_WS_PRELOAD / MODE_WS_DIAG** 一致；EW 对应 **MODE_EW**。
+- **数据流与分块**：仿真器按 `arr_r × arr_c` 做 GEMM/Conv2D 分块并估算周期；RTL 的 M/K/N、ARR_R/ARR_C 需与仿真配置一致以便对比。
+- **NoC 与 trace**：仿真器可导出 NoC 流量 trace（packet 文本/JSON/CSV）并接入 BookSim；本 RTL 不包含 NoC，仅实现阵列与 im2col，与 trace 中的「计算与数据量」假设一致即可。
+- **运行仿真器**：在 `reconfig_sim_proj` 根目录执行 `PYTHONPATH=. python reconfig_sim/examples/run_demo.py` 可得到周期/能耗报告；NoC trace 与代码检查说明见该目录下 `README.md` 与 `CODE_REVIEW_ZH.md`。
+
+据此，可先用周期仿真做架构与策略探索，再在本目录进行 RTL 仿真与综合验证。
+
+---
+
+## 9. 与 PointKAN 的关系
 
 本 RTL 作为 **特征计算** 的硬件实现，可与 PointKAN-pytorch 中的模型结构对应：  
 - GEMM 用于全连接或 1×1 卷积等线性变换；  
 - im2col + GEMM 用于常规 1D/2D 卷积；  
 - EW 可用于激活或逐元素操作。  
 
-具体与 PyTorch 层的映射与量化约定需结合上层 hw_sim 与算法脚本使用。
+具体与 PyTorch 层的映射与量化约定需结合上层 hw_sim（含周期仿真器 reconfig_sim_proj）与算法脚本使用。

@@ -3,7 +3,7 @@
     "total_cycles": 102,
     "total_energy": 1602.4800000000002,
     "total_macs": 1024,
-    "mode_request": "OS",
+    "mode_request": "AUTO",
     "mode_breakdown": {
       "OS": {
         "tiles": 2,
@@ -115,7 +115,7 @@
     "total_cycles": 712,
     "total_energy": 17712.64,
     "total_macs": 13824,
-    "mode_request": "OS",
+    "mode_request": "AUTO",
     "mode_breakdown": {
       "OS": {
         "tiles": 8,

@@ -9,6 +9,7 @@ A modular Python simulator for a reconfigurable systolic array supporting OS/WS 
 - Analytic buffer model
 - Analytic NoC model
 - Modular controllers at the simulator level (dispatcher and mode assignment)
+- Dispatcher-to-NoC traffic trace export and BookSim adapter (packet-trace text/JSON/CSV)
 
 ## Why not BookSim by default?
 
@@ -27,6 +28,7 @@ A practical flow is:
 - `reconfig_sim/schedulers`: tiler and dispatcher
 - `reconfig_sim/workloads`: GEMM / Conv2D workloads
 - `reconfig_sim/utils`: im2col and report helpers
+- `reconfig_sim/noc`: traffic trace conversion + BookSim export adapter
 - `reconfig_sim/examples`: runnable demo
 
 ## Run
