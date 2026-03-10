@@ -1,14 +1,14 @@
 {
   "gemm": {
-    "total_cycles": 79,
-    "total_energy": 1551.6400000000003,
+    "total_cycles": 102,
+    "total_energy": 1602.4800000000002,
     "total_macs": 1024,
-    "mode_request": "AUTO",
+    "mode_request": "OS",
     "mode_breakdown": {
       "OS": {
-        "tiles": 1,
-        "cycles": 79,
-        "energy": 1551.6400000000003
+        "tiles": 2,
+        "cycles": 102,
+        "energy": 1602.4800000000002
       },
       "WS": {
         "tiles": 0,
@@ -24,37 +24,78 @@
           "m0": 0,
           "k0": 0,
           "n0": 0,
-          "m_tile": 16,
+          "m_tile": 8,
           "k_tile": 8,
           "n_tile": 8,
           "batch_idx": 0,
           "extra": {}
         },
-        "cycles": 79,
-        "energy": 1551.6400000000003,
-        "macs": 1024,
+        "cycles": 51,
+        "energy": 801.2400000000001,
+        "macs": 512,
         "buffer": {
-          "a_read_bytes": 256,
+          "a_read_bytes": 128,
           "b_read_bytes": 128,
           "c_read_bytes": 0,
-          "c_write_bytes": 1024,
-          "energy": 332.8,
+          "c_write_bytes": 512,
+          "energy": 179.2,
           "stalls": 0
         },
         "noc": {
-          "bytes_moved": 1408,
-          "hops": 5632,
-          "cycles": 44,
-          "energy": 121.44
+          "bytes_moved": 768,
+          "hops": 3072,
+          "cycles": 24,
+          "energy": 66.24
         },
         "phase_cycles": {
           "clear": 1,
-          "compute": 30,
+          "compute": 22,
           "drain": 4
         },
         "phase_energy": {
-          "clear": 6.4,
-          "compute": 1043.2,
+          "clear": 3.2,
+          "compute": 521.6,
+          "drain": 0.4
+        }
+      },
+      {
+        "tile": {
+          "op_type": "gemm",
+          "mode": "OS",
+          "m0": 8,
+          "k0": 0,
+          "n0": 0,
+          "m_tile": 8,
+          "k_tile": 8,
+          "n_tile": 8,
+          "batch_idx": 0,
+          "extra": {}
+        },
+        "cycles": 51,
+        "energy": 801.2400000000001,
+        "macs": 512,
+        "buffer": {
+          "a_read_bytes": 128,
+          "b_read_bytes": 128,
+          "c_read_bytes": 0,
+          "c_write_bytes": 512,
+          "energy": 179.2,
+          "stalls": 0
+        },
+        "noc": {
+          "bytes_moved": 768,
+          "hops": 3072,
+          "cycles": 24,
+          "energy": 66.24
+        },
+        "phase_cycles": {
+          "clear": 1,
+          "compute": 22,
+          "drain": 4
+        },
+        "phase_energy": {
+          "clear": 3.2,
+          "compute": 521.6,
           "drain": 0.4
         }
       }
@@ -66,18 +107,20 @@
       "n": 8
     },
     "correct": true,
+    "tiling_check": "OS: every (i,j) covered exactly once",
+    "result_check": "systolic result matches golden (matmul)",
     "golden_checksum": -5292003193
   },
   "conv2d": {
-    "total_cycles": 352,
-    "total_energy": 16628.22,
+    "total_cycles": 712,
+    "total_energy": 17712.64,
     "total_macs": 13824,
-    "mode_request": "AUTO",
+    "mode_request": "OS",
     "mode_breakdown": {
       "OS": {
-        "tiles": 1,
-        "cycles": 352,
-        "energy": 16628.22
+        "tiles": 8,
+        "cycles": 712,
+        "energy": 17712.64
       },
       "WS": {
         "tiles": 0,
@@ -93,37 +136,324 @@
           "m0": 0,
           "k0": 0,
           "n0": 0,
-          "m_tile": 64,
+          "m_tile": 8,
           "k_tile": 27,
           "n_tile": 8,
           "batch_idx": 0,
           "extra": {}
         },
-        "cycles": 352,
-        "energy": 16628.22,
-        "macs": 13824,
+        "cycles": 89,
+        "energy": 2214.08,
+        "macs": 1728,
         "buffer": {
-          "a_read_bytes": 3456,
+          "a_read_bytes": 432,
           "b_read_bytes": 432,
           "c_read_bytes": 0,
-          "c_write_bytes": 4096,
-          "energy": 1801.6,
+          "c_write_bytes": 512,
+          "energy": 300.8,
           "stalls": 0
         },
         "noc": {
-          "bytes_moved": 7984,
-          "hops": 31936,
-          "cycles": 250,
-          "energy": 688.62
+          "bytes_moved": 1376,
+          "hops": 5504,
+          "cycles": 43,
+          "energy": 118.67999999999999
         },
         "phase_cycles": {
           "clear": 1,
-          "compute": 97,
+          "compute": 41,
           "drain": 4
         },
         "phase_energy": {
-          "clear": 25.6,
-          "compute": 13900.8,
+          "clear": 3.2,
+          "compute": 1737.6,
+          "drain": 0.4
+        }
+      },
+      {
+        "tile": {
+          "op_type": "conv2d_gemm",
+          "mode": "OS",
+          "m0": 8,
+          "k0": 0,
+          "n0": 0,
+          "m_tile": 8,
+          "k_tile": 27,
+          "n_tile": 8,
+          "batch_idx": 0,
+          "extra": {}
+        },
+        "cycles": 89,
+        "energy": 2214.08,
+        "macs": 1728,
+        "buffer": {
+          "a_read_bytes": 432,
+          "b_read_bytes": 432,
+          "c_read_bytes": 0,
+          "c_write_bytes": 512,
+          "energy": 300.8,
+          "stalls": 0
+        },
+        "noc": {
+          "bytes_moved": 1376,
+          "hops": 5504,
+          "cycles": 43,
+          "energy": 118.67999999999999
+        },
+        "phase_cycles": {
+          "clear": 1,
+          "compute": 41,
+          "drain": 4
+        },
+        "phase_energy": {
+          "clear": 3.2,
+          "compute": 1737.6,
+          "drain": 0.4
+        }
+      },
+      {
+        "tile": {
+          "op_type": "conv2d_gemm",
+          "mode": "OS",
+          "m0": 16,
+          "k0": 0,
+          "n0": 0,
+          "m_tile": 8,
+          "k_tile": 27,
+          "n_tile": 8,
+          "batch_idx": 0,
+          "extra": {}
+        },
+        "cycles": 89,
+        "energy": 2214.08,
+        "macs": 1728,
+        "buffer": {
+          "a_read_bytes": 432,
+          "b_read_bytes": 432,
+          "c_read_bytes": 0,
+          "c_write_bytes": 512,
+          "energy": 300.8,
+          "stalls": 0
+        },
+        "noc": {
+          "bytes_moved": 1376,
+          "hops": 5504,
+          "cycles": 43,
+          "energy": 118.67999999999999
+        },
+        "phase_cycles": {
+          "clear": 1,
+          "compute": 41,
+          "drain": 4
+        },
+        "phase_energy": {
+          "clear": 3.2,
+          "compute": 1737.6,
+          "drain": 0.4
+        }
+      },
+      {
+        "tile": {
+          "op_type": "conv2d_gemm",
+          "mode": "OS",
+          "m0": 24,
+          "k0": 0,
+          "n0": 0,
+          "m_tile": 8,
+          "k_tile": 27,
+          "n_tile": 8,
+          "batch_idx": 0,
+          "extra": {}
+        },
+        "cycles": 89,
+        "energy": 2214.08,
+        "macs": 1728,
+        "buffer": {
+          "a_read_bytes": 432,
+          "b_read_bytes": 432,
+          "c_read_bytes": 0,
+          "c_write_bytes": 512,
+          "energy": 300.8,
+          "stalls": 0
+        },
+        "noc": {
+          "bytes_moved": 1376,
+          "hops": 5504,
+          "cycles": 43,
+          "energy": 118.67999999999999
+        },
+        "phase_cycles": {
+          "clear": 1,
+          "compute": 41,
+          "drain": 4
+        },
+        "phase_energy": {
+          "clear": 3.2,
+          "compute": 1737.6,
+          "drain": 0.4
+        }
+      },
+      {
+        "tile": {
+          "op_type": "conv2d_gemm",
+          "mode": "OS",
+          "m0": 32,
+          "k0": 0,
+          "n0": 0,
+          "m_tile": 8,
+          "k_tile": 27,
+          "n_tile": 8,
+          "batch_idx": 0,
+          "extra": {}
+        },
+        "cycles": 89,
+        "energy": 2214.08,
+        "macs": 1728,
+        "buffer": {
+          "a_read_bytes": 432,
+          "b_read_bytes": 432,
+          "c_read_bytes": 0,
+          "c_write_bytes": 512,
+          "energy": 300.8,
+          "stalls": 0
+        },
+        "noc": {
+          "bytes_moved": 1376,
+          "hops": 5504,
+          "cycles": 43,
+          "energy": 118.67999999999999
+        },
+        "phase_cycles": {
+          "clear": 1,
+          "compute": 41,
+          "drain": 4
+        },
+        "phase_energy": {
+          "clear": 3.2,
+          "compute": 1737.6,
+          "drain": 0.4
+        }
+      },
+      {
+        "tile": {
+          "op_type": "conv2d_gemm",
+          "mode": "OS",
+          "m0": 40,
+          "k0": 0,
+          "n0": 0,
+          "m_tile": 8,
+          "k_tile": 27,
+          "n_tile": 8,
+          "batch_idx": 0,
+          "extra": {}
+        },
+        "cycles": 89,
+        "energy": 2214.08,
+        "macs": 1728,
+        "buffer": {
+          "a_read_bytes": 432,
+          "b_read_bytes": 432,
+          "c_read_bytes": 0,
+          "c_write_bytes": 512,
+          "energy": 300.8,
+          "stalls": 0
+        },
+        "noc": {
+          "bytes_moved": 1376,
+          "hops": 5504,
+          "cycles": 43,
+          "energy": 118.67999999999999
+        },
+        "phase_cycles": {
+          "clear": 1,
+          "compute": 41,
+          "drain": 4
+        },
+        "phase_energy": {
+          "clear": 3.2,
+          "compute": 1737.6,
+          "drain": 0.4
+        }
+      },
+      {
+        "tile": {
+          "op_type": "conv2d_gemm",
+          "mode": "OS",
+          "m0": 48,
+          "k0": 0,
+          "n0": 0,
+          "m_tile": 8,
+          "k_tile": 27,
+          "n_tile": 8,
+          "batch_idx": 0,
+          "extra": {}
+        },
+        "cycles": 89,
+        "energy": 2214.08,
+        "macs": 1728,
+        "buffer": {
+          "a_read_bytes": 432,
+          "b_read_bytes": 432,
+          "c_read_bytes": 0,
+          "c_write_bytes": 512,
+          "energy": 300.8,
+          "stalls": 0
+        },
+        "noc": {
+          "bytes_moved": 1376,
+          "hops": 5504,
+          "cycles": 43,
+          "energy": 118.67999999999999
+        },
+        "phase_cycles": {
+          "clear": 1,
+          "compute": 41,
+          "drain": 4
+        },
+        "phase_energy": {
+          "clear": 3.2,
+          "compute": 1737.6,
+          "drain": 0.4
+        }
+      },
+      {
+        "tile": {
+          "op_type": "conv2d_gemm",
+          "mode": "OS",
+          "m0": 56,
+          "k0": 0,
+          "n0": 0,
+          "m_tile": 8,
+          "k_tile": 27,
+          "n_tile": 8,
+          "batch_idx": 0,
+          "extra": {}
+        },
+        "cycles": 89,
+        "energy": 2214.08,
+        "macs": 1728,
+        "buffer": {
+          "a_read_bytes": 432,
+          "b_read_bytes": 432,
+          "c_read_bytes": 0,
+          "c_write_bytes": 512,
+          "energy": 300.8,
+          "stalls": 0
+        },
+        "noc": {
+          "bytes_moved": 1376,
+          "hops": 5504,
+          "cycles": 43,
+          "energy": 118.67999999999999
+        },
+        "phase_cycles": {
+          "clear": 1,
+          "compute": 41,
+          "drain": 4
+        },
+        "phase_energy": {
+          "clear": 3.2,
+          "compute": 1737.6,
           "drain": 0.4
         }
       }
@@ -146,6 +476,8 @@
       "cout": 8
     },
     "correct": true,
+    "tiling_check": "OS: every (i,j) covered exactly once",
+    "result_check": "systolic result matches golden (conv2d)",
     "golden_checksum": 44067418031
   },
   "noc_note": "This simulator uses an analytic NoC model by default. BookSim is useful when you need packet-level contention/latency under a concrete topology and routing policy. For systolic-array design-space exploration, an analytic model is usually faster and easier to calibrate. A practical workflow is: first use the analytic model for sweeps, then calibrate a few representative traffic points against BookSim.",

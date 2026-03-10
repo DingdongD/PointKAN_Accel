@@ -177,3 +177,163 @@ def trace_to_serializable(trace: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         {"cycle": e["cycle"], "phase": e["phase"], "grid": e["grid"]}
         for e in trace
     ]
+
+
+# ---------- 图片导出：完整过程（所有 tile × 每 cycle） ----------
+_OP_COLORS = {
+    OP_CLEAR: "#4A90D9",     # 蓝
+    OP_MAC: "#50C878",       # 绿
+    OP_PRELOAD: "#E6B800",   # 黄
+    OP_DRAIN: "#E07850",     # 橙
+    OP_IDLE: "#E8E8E8",     # 浅灰
+}
+
+
+def _render_grid_to_image(
+    grid: List[List[str]],
+    path: str,
+    title: str = "",
+    cell_size: float = 0.8,
+) -> bool:
+    """将单周期 grid 画成彩色网格图并保存为 PNG。需 matplotlib。返回是否成功。"""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import matplotlib.patches as mpatches
+    except ImportError:
+        return False
+    arr_r, arr_c = len(grid), len(grid[0]) if grid else 0
+    if arr_r == 0 or arr_c == 0:
+        return False
+    fig, ax = plt.subplots(1, 1, figsize=(cell_size * arr_c, cell_size * arr_r))
+    for i in range(arr_r):
+        for j in range(arr_c):
+            op = grid[i][j]
+            color = _OP_COLORS.get(op, "#E8E8E8")
+            rect = mpatches.Rectangle((j, arr_r - 1 - i), 1, 1, facecolor=color, edgecolor="gray", linewidth=0.5)
+            ax.add_patch(rect)
+            ax.text(j + 0.5, arr_r - 1 - i + 0.5, op, ha="center", va="center", fontsize=8)
+    ax.set_xlim(0, arr_c)
+    ax.set_ylim(0, arr_r)
+    ax.set_aspect("equal")
+    ax.set_xticks(range(arr_c))
+    ax.set_yticks(range(arr_r))
+    ax.set_xticklabels(range(arr_c))
+    ax.set_yticklabels(range(arr_r - 1, -1, -1))
+    if title:
+        ax.set_title(title, fontsize=10)
+    plt.tight_layout()
+    plt.savefig(path, dpi=100, bbox_inches="tight")
+    plt.close()
+    return True
+
+
+def export_report_to_images(
+    report: Dict[str, Any],
+    cfg,
+    output_dir: str,
+    op_type: str = "gemm",
+    arr_r: Optional[int] = None,
+    arr_c: Optional[int] = None,
+) -> Tuple[int, str]:
+    """
+    将报告中的「所有 tile × 每 cycle」导出为 PNG 图片序列，便于查看完整数据流过程。
+    report: run_gemm 或 run_conv2d 的返回（需含 'trace'，每项含 'tile' 字典）。
+    output_dir: 图片保存目录，若不存在会创建。
+    op_type: 'gemm' 或 'conv2d'，仅用于文件名前缀。
+    返回 (总帧数, output_dir)。
+    """
+    import os
+    from ..models.tile import TileDesc
+
+    arr_r = arr_r or getattr(cfg.array, "arr_r", 8)
+    arr_c = arr_c or getattr(cfg.array, "arr_c", 8)
+    traces = report.get("trace") or []
+    if not traces:
+        return 0, output_dir
+
+    os.makedirs(output_dir, exist_ok=True)
+    frame_count = 0
+    for tile_idx, t_stats in enumerate(traces):
+        t = t_stats.get("tile") or {}
+        tile = TileDesc(
+            op_type=t.get("op_type", op_type),
+            mode=t.get("mode", "OS"),
+            m0=t.get("m0", 0),
+            k0=t.get("k0", 0),
+            n0=t.get("n0", 0),
+            m_tile=t.get("m_tile", arr_r),
+            k_tile=t.get("k_tile", arr_r),
+            n_tile=t.get("n_tile", arr_c),
+            batch_idx=t.get("batch_idx", 0),
+            extra=t.get("extra"),
+        )
+        trace = generate_tile_cycle_activity(tile, cfg, arr_r, arr_c, max_cycles=None)
+        for entry in trace:
+            title = "{} Tile {} | global frame {} | cycle {} [{}]".format(
+                op_type, tile_idx, frame_count, entry["cycle"], entry["phase"]
+            )
+            path = os.path.join(output_dir, "frame_{:05d}.png".format(frame_count))
+            _render_grid_to_image(entry["grid"], path, title=title)
+            frame_count += 1
+
+    if frame_count > 0:
+        index_path = os.path.join(output_dir, "index.html")
+        with open(index_path, "w", encoding="utf-8") as f:
+            f.write("<!DOCTYPE html><html><head><meta charset='utf-8'><title>Systolic Frames</title></head><body>\n")
+            f.write("<p>Total frames: {} (all tiles, every cycle).</p>\n".format(frame_count))
+            f.write("<p>Legend: CLR=clear, MAC=mac, PRE=preload, DRN=drain, -=idle</p>\n")
+            for i in range(frame_count):
+                f.write('<img src="frame_{:05d}.png" alt="frame {}" style="max-width:360px; margin:4px;" />\n'.format(i, i))
+            f.write("</body></html>\n")
+        # 将 frame_*.png 拼成一张 GIF 动画
+        gif_path = _frames_to_gif(output_dir, gif_filename="animation.gif", duration_ms=200)
+        if gif_path:
+            index_path = os.path.join(output_dir, "index.html")
+            with open(index_path, "a", encoding="utf-8") as f:
+                f.write('<p><a href="animation.gif">animation.gif</a> (all frames)</p>\n')
+    return frame_count, output_dir
+
+
+def _frames_to_gif(
+    output_dir: str,
+    gif_filename: str = "animation.gif",
+    duration_ms: int = 200,
+) -> Optional[str]:
+    """
+    将 output_dir 下按数字序的 frame_*.png 拼成一张 GIF，保存为 output_dir/gif_filename。
+    duration_ms: 每帧持续时间（毫秒）。返回 GIF 路径，失败返回 None。
+    """
+    import os
+    import glob
+    import re
+    pattern = os.path.join(output_dir, "frame_*.png")
+    files = sorted(glob.glob(pattern), key=lambda p: int(re.search(r"frame_(\d+)\.png", p).group(1)))
+    if not files:
+        return None
+    gif_path = os.path.join(output_dir, gif_filename)
+    duration_sec = duration_ms / 1000.0
+    # 优先使用 imageio，GIF 质量更好
+    try:
+        import imageio
+        frames = [imageio.v2.imread(p) for p in files]
+        imageio.mimsave(gif_path, frames, duration=duration_sec, loop=0)
+        return gif_path
+    except ImportError:
+        pass
+    # 回退到 Pillow（首帧须为 P 模式，后续帧会按首帧调色板转换）
+    try:
+        from PIL import Image
+        images_rgb = [Image.open(p).convert("RGB") for p in files]
+        first_p = images_rgb[0].quantize(colors=256)
+        first_p.save(
+            gif_path,
+            save_all=True,
+            append_images=images_rgb[1:],
+            duration=duration_ms,
+            loop=0,
+        )
+        return gif_path
+    except Exception:
+        return None

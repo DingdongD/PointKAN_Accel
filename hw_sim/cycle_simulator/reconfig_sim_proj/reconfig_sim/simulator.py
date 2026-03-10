@@ -13,6 +13,12 @@ from .models.cycle_energy import CycleEnergyModel
 from .schedulers.tiler import GemmTiler, Conv2DTiler
 from .schedulers.dispatcher import Dispatcher
 from .utils.im2col import conv2d_to_gemm
+from .utils.tiling_check import (
+    verify_gemm_tiling_coverage,
+    verify_conv2d_tiling_coverage,
+    verify_gemm_result,
+    verify_conv2d_result,
+)
 from .workloads.gemm import GemmWorkload
 from .workloads.conv2d import Conv2DWorkload
 
@@ -77,9 +83,15 @@ class ReconfigSimulator:
             tiles = Dispatcher(self.cfg).assign_modes(tiles, 'AUTO')
         stats = self._simulate_tiles(tiles, mode)
         golden = wl.golden()
+        tiling_ok, tiling_msg = verify_gemm_tiling_coverage(tiles, wl.m, wl.n)
+        result_ok, result_msg = verify_gemm_result(
+            wl.a, wl.b, golden, tiles, wl.m, wl.k, wl.n
+        )
         stats['op_type'] = 'gemm'
         stats['shape'] = {'m': wl.m, 'k': wl.k, 'n': wl.n}
-        stats['correct'] = True
+        stats['correct'] = tiling_ok and result_ok
+        stats['tiling_check'] = tiling_msg
+        stats['result_check'] = result_msg
         stats['golden_checksum'] = int(np.sum(golden.astype(np.int64)))
         return stats
 
@@ -110,6 +122,13 @@ class ReconfigSimulator:
             'k_dim': k,
             'cout': cout,
         }
-        stats['correct'] = True
+        tiling_ok, tiling_msg = verify_conv2d_tiling_coverage(tiles, rows, cout)
+        n, oh, ow = y.shape[0], y.shape[2], y.shape[3]
+        result_ok, result_msg = verify_conv2d_result(
+            cols, w_mat, y, tiles, rows, k, cout, n, oh, ow, bias=wl.bias
+        )
+        stats['correct'] = tiling_ok and result_ok
+        stats['tiling_check'] = tiling_msg
+        stats['result_check'] = result_msg
         stats['golden_checksum'] = int(np.sum(y.astype(np.int64)))
         return stats
