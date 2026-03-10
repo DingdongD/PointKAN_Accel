@@ -1,0 +1,196 @@
+{
+  "gemm": {
+    "total_cycles": 79,
+    "total_energy": 1551.6400000000003,
+    "total_macs": 1024,
+    "mode_request": "AUTO",
+    "mode_breakdown": {
+      "OS": {
+        "tiles": 1,
+        "cycles": 79,
+        "energy": 1551.6400000000003
+      },
+      "WS": {
+        "tiles": 0,
+        "cycles": 0,
+        "energy": 0.0
+      }
+    },
+    "trace": [
+      {
+        "tile": {
+          "op_type": "gemm",
+          "mode": "OS",
+          "m0": 0,
+          "k0": 0,
+          "n0": 0,
+          "m_tile": 16,
+          "k_tile": 8,
+          "n_tile": 8,
+          "batch_idx": 0,
+          "extra": {}
+        },
+        "cycles": 79,
+        "energy": 1551.6400000000003,
+        "macs": 1024,
+        "buffer": {
+          "a_read_bytes": 256,
+          "b_read_bytes": 128,
+          "c_read_bytes": 0,
+          "c_write_bytes": 1024,
+          "energy": 332.8,
+          "stalls": 0
+        },
+        "noc": {
+          "bytes_moved": 1408,
+          "hops": 5632,
+          "cycles": 44,
+          "energy": 121.44
+        },
+        "phase_cycles": {
+          "clear": 1,
+          "compute": 30,
+          "drain": 4
+        },
+        "phase_energy": {
+          "clear": 6.4,
+          "compute": 1043.2,
+          "drain": 0.4
+        }
+      }
+    ],
+    "op_type": "gemm",
+    "shape": {
+      "m": 16,
+      "k": 8,
+      "n": 8
+    },
+    "correct": true,
+    "golden_checksum": -5292003193
+  },
+  "conv2d": {
+    "total_cycles": 352,
+    "total_energy": 16628.22,
+    "total_macs": 13824,
+    "mode_request": "AUTO",
+    "mode_breakdown": {
+      "OS": {
+        "tiles": 1,
+        "cycles": 352,
+        "energy": 16628.22
+      },
+      "WS": {
+        "tiles": 0,
+        "cycles": 0,
+        "energy": 0.0
+      }
+    },
+    "trace": [
+      {
+        "tile": {
+          "op_type": "conv2d_gemm",
+          "mode": "OS",
+          "m0": 0,
+          "k0": 0,
+          "n0": 0,
+          "m_tile": 64,
+          "k_tile": 27,
+          "n_tile": 8,
+          "batch_idx": 0,
+          "extra": {}
+        },
+        "cycles": 352,
+        "energy": 16628.22,
+        "macs": 13824,
+        "buffer": {
+          "a_read_bytes": 3456,
+          "b_read_bytes": 432,
+          "c_read_bytes": 0,
+          "c_write_bytes": 4096,
+          "energy": 1801.6,
+          "stalls": 0
+        },
+        "noc": {
+          "bytes_moved": 7984,
+          "hops": 31936,
+          "cycles": 250,
+          "energy": 688.62
+        },
+        "phase_cycles": {
+          "clear": 1,
+          "compute": 97,
+          "drain": 4
+        },
+        "phase_energy": {
+          "clear": 25.6,
+          "compute": 13900.8,
+          "drain": 0.4
+        }
+      }
+    ],
+    "op_type": "conv2d_im2col",
+    "shape": {
+      "n": 1,
+      "c_in": 3,
+      "h": 8,
+      "w": 8,
+      "c_out": 8,
+      "k_h": 3,
+      "k_w": 3,
+      "stride": 1,
+      "padding": 1
+    },
+    "im2col": {
+      "rows": 64,
+      "k_dim": 27,
+      "cout": 8
+    },
+    "correct": true,
+    "golden_checksum": 44067418031
+  },
+  "noc_note": "This simulator uses an analytic NoC model by default. BookSim is useful when you need packet-level contention/latency under a concrete topology and routing policy. For systolic-array design-space exploration, an analytic model is usually faster and easier to calibrate. A practical workflow is: first use the analytic model for sweeps, then calibrate a few representative traffic points against BookSim.",
+  "config": {
+    "array": {
+      "arr_r": 8,
+      "arr_c": 8,
+      "word_size": 16,
+      "acc_width": 64
+    },
+    "buffer": {
+      "global_buffer_bytes": 524288,
+      "a_buffer_bytes": 65536,
+      "b_buffer_bytes": 65536,
+      "c_buffer_bytes": 65536,
+      "line_bytes": 64,
+      "read_energy_per_byte": 0.2,
+      "write_energy_per_byte": 0.25
+    },
+    "noc": {
+      "model": "analytic",
+      "topology": "mesh",
+      "link_bandwidth_bytes_per_cycle": 32,
+      "hops_per_a": 4,
+      "hops_per_b": 4,
+      "hops_per_c": 4,
+      "energy_per_byte_per_hop": 0.02,
+      "router_energy_per_flit": 0.1,
+      "flit_bytes": 16,
+      "contention_factor": 1.0
+    },
+    "timing": {
+      "os_clear_cycles": 1,
+      "os_drain_extra": 4,
+      "ws_preload_cycles": 2,
+      "ws_gap_cycles": 1,
+      "mode_switch_cycles": 2
+    },
+    "energy": {
+      "mac_energy": 1.0,
+      "os_psum_write_energy": 0.15,
+      "os_psum_clear_energy": 0.05,
+      "ws_weight_load_energy": 0.12,
+      "dispatcher_energy_per_cycle": 0.5,
+      "control_energy_per_cycle": 0.1
+    }
+  }
+}
