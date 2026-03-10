@@ -1,0 +1,15 @@
+{
+  "dram_type": "D",
+  "io_type": "DDR3",
+  "iostate": "RW",
+  "bus_freq_mhz": 800.0,
+  "num_dq": 72,
+  "burst_bytes": 256,
+  "io_dynamic_power_mw": 1749.24,
+  "phy_power_mw": 232.752,
+  "io_termination_power_mw": 3785.43,
+  "phy_wakeup_time_us": 27.503,
+  "read_fixed_latency_ns": 0.0,
+  "write_fixed_latency_ns": 0.0,
+  "row_miss_penalty_ns": 0.0
+}
