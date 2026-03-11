@@ -31,6 +31,25 @@ except ImportError:
     )
 
 
+def _furthest_point_sample_cpu(xyz: torch.Tensor, npoint: int) -> torch.Tensor:
+    """
+    Pure PyTorch CPU implementation of FPS. xyz: (B, N, 3), returns (B, npoint) LongTensor of indices.
+    """
+    B, N, _ = xyz.shape
+    device = xyz.device
+    idx = torch.zeros(B, npoint, dtype=torch.long, device=device)
+    idx[:, 0] = 0
+    for i in range(1, npoint):
+        selected = torch.gather(
+            xyz, 1, idx[:, :i].unsqueeze(-1).expand(-1, -1, 3)
+        )  # (B, i, 3)
+        cur = xyz.unsqueeze(2)  # (B, N, 1, 3)
+        dist = ((cur - selected.unsqueeze(1)) ** 2).sum(dim=-1)  # (B, N, i)
+        min_dist, _ = dist.min(dim=2)  # (B, N)
+        idx[:, i] = min_dist.argmax(dim=1)
+    return idx
+
+
 class FurthestPointSampling(Function):
     @staticmethod
     def forward(ctx, xyz, npoint):
@@ -51,7 +70,10 @@ class FurthestPointSampling(Function):
         torch.Tensor
             (B, npoint) tensor containing the set
         """
-        out = _ext.furthest_point_sampling(xyz, npoint)
+        if not xyz.is_cuda:
+            out = _furthest_point_sample_cpu(xyz, npoint)
+        else:
+            out = _ext.furthest_point_sampling(xyz, npoint)
 
         ctx.mark_non_differentiable(out)
 

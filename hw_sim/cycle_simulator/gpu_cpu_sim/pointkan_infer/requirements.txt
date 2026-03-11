@@ -1,0 +1,3 @@
+# PointKAN 推理 profiling 额外依赖（与 PointKAN-elite 环境共用 PyTorch 等）
+# CPU 推理能耗（仅推理阶段）：进程内 pyRAPL Measurement 包住推理循环
+pyRAPL>=0.2.0

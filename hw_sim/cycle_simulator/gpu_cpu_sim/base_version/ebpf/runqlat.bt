@@ -1,0 +1,23 @@
+#!/usr/bin/env bpftrace
+
+/*
+统计 run queue latency（进程被唤醒到真正被调度运行之间的延迟）
+单位最后转为 us，并画出直方图
+*/
+
+tracepoint:sched:sched_wakeup,
+tracepoint:sched:sched_wakeup_new
+{
+  // 记录某个 pid 被唤醒时的时间戳
+  @q[args->pid] = nsecs;
+}
+
+tracepoint:sched:sched_switch
+/@q[args->next_pid]/
+{
+  // 当 next_pid 真正被切换上 CPU 时，计算从 wakeup 到 run 的延迟
+  @runqlat_us = hist((nsecs - @q[args->next_pid]) / 1000);
+
+  // 计算完后删除该 pid 的暂存时间戳
+  delete(@q[args->next_pid]);
+}

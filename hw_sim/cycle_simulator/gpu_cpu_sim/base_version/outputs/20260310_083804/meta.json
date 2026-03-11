@@ -1,0 +1,11 @@
+{
+  "cmd": "sleep 0.2",
+  "out_dir": "/workspace/PointKAN-pytorch/hw_sim/cycle_simulator/gpu_cpu_sim/base_version/outputs",
+  "mode": "cpu",
+  "warmup": 0,
+  "repeat": 1,
+  "gpu_index": 0,
+  "gpu_sample_ms": 50,
+  "cpu_sample_ms": 50,
+  "enable_perf": false
+}

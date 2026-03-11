@@ -31,11 +31,11 @@ def download():
 
 def load_scanobjectnn_data(partition):
     #download()
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    # BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     all_data = []
     all_label = []
 
-    h5_name = BASE_DIR + '/data/h5_files/main_split/' + partition + '_objectdataset_augmentedrot_scale75.h5'
+    h5_name = '/workspace/VoxelNet/scannet_kan/main_split/' + partition + '_objectdataset_augmentedrot_scale75.h5'
     f = h5py.File(h5_name, mode="r")
     data = f['data'][:].astype('float32')
     label = f['label'][:].astype('int64')

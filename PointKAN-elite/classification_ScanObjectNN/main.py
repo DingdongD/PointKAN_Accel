@@ -226,6 +226,7 @@ def train(net, trainloader, optimizer, criterion, device):
         logits = net(data)
         loss = criterion(logits, label)
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(net.parameters(), 1.0)
         optimizer.step()
         train_loss += loss.item()
         preds = logits.max(dim=1)[1]

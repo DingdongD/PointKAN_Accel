@@ -484,12 +484,15 @@ def simulate_network(
         if area_um2 is not None and isinstance(area_um2, (int, float)):
             operator_breakdown[op_name]["area_um2"] = operator_breakdown[op_name].get("area_um2", 0) + float(area_um2)
         layer_name = meta.get("layer_name", "")
+        area_um2 = meta.get("area_um2")
+        area_um2_val = float(area_um2) if area_um2 is not None and isinstance(area_um2, (int, float)) else 0.0
         operator_cycle_detail.append({
             "operator": op_name,
             "layer_name": layer_name,
             "duration": e.duration,
             "latency_ns": e.duration * clk_ns,
             "energy_nj": e.energy,
+            "area_um2": area_um2_val,
         })
 
     # 按执行顺序生成完整硬件算子序列（与 constants 中键名一致，便于导出 operator_sequence.txt）

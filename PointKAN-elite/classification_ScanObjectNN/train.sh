@@ -16,7 +16,7 @@ SEED="${SEED:-42}"
 RESUME="${RESUME:-}"
 PATIENCE="${PATIENCE:-20}"
 
-BATCH_SIZE=32
+BATCH_SIZE=64
 EPOCH=200
 LR=0.01
 WEIGHT_DECAY=1e-4
@@ -40,9 +40,9 @@ if [[ -n "$RESUME" ]]; then
     --patience "$PATIENCE" \
     --resume "$RESUME"
 else
-  echo ">>> 从头训练 (checkpoints 将保存在 checkpoints/PointKAN-${MSG}-${SEED}, 早停 patience=${PATIENCE})"
+  echo ">>> 从头训练 (checkpoints 将保存在 checkpoints/PointKANElite-${MSG}-${SEED}, 早停 patience=${PATIENCE})"
   python main.py \
-    --model PointKAN \
+    --model pointKANElite \
     --msg "$MSG" \
     --seed "$SEED" \
     --batch_size "$BATCH_SIZE" \

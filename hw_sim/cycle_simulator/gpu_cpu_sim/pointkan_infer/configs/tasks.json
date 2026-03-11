@@ -1,0 +1,20 @@
+{
+  "modelnet40": {
+    "checkpoint": "PointKAN-elite/classification_ModelNet40/checkpoints/pointKANElite-pointkan_elite_exp-42",
+    "num_points": 1024,
+    "batch_size": 1,
+    "description": "ModelNet40 分类"
+  },
+  "scanobjectnn": {
+    "checkpoint": "PointKAN-elite/classification_ScanObjectNN/checkpoints/pointKANElite-ScanObjectNN",
+    "num_points": 1024,
+    "batch_size": 1,
+    "description": "ScanObjectNN 分类"
+  },
+  "part_seg": {
+    "checkpoint": "PointKAN-elite/part_segmentation/checkpoints/pointKANElite_part_exp",
+    "num_points": 2048,
+    "batch_size": 1,
+    "description": "Part Segmentation"
+  }
+}

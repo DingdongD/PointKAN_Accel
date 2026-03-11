@@ -1,0 +1,43 @@
+{
+  "aggregate": {
+    "num_runs": 1,
+    "latency_s_mean": 0.207416142,
+    "latency_s_min": 0.207416142,
+    "latency_s_max": 0.207416142,
+    "gpu_energy_j_mean": null,
+    "gpu_avg_power_w_mean": null,
+    "gpu_peak_power_w_max": null,
+    "cpu_avg_percent_mean": 0.0,
+    "rss_peak_mb_max": 0.9375,
+    "cpu_energy_pkg_j_mean": null,
+    "cpu_energy_ram_j_mean": null,
+    "cpu_energy_total_j_mean": null,
+    "perf_stats_mean": null
+  },
+  "runs": [
+    {
+      "mode": "cpu",
+      "command": "sleep 0.2",
+      "returncode": 0,
+      "wall_time_s": 0.207416142,
+      "latency_s": 0.207416142,
+      "gpu_backend": null,
+      "gpu_energy_j": null,
+      "gpu_avg_power_w": null,
+      "gpu_peak_power_w": null,
+      "cpu_avg_percent": 0.0,
+      "rss_peak_mb": 0.9375,
+      "cpu_energy_pkg_j": null,
+      "cpu_energy_ram_j": null,
+      "cpu_energy_total_j": null,
+      "rapl_source": null,
+      "perf_stats": null,
+      "stdout_path": "/workspace/PointKAN-pytorch/hw_sim/cycle_simulator/gpu_cpu_sim/base_version/outputs/20260310_083804/run_0.stdout.txt",
+      "stderr_path": "/workspace/PointKAN-pytorch/hw_sim/cycle_simulator/gpu_cpu_sim/base_version/outputs/20260310_083804/run_0.stderr.txt",
+      "gpu_csv_path": null,
+      "cpu_csv_path": "/workspace/PointKAN-pytorch/hw_sim/cycle_simulator/gpu_cpu_sim/base_version/outputs/20260310_083804/run_0_cpu_samples.csv",
+      "dmon_path": null,
+      "perf_path": null
+    }
+  ]
+}

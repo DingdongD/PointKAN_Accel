@@ -80,10 +80,15 @@ class KAT_Group(nn.Module):
             Tensor: Processed tensor after applying rational function.
         """
         assert input.dim() == 3 or input.dim() == 2, "Input tensor must be 3D (batch, length, channels) or 2D (batch, channels)."
-    
-    
-        # Repeat the weights for all groups
+
         weight_numerator = self.weight_numerator.repeat(self.num_groups, 1)
+        # CPU fallback: Triton kernels are GPU-only, use pure PyTorch path when input is on CPU
+        if not input.is_cuda:
+            x = input
+            if x.dim() == 2:
+                x = x.unsqueeze(1)  # (B, D) -> (B, 1, D) for Rational_CUDA_A_1DGroup
+            out = Rational_CUDA_A_1DGroup(x, weight_numerator, self.weight_denominator, self.num_groups)
+            return out.squeeze(1) if input.dim() == 2 else out
         return self.rational(input, weight_numerator, self.weight_denominator, self.num_groups)
         
     def extra_repr(self):

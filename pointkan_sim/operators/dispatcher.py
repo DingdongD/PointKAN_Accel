@@ -68,6 +68,9 @@ def _gen_conv1d(
             area_list = context.get("mnsim_area_um2")
             if isinstance(area_list, (list, tuple)) and idx < len(area_list):
                 meta["area_um2"] = float(area_list[idx])
+            layer_names = context.get("mnsim_layer_names")
+            if isinstance(layer_names, (list, tuple)) and idx < len(layer_names):
+                meta["layer_name"] = str(layer_names[idx])
             context["mnsim_index"] = idx + 1
             mnsim_ev = Event(
                 event_id=0,
@@ -117,6 +120,9 @@ def _gen_linear(
             area_list = context.get("mnsim_area_um2")
             if isinstance(area_list, (list, tuple)) and idx < len(area_list):
                 meta["area_um2"] = float(area_list[idx])
+            layer_names = context.get("mnsim_layer_names")
+            if isinstance(layer_names, (list, tuple)) and idx < len(layer_names):
+                meta["layer_name"] = str(layer_names[idx])
             context["mnsim_index"] = idx + 1
             mnsim_ev = Event(
                 event_id=0,

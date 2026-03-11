@@ -466,6 +466,8 @@ def main() -> int:
                     mnsim_context["mnsim_clock_period_ns"] = float(neurosim_clock_ns)
                 if getattr(neurosim_result, "layer_area_um2", None) is not None:
                     mnsim_context["mnsim_area_um2"] = neurosim_result.layer_area_um2
+                if conv_linear_list:
+                    mnsim_context["mnsim_layer_names"] = [c.name for c in conv_linear_list[: len(neurosim_result.layer_latency_ns)]]
                 n_mnsim = len(neurosim_result.layer_latency_ns)
                 log_info("已用 NeuroSim 全网络仿真（DNN_NeuroSim main）得到逐层 latency/energy")
                 # 数字逻辑时钟由 hw_config.clock_period（可 --logic_clk_freq 设置，默认 1 GHz）；Conv/Linear 单独用 NeuroSim 时钟
@@ -519,6 +521,8 @@ def main() -> int:
                     }
                     if getattr(mnsim_result, "layer_area_um2", None):
                         mnsim_context["mnsim_area_um2"] = mnsim_result.layer_area_um2
+                    if conv_linear_order:
+                        mnsim_context["mnsim_layer_names"] = [conv_linear_order[i][0] for i in range(len(conv_linear_order))]
                     n_mnsim = len(mnsim_result.layer_latency_ns)
                     log_info("已用与 checkpoint 一致的层结构 + 真实按层 indata/rdata 驱动 MNSIM 全 NetStruct（Tile/NoC）")
                     clock_ns = hw_config.clock_period
@@ -645,7 +649,7 @@ def main() -> int:
         # 每个算子 cycle 的详细构成：按 (算子类型, 层名) 聚合并打印
         if operator_cycle_detail:
             from collections import defaultdict
-            by_op_layer: dict = defaultdict(lambda: {"cycles": 0, "latency_ns": 0.0, "energy_nj": 0.0})
+            by_op_layer: dict = defaultdict(lambda: {"cycles": 0, "latency_ns": 0.0, "energy_nj": 0.0, "area_um2": 0.0})
             for d in operator_cycle_detail:
                 op = d.get("operator", "other")
                 layer = d.get("layer_name", "")
@@ -653,6 +657,7 @@ def main() -> int:
                 by_op_layer[key]["cycles"] += d.get("duration", 0)
                 by_op_layer[key]["latency_ns"] += d.get("latency_ns", 0.0)
                 by_op_layer[key]["energy_nj"] += d.get("energy_nj", 0.0)
+                by_op_layer[key]["area_um2"] += d.get("area_um2", 0.0)
             log_separator()
             log_info("每个算子 cycle 的详细构成（按算子类型 + 层名）")
             log_info("  operator_cycle_detail 按 (算子, 层名) 聚合；以下按算子类型分组，组内按 cycles 降序。")
@@ -660,17 +665,40 @@ def main() -> int:
             # 按算子类型分组
             by_op: dict = defaultdict(list)
             for (op, layer), v in by_op_layer.items():
-                by_op[op].append((layer, v["cycles"], v["latency_ns"], v["energy_nj"]))
+                by_op[op].append((layer, v["cycles"], v["latency_ns"], v["energy_nj"], v["area_um2"]))
             for op_name in sorted(by_op.keys(), key=lambda o: (-sum(x[1] for x in by_op[o]), o)):
                 rows = by_op[op_name]
                 rows.sort(key=lambda x: -x[1])
                 total_op_cy = sum(r[1] for r in rows)
                 total_op_lat = sum(r[2] for r in rows)
                 total_op_en = sum(r[3] for r in rows)
-                log_info(f"  [{op_name}] 合计: cycles={total_op_cy:,.0f}, latency_ns={total_op_lat:,.1f}, energy_nJ={total_op_en:.2f}")
-                for layer_name, cy, lat_ns, en in rows:
-                    log_info(f"    layer={layer_name!r}  cycles={cy:,.0f}  latency_ns={lat_ns:,.1f}  energy_nJ={en:.2f}")
+                total_op_area = sum(r[4] for r in rows)
+                log_info(f"  [{op_name}] 合计: cycles={total_op_cy:,.0f}, latency_ns={total_op_lat:,.1f}, energy_nJ={total_op_en:.2f}, area_um2={total_op_area:,.2f}")
+                for layer_name, cy, lat_ns, en, area_u in rows:
+                    log_info(f"    layer={layer_name!r}  cycles={cy:,.0f}  latency_ns={lat_ns:,.1f}  energy_nJ={en:.2f}  area_um2={area_u:,.2f}")
             log_separator()
+
+            # Conv1d 与 Linear 面积明细（逐层 area_um2，便于分析面积过大的来源）
+            for op_name in ("Conv1d", "Linear"):
+                if op_name not in by_op:
+                    continue
+                rows = by_op[op_name]
+                total_op_area = sum(r[4] for r in rows)
+                if total_op_area <= 0:
+                    continue
+                rows_with_area = [(r[0], r[4]) for r in rows if r[4] > 0]
+                if not rows_with_area:
+                    continue
+                rows_with_area.sort(key=lambda x: -x[1])
+                log_info(f"Conv1d 与 Linear 面积明细 — [{op_name}] 合计 area={total_op_area:,.2f} um^2（占系统总面积比例见上表）")
+                log_info(f"  {'层名':<50} {'area_um2':>16} {'占该类型%':>10}")
+                log_info("  " + "-" * 78)
+                for layer_name, area_u in rows_with_area:
+                    pct = (area_u / total_op_area * 100) if total_op_area > 0 else 0
+                    name_show = (layer_name[:47] + "...") if len(layer_name) > 50 else layer_name or "(未命名)"
+                    log_info(f"  {name_show:<50} {area_u:>16,.2f} {pct:>9.1f}%")
+                log_info("  " + "-" * 78)
+                log_separator()
 
         # 端到端 PPA 报告与算子级 breakdown 可视化：report.json + latency/energy 饼图（由 write_ppa_report_and_plots 统一写入 sim_results）
         from pointkan_sim.integration.ppa_report import build_ppa_report, write_ppa_report_and_plots
