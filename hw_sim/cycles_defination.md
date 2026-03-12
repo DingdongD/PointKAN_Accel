@@ -21,12 +21,8 @@
 | **dequantize_pipeline** | INT8→FP32 反量化流水线 | `T = N + 4` | 1 GHz | `2.30` | `2078` | N=待反量化元素数，4cycles流水线填充延迟 |
 | **grf** | GRF  | `19` (固定延迟) | 1 GHz | `23.7833` | `47887` | 无法流水，每次调用固定19cycles |
 | **fp32_resampler (64→512)** | FP32 重采样 (64点插值到512点) | `T = N + 2` | 1 GHz | `103` | `92269` | N=输出元素数，3cycles延迟，流水吞吐1elem/cycle |
-
-
-### 1.2 待实现模块
-
-| 模块名称 (Module) | 功能描述 | 周期数 (Cycles) | 频率 (Freq) | 功耗 (Power) | 面积 (Area) | 备注/优化点 |
-| :--- | :--- | :---: | :---: | :---: | :---: | :--- |
-| **FPS-KNN** | FPS-KNN排序规约 | `` | `` | `` | `` | *K=不同数值场景？ |
-
-
+| **Coarse_filter** | FPS/KNN可重构粗筛电路 | `T_fps_mode1 = 1; T_fps_mode0 = 3; T_knn_mode = 4`| 1GHz | 265 | 644686 | fps_mode1对于前10%的采样点，每阶段针对sram-cim array输出的128个距离值进行max排序，每次开销1个cycle，持续工作8个阶段，最终得到1024个距离值中的max值，无需使用细筛电路；fps_mode0对于后90%的采样点，每个阶段对于128个距离值进行基于预测距离的粗筛，每次开销3个cycles(被隐藏在sram-cim array距离计算的6cycles周期中)，最终输出32个max候选距离值至细筛电路；knn_mode，在8组128个距离计算完，且最后一组FPS排序完成后，复用1024个距离值进行KNN粗筛，由于根据动态阈值进行调整，最多6次迭代周期，KNN粗筛开销4个周期+1个output周期，示例：KNN第1次阈值即满足要求，开销4+1=5cycles；第6次阈值满足要求，开销4*6+1=25cycles(也是最大开销)。最终将N个min值输出至细筛电路(32≥N≥24) |
+| **fine_filter** | FPS/KNN可重构细筛电路 | `T = 2` | 1GHz | 38 | 53261 | FPS和KNN细筛均2cycles |
+| **dist2_update_table** | 最小距离更新表 | `T = 1` | 1GHz | 30 | 26610 | FPS每阶段采样后更新最小距离表 |
+| **SRAM_CIM_array** | sram-cim_array 距离计算宏 | `T = (num_input_points / num_array_parrallelism) * (num_xyz_quant_bit / num_bit_slice)` | 1GHz | 6 | / | num_bit_slice=2; num_array_parralleism = 128; 每次计算128个距离值，开销(num_xyz_quant_bit / num_bit_slice)个周期 |
+| **dist2_merge_adder** | 将距离值的交叉项和自平方项聚合 | `T = 1` | 1GHz | 1.3 | 2179 | 在sram_cim_array距离计算后，执行1个周期；共128个 |
