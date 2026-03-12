@@ -1,0 +1,3 @@
+WARNING:root:imports error 
+ You need to install pymongo>=3.9.0 in order to use MongoOutput 
+run_infer_random: task=modelnet40 device=cuda batches=20 inference_only_s=1.424911 (model forward only, sum of 20 batches)

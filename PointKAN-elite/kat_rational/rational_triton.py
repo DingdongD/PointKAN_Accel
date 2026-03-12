@@ -82,51 +82,25 @@ def rational_fwd_kernel(
     tl.store(result_ptr + offs, P / Q, mask=mask)
 
 def rational_fwd_triton(x, n, d, group):
-    
-    
-    # 检查是否有可用的 GPU
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
-    # 确保所有输入张量都在 GPU 上
-    x = x.to(device)
-    n = n.to(device)
-    d = d.to(device)
-    
-    # 如果 group 是整数，将其转换为张量并移动到 GPU 上
-    if isinstance(group, int):
-        group = torch.tensor(group, dtype=torch.int32, device=device)
-        
+    device = x.device
     D = x.shape[-1]
     x_size = x.numel()
-    D_per_group = D // group
-    # 处理 D_tensor
-    if isinstance(D, torch.Tensor):
-        D_tensor = D.clone().detach().to(device).to(torch.int64)
-    else:
-        D_tensor = torch.tensor(D, dtype=torch.int64, device=device)
+    D_per_group = D // group if isinstance(group, int) else D // group.item()
 
-    # 处理 x_size_tensor
-    if isinstance(x_size, torch.Tensor):
-        x_size_tensor = x_size.clone().detach().to(device).to(torch.int64)
-    else:
-        x_size_tensor = torch.tensor(x_size, dtype=torch.int64, device=device)
+    D_tensor = torch.tensor(D, dtype=torch.int64, device=device)
+    x_size_tensor = torch.tensor(x_size, dtype=torch.int64, device=device)
+    D_per_group_tensor = torch.tensor(D_per_group, dtype=torch.int64, device=device)
+    if isinstance(group, int):
+        group = torch.tensor(group, dtype=torch.int32, device=device)
 
-    # 处理 D_per_group_tensor
-    if isinstance(D_per_group, torch.Tensor):
-        D_per_group_tensor = D_per_group.clone().detach().to(device).to(torch.int64)
-    else:
-        D_per_group_tensor = torch.tensor(D_per_group, dtype=torch.int64, device=device)
-    result = torch.empty_like(x,device=device)
+    result = torch.empty_like(x, device=device)
     BLOCK_SIZE = 256
-    
-
     num_blocks = (x_size + BLOCK_SIZE - 1) // BLOCK_SIZE
     rational_fwd_kernel[(num_blocks,)](
         x, n, d, result,
         D_tensor, group, x_size_tensor, D_per_group_tensor,
         BLOCK_SIZE=BLOCK_SIZE
     )
-
     return result
 
 # --------------------

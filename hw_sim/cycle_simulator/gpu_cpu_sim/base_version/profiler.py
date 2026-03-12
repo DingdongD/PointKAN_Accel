@@ -388,6 +388,7 @@ class RunSummary:
     cpu_energy_inference_pkg_j: Optional[float] = None
     cpu_energy_inference_ram_j: Optional[float] = None
     cpu_energy_inference_total_j: Optional[float] = None
+    gpu_idle_power_w: Optional[float] = None  # 跑前采样的 GPU 空闲功率，用于能耗扣减
 
 
 class GPUSampler(threading.Thread):
@@ -558,6 +559,7 @@ def aggregate(summaries: List[RunSummary]) -> Dict[str, Any]:
         "inference_only_per_forward_s_mean": avg([s.inference_only_per_forward_s for s in summaries if getattr(s, "inference_only_per_forward_s", None) is not None]),
 
         "gpu_energy_j_mean": avg([s.gpu_energy_j for s in summaries]),
+        "gpu_idle_power_w_mean": avg([s.gpu_idle_power_w for s in summaries if getattr(s, "gpu_idle_power_w", None) is not None]),
         "gpu_avg_power_w_mean": avg([s.gpu_avg_power_w for s in summaries]),
         "gpu_peak_power_w_max": max(
             [s.gpu_peak_power_w for s in summaries if s.gpu_peak_power_w is not None],
@@ -581,6 +583,32 @@ def aggregate(summaries: List[RunSummary]) -> Dict[str, Any]:
     }
 
 
+def sample_gpu_idle_power(gpu_index: int, duration_s: float = 2.0, interval_s: float = 0.1) -> Optional[float]:
+    """
+    在启动子进程前采样 GPU 空闲功率（瓦），用于后续从总能耗中扣减空闲分量。
+    采样 duration_s 秒，每 interval_s 秒取一次 NVML 功率，返回平均值。
+    """
+    if pynvml is None:
+        return None
+    try:
+        pynvml.nvmlInit()
+        handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
+        t0 = time.perf_counter()
+        powers: List[float] = []
+        while time.perf_counter() - t0 < duration_s:
+            p_mw = pynvml.nvmlDeviceGetPowerUsage(handle)
+            powers.append(p_mw / 1000.0)
+            time.sleep(interval_s)
+        pynvml.nvmlShutdown()
+        return sum(powers) / len(powers) if powers else None
+    except Exception:
+        try:
+            pynvml.nvmlShutdown()
+        except Exception:
+            pass
+        return None
+
+
 def run_command(
     cmd: str,
     out_dir: Path,
@@ -593,10 +621,18 @@ def run_command(
     enable_perf: bool = False,
 ) -> RunSummary:
     """
-    执行一次目标命令，并在运行期间进行 CPU/GPU 采样
+    执行一次目标命令，并在运行期间进行 CPU/GPU 采样。
+    GPU 能耗会扣减「空闲功率 × 运行时间」得到增量能耗。
     """
 
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    # 先测 GPU 空闲功率（用于能耗扣减）
+    gpu_idle_power_w: Optional[float] = None
+    if sample_gpu and pynvml is not None:
+        gpu_idle_power_w = sample_gpu_idle_power(
+            gpu_index, duration_s=2.0, interval_s=max(0.05, gpu_interval_ms / 1000.0)
+        )
 
     stdout_path = out_dir / f"{tag}.stdout.txt"
     stderr_path = out_dir / f"{tag}.stderr.txt"
@@ -761,6 +797,11 @@ def run_command(
     else:
         gpu_csv_path = None
 
+    # GPU 能耗扣减空闲分量：用「推理时长」扣减避免 wall 内大量非推理时间导致扣成 0
+    subtract_s = inference_only_s if inference_only_s is not None and inference_only_s >= 0 else wall_s
+    if gpu_energy is not None and gpu_idle_power_w is not None and subtract_s is not None:
+        gpu_energy = max(0.0, float(gpu_energy) - gpu_idle_power_w * subtract_s)
+
     # 汇总 CPU
     if cpu_sampler and cpu_sampler.samples:
         write_csv(cpu_csv_path, cpu_sampler.samples)
@@ -835,6 +876,7 @@ def run_command(
         gpu_energy_j=gpu_energy,
         gpu_avg_power_w=gpu_avg_power,
         gpu_peak_power_w=gpu_peak_power,
+        gpu_idle_power_w=gpu_idle_power_w,
 
         cpu_avg_percent=cpu_avg,
         rss_peak_mb=rss_peak,
@@ -929,6 +971,8 @@ def main():
                 "inference_only_per_forward_s_mean": agg.get("inference_only_per_forward_s_mean"),
                 "inference_only_s_mean": agg.get("inference_only_s_mean"),
                 "gpu_energy_j_mean": agg.get("gpu_energy_j_mean"),
+                "gpu_avg_power_w_mean": agg.get("gpu_avg_power_w_mean"),
+                "gpu_peak_power_w_max": agg.get("gpu_peak_power_w_max"),
                 "cpu_energy_inference_pkg_j_mean": agg.get("cpu_energy_inference_pkg_j_mean"),
                 "cpu_energy_inference_ram_j_mean": agg.get("cpu_energy_inference_ram_j_mean"),
                 "cpu_energy_inference_total_j_mean": agg.get("cpu_energy_inference_total_j_mean"),

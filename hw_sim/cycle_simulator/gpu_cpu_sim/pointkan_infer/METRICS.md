@@ -62,7 +62,16 @@
 
 ---
 
-## 五、为何 CPU 的 inference_only 有时是 null
+## 五、功耗/能耗是否扣除初始（空闲）功耗
+
+**已做：先测空闲功耗，再从上报能耗中扣减。**
+
+- **GPU**：profiler 在**子进程启动前**用 NVML 采样约 2 秒的 GPU 空闲功率（`gpu_idle_power_w`），子进程结束后对功率-时间曲线梯形积分得到 `gpu_energy_j` 原始值，再扣减「空闲功率 × 运行时间」得到增量能耗：`gpu_energy_j = max(0, E_total - P_idle × T_run)`。若使用 dmon 或无 NVML 则不扣减。
+- **CPU**：在 `measure_cpu_energy_inference()` 中先测约 1 秒的 CPU 空闲功率（pyRAPL 包住 sleep），再执行推理并得到推理能耗与推理时长 `infer_total_s`；扣减「空闲功率 × 推理时间」：`E_corrected = E_total - P_idle × infer_total_s`，对 pkg/ram/total 按比例修正后返回。
+
+---
+
+## 六、为何 CPU 的 inference_only 有时是 null
 
 若某次 run 的 **returncode 不为 0**（例如脚本在写 `*_inference_only.json` 之前就异常退出），则 profiler 读不到该次的推理时间/能耗，aggregate 里 `inference_only_*`、`cpu_energy_inference_*` 会为 null。  
 此时应查看该 run 的 `run_*.stderr.txt` 或 stdout 定位错误；修复后重跑即可得到正常的推理指标。

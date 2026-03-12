@@ -1,0 +1,25 @@
+# PointKAN mini_demo 推理环境依赖
+# 建议先创建虚拟环境并安装 PyTorch（含 CUDA），再安装本文件：
+#   pip install torch  # 或从 https://pytorch.org 按 CUDA 版本安装
+#   pip install -r requirements.txt
+#
+# 说明：kat_rational（KAT_Group）由内嵌的 PointKAN-elite/kat_rational 提供，无需单独安装 rational_kat_cu。
+# 若目标环境原本使用 pip 安装的 rational_kat_cu（包名 kat_rational），请勿再安装，以免与内嵌版本冲突。
+
+# 推理与 profiler 必需
+pynvml>=11.0.0          # GPU 功耗/能耗采样（单卡）
+psutil>=5.8.0           # profiler CPU/内存采样
+numpy>=1.19.0            # 通用
+
+# PointKAN-elite 模型依赖
+timm>=0.6.0              # 模型层（to_2tuple 等）
+triton>=2.0.0            # KAT rational GPU kernel（仅 GPU 推理需要；CPU 会走 PyTorch fallback）
+
+# 可选：CPU 推理能耗测量（不装则 cpu_energy 为 null）
+pyRAPL>=1.4.0
+
+# 可选：生成 CPU vs GPU 对比图（run.sh 结束后自动画图）
+matplotlib>=3.3.0
+
+# 说明：pointnet2_ops 来自本目录 pointnet2_ops_lib，需单独安装：
+#   pip install -e pointnet2_ops_lib

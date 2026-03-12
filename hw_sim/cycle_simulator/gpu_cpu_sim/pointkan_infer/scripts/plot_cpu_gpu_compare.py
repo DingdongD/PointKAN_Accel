@@ -50,7 +50,7 @@ def load_aggregate(run_dir: Path) -> Optional[dict]:
 
 
 def _infer_lat(agg) -> float:
-    """仅 model(x) 推理时间，绝不使用进程 latency_s。"""
+    """仅 model(x) 推理时间：优先 inference_only_per_forward_s_mean（单次前向），否则 inference_only_s_mean。不使用进程级 latency_s。"""
     v = (agg.get("inference_only_per_forward_s_mean") or agg.get("inference_only_s_mean")) if agg else None
     return float(v) if v is not None else 0.0
 
@@ -163,6 +163,11 @@ def main():
     if all(data[t]["latency_gpu"] == 0 and data[t]["latency_cpu"] == 0 for t in TASK_ORDER):
         print(f"No summary.json found under {prefix_gpu}*/ and {prefix_cpu}*/. Run profile_random_all.sh or profile_all.sh first.")
         return
+    # 若某端全为 0，提示可能该端 run 失败（未写入 inference_only.json）
+    if all(data[t]["latency_gpu"] == 0 for t in TASK_ORDER):
+        print("Warning: GPU latency is 0 for all tasks. Check that GPU runs succeeded (returncode 0) and wrote *_inference_only.json.")
+    if all(data[t]["latency_cpu"] == 0 for t in TASK_ORDER):
+        print("Warning: CPU latency is 0 for all tasks. Check that CPU runs succeeded and wrote *_inference_only.json.")
 
     out_path = Path(args.out) if args.out else out_dir / "cpu_gpu_compare.png"
     plot_cpu_gpu_compare(data, out_path, title_suffix=title_suffix)

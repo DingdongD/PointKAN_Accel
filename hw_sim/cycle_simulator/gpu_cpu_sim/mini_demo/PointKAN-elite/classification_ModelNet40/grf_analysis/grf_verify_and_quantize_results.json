@@ -1,0 +1,1754 @@
+{
+  "verify_base_plus_residual": [
+    {
+      "name": "LFP_blocks_list.0.operation1.0.act1",
+      "base_kinds": {
+        "mean": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "min": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "max": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        }
+      }
+    },
+    {
+      "name": "LFP_blocks_list.0.operation1.0.act2",
+      "base_kinds": {
+        "mean": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "min": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "max": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        }
+      }
+    },
+    {
+      "name": "LFP_blocks_list.0.operation2.0.act1",
+      "base_kinds": {
+        "mean": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "min": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "max": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        }
+      }
+    },
+    {
+      "name": "LFP_blocks_list.0.operation2.0.act2",
+      "base_kinds": {
+        "mean": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "min": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "max": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        }
+      }
+    },
+    {
+      "name": "LFP_blocks_list.1.operation1.0.act1",
+      "base_kinds": {
+        "mean": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "min": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "max": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        }
+      }
+    },
+    {
+      "name": "LFP_blocks_list.1.operation1.0.act2",
+      "base_kinds": {
+        "mean": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "min": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "max": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        }
+      }
+    },
+    {
+      "name": "LFP_blocks_list.1.operation2.0.act1",
+      "base_kinds": {
+        "mean": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "min": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "max": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        }
+      }
+    },
+    {
+      "name": "LFP_blocks_list.1.operation2.0.act2",
+      "base_kinds": {
+        "mean": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "min": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "max": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        }
+      }
+    },
+    {
+      "name": "LFP_blocks_list.2.operation1.0.act1",
+      "base_kinds": {
+        "mean": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "min": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "max": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        }
+      }
+    },
+    {
+      "name": "LFP_blocks_list.2.operation1.0.act2",
+      "base_kinds": {
+        "mean": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "min": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "max": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        }
+      }
+    },
+    {
+      "name": "LFP_blocks_list.2.operation2.0.act1",
+      "base_kinds": {
+        "mean": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "min": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "max": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        }
+      }
+    },
+    {
+      "name": "LFP_blocks_list.2.operation2.0.act2",
+      "base_kinds": {
+        "mean": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "min": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "max": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        }
+      }
+    },
+    {
+      "name": "LFP_blocks_list.3.operation1.0.act1",
+      "base_kinds": {
+        "mean": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "min": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "max": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        }
+      }
+    },
+    {
+      "name": "LFP_blocks_list.3.operation1.0.act2",
+      "base_kinds": {
+        "mean": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "min": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "max": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        }
+      }
+    },
+    {
+      "name": "LFP_blocks_list.3.operation2.0.act1",
+      "base_kinds": {
+        "mean": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "min": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "max": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        }
+      }
+    },
+    {
+      "name": "LFP_blocks_list.3.operation2.0.act2",
+      "base_kinds": {
+        "mean": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "min": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        },
+        "max": {
+          "passed": true,
+          "max_abs_diff": 0.0
+        }
+      }
+    }
+  ],
+  "residual_dynamic_range": [
+    {
+      "name": "LFP_blocks_list.0.operation1.0.act1",
+      "base_kinds": {
+        "mean": {
+          "base": {
+            "min": -2.79016,
+            "max": 0.723154,
+            "span": 3.513314
+          },
+          "residual": {
+            "min": -1.373113,
+            "max": 1.029705,
+            "span": 2.402819
+          }
+        },
+        "min": {
+          "base": {
+            "min": -4.163273,
+            "max": 0.681441,
+            "span": 4.844714
+          },
+          "residual": {
+            "min": 0.0,
+            "max": 2.402819,
+            "span": 2.402819
+          }
+        },
+        "max": {
+          "base": {
+            "min": -1.760455,
+            "max": 0.851829,
+            "span": 2.612284
+          },
+          "residual": {
+            "min": -2.402819,
+            "max": 0.0,
+            "span": 2.402819
+          }
+        }
+      }
+    },
+    {
+      "name": "LFP_blocks_list.0.operation1.0.act2",
+      "base_kinds": {
+        "mean": {
+          "base": {
+            "min": -0.28821,
+            "max": 1.01051,
+            "span": 1.29872
+          },
+          "residual": {
+            "min": -0.250535,
+            "max": 0.192532,
+            "span": 0.443067
+          }
+        },
+        "min": {
+          "base": {
+            "min": -0.29041,
+            "max": 0.780595,
+            "span": 1.071005
+          },
+          "residual": {
+            "min": 0.0,
+            "max": 0.442173,
+            "span": 0.442173
+          }
+        },
+        "max": {
+          "base": {
+            "min": -0.282361,
+            "max": 1.185721,
+            "span": 1.468082
+          },
+          "residual": {
+            "min": -0.442173,
+            "max": 0.0,
+            "span": 0.442173
+          }
+        }
+      }
+    },
+    {
+      "name": "LFP_blocks_list.0.operation2.0.act1",
+      "base_kinds": {
+        "mean": {
+          "base": {
+            "min": -3.947033,
+            "max": 2.41245,
+            "span": 6.359483
+          },
+          "residual": {
+            "min": -1.074249,
+            "max": 1.745798,
+            "span": 2.820047
+          }
+        },
+        "min": {
+          "base": {
+            "min": -5.021282,
+            "max": 1.436214,
+            "span": 6.457496
+          },
+          "residual": {
+            "min": 0.0,
+            "max": 2.820047,
+            "span": 2.820047
+          }
+        },
+        "max": {
+          "base": {
+            "min": -2.201235,
+            "max": 2.919168,
+            "span": 5.120403
+          },
+          "residual": {
+            "min": -2.820047,
+            "max": 0.0,
+            "span": 2.820047
+          }
+        }
+      }
+    },
+    {
+      "name": "LFP_blocks_list.0.operation2.0.act2",
+      "base_kinds": {
+        "mean": {
+          "base": {
+            "min": -0.179185,
+            "max": 0.323091,
+            "span": 0.502276
+          },
+          "residual": {
+            "min": -0.016,
+            "max": 0.019763,
+            "span": 0.035763
+          }
+        },
+        "min": {
+          "base": {
+            "min": -0.181823,
+            "max": 0.31455,
+            "span": 0.496373
+          },
+          "residual": {
+            "min": 0.0,
+            "max": 0.035755,
+            "span": 0.035755
+          }
+        },
+        "max": {
+          "base": {
+            "min": -0.177277,
+            "max": 0.334096,
+            "span": 0.511372
+          },
+          "residual": {
+            "min": -0.035755,
+            "max": 0.0,
+            "span": 0.035755
+          }
+        }
+      }
+    },
+    {
+      "name": "LFP_blocks_list.1.operation1.0.act1",
+      "base_kinds": {
+        "mean": {
+          "base": {
+            "min": -4.638729,
+            "max": 0.435278,
+            "span": 5.074007
+          },
+          "residual": {
+            "min": -2.160174,
+            "max": 1.422416,
+            "span": 3.58259
+          }
+        },
+        "min": {
+          "base": {
+            "min": -6.798903,
+            "max": 0.281831,
+            "span": 7.080734
+          },
+          "residual": {
+            "min": 0.0,
+            "max": 3.58259,
+            "span": 3.58259
+          }
+        },
+        "max": {
+          "base": {
+            "min": -3.216313,
+            "max": 0.646354,
+            "span": 3.862667
+          },
+          "residual": {
+            "min": -3.58259,
+            "max": 0.0,
+            "span": 3.58259
+          }
+        }
+      }
+    },
+    {
+      "name": "LFP_blocks_list.1.operation1.0.act2",
+      "base_kinds": {
+        "mean": {
+          "base": {
+            "min": -1.337416,
+            "max": 1.596541,
+            "span": 2.933957
+          },
+          "residual": {
+            "min": -0.404114,
+            "max": 0.318844,
+            "span": 0.722957
+          }
+        },
+        "min": {
+          "base": {
+            "min": -1.534909,
+            "max": 1.192427,
+            "span": 2.727337
+          },
+          "residual": {
+            "min": 0.0,
+            "max": 0.635232,
+            "span": 0.635232
+          }
+        },
+        "max": {
+          "base": {
+            "min": -1.018573,
+            "max": 1.82766,
+            "span": 2.846232
+          },
+          "residual": {
+            "min": -0.635232,
+            "max": 0.0,
+            "span": 0.635232
+          }
+        }
+      }
+    },
+    {
+      "name": "LFP_blocks_list.1.operation2.0.act1",
+      "base_kinds": {
+        "mean": {
+          "base": {
+            "min": -4.593155,
+            "max": 2.639084,
+            "span": 7.232239
+          },
+          "residual": {
+            "min": -1.830518,
+            "max": 1.806676,
+            "span": 3.637194
+          }
+        },
+        "min": {
+          "base": {
+            "min": -6.423672,
+            "max": 1.802887,
+            "span": 8.226559
+          },
+          "residual": {
+            "min": 0.0,
+            "max": 3.637194,
+            "span": 3.637194
+          }
+        },
+        "max": {
+          "base": {
+            "min": -2.786478,
+            "max": 3.454212,
+            "span": 6.24069
+          },
+          "residual": {
+            "min": -3.637194,
+            "max": 0.0,
+            "span": 3.637194
+          }
+        }
+      }
+    },
+    {
+      "name": "LFP_blocks_list.1.operation2.0.act2",
+      "base_kinds": {
+        "mean": {
+          "base": {
+            "min": -0.133848,
+            "max": 0.385173,
+            "span": 0.519021
+          },
+          "residual": {
+            "min": -0.028729,
+            "max": 0.01265,
+            "span": 0.04138
+          }
+        },
+        "min": {
+          "base": {
+            "min": -0.134239,
+            "max": 0.356444,
+            "span": 0.490683
+          },
+          "residual": {
+            "min": 0.0,
+            "max": 0.04138,
+            "span": 0.04138
+          }
+        },
+        "max": {
+          "base": {
+            "min": -0.13293,
+            "max": 0.397824,
+            "span": 0.530754
+          },
+          "residual": {
+            "min": -0.04138,
+            "max": 0.0,
+            "span": 0.04138
+          }
+        }
+      }
+    },
+    {
+      "name": "LFP_blocks_list.2.operation1.0.act1",
+      "base_kinds": {
+        "mean": {
+          "base": {
+            "min": -2.64857,
+            "max": 5.654037,
+            "span": 8.302607
+          },
+          "residual": {
+            "min": -1.550675,
+            "max": 2.170292,
+            "span": 3.720968
+          }
+        },
+        "min": {
+          "base": {
+            "min": -4.175462,
+            "max": 4.103362,
+            "span": 8.278824
+          },
+          "residual": {
+            "min": 0.0,
+            "max": 3.720968,
+            "span": 3.720968
+          }
+        },
+        "max": {
+          "base": {
+            "min": -1.968247,
+            "max": 7.824329,
+            "span": 9.792576
+          },
+          "residual": {
+            "min": -3.720968,
+            "max": 0.0,
+            "span": 3.720968
+          }
+        }
+      }
+    },
+    {
+      "name": "LFP_blocks_list.2.operation1.0.act2",
+      "base_kinds": {
+        "mean": {
+          "base": {
+            "min": -0.329508,
+            "max": 0.749235,
+            "span": 1.078743
+          },
+          "residual": {
+            "min": -0.196024,
+            "max": 0.094316,
+            "span": 0.29034
+          }
+        },
+        "min": {
+          "base": {
+            "min": -0.335622,
+            "max": 0.642738,
+            "span": 0.97836
+          },
+          "residual": {
+            "min": 0.0,
+            "max": 0.28935,
+            "span": 0.28935
+          }
+        },
+        "max": {
+          "base": {
+            "min": -0.317249,
+            "max": 0.805892,
+            "span": 1.123141
+          },
+          "residual": {
+            "min": -0.28935,
+            "max": 0.0,
+            "span": 0.28935
+          }
+        }
+      }
+    },
+    {
+      "name": "LFP_blocks_list.2.operation2.0.act1",
+      "base_kinds": {
+        "mean": {
+          "base": {
+            "min": -1.188841,
+            "max": 5.180505,
+            "span": 6.369346
+          },
+          "residual": {
+            "min": -1.920162,
+            "max": 2.320191,
+            "span": 4.240353
+          }
+        },
+        "min": {
+          "base": {
+            "min": -1.754614,
+            "max": 3.260343,
+            "span": 5.014957
+          },
+          "residual": {
+            "min": 0.0,
+            "max": 4.240353,
+            "span": 4.240353
+          }
+        },
+        "max": {
+          "base": {
+            "min": -1.050058,
+            "max": 7.500696,
+            "span": 8.550754
+          },
+          "residual": {
+            "min": -4.240353,
+            "max": 0.0,
+            "span": 4.240353
+          }
+        }
+      }
+    },
+    {
+      "name": "LFP_blocks_list.2.operation2.0.act2",
+      "base_kinds": {
+        "mean": {
+          "base": {
+            "min": -1.672963,
+            "max": 4.521726,
+            "span": 6.19469
+          },
+          "residual": {
+            "min": -1.901875,
+            "max": 2.419497,
+            "span": 4.321372
+          }
+        },
+        "min": {
+          "base": {
+            "min": -2.806673,
+            "max": 2.619852,
+            "span": 5.426525
+          },
+          "residual": {
+            "min": 0.0,
+            "max": 4.321372,
+            "span": 4.321372
+          }
+        },
+        "max": {
+          "base": {
+            "min": -0.856803,
+            "max": 6.941223,
+            "span": 7.798026
+          },
+          "residual": {
+            "min": -4.321372,
+            "max": 0.0,
+            "span": 4.321372
+          }
+        }
+      }
+    },
+    {
+      "name": "LFP_blocks_list.3.operation1.0.act1",
+      "base_kinds": {
+        "mean": {
+          "base": {
+            "min": -3.189829,
+            "max": 6.913169,
+            "span": 10.102997
+          },
+          "residual": {
+            "min": -2.596104,
+            "max": 4.99444,
+            "span": 7.590544
+          }
+        },
+        "min": {
+          "base": {
+            "min": -5.021037,
+            "max": 4.317065,
+            "span": 9.338102
+          },
+          "residual": {
+            "min": 0.0,
+            "max": 7.590544,
+            "span": 7.590544
+          }
+        },
+        "max": {
+          "base": {
+            "min": -2.121853,
+            "max": 11.907609,
+            "span": 14.029462
+          },
+          "residual": {
+            "min": -7.590544,
+            "max": 0.0,
+            "span": 7.590544
+          }
+        }
+      }
+    },
+    {
+      "name": "LFP_blocks_list.3.operation1.0.act2",
+      "base_kinds": {
+        "mean": {
+          "base": {
+            "min": -0.44074,
+            "max": 2.116828,
+            "span": 2.557568
+          },
+          "residual": {
+            "min": -0.709749,
+            "max": 0.511406,
+            "span": 1.221155
+          }
+        },
+        "min": {
+          "base": {
+            "min": -0.476857,
+            "max": 1.407079,
+            "span": 1.883936
+          },
+          "residual": {
+            "min": 0.0,
+            "max": 1.221155,
+            "span": 1.221155
+          }
+        },
+        "max": {
+          "base": {
+            "min": -0.412413,
+            "max": 2.628234,
+            "span": 3.040648
+          },
+          "residual": {
+            "min": -1.221155,
+            "max": 0.0,
+            "span": 1.221155
+          }
+        }
+      }
+    },
+    {
+      "name": "LFP_blocks_list.3.operation2.0.act1",
+      "base_kinds": {
+        "mean": {
+          "base": {
+            "min": -0.798285,
+            "max": 4.007411,
+            "span": 4.805696
+          },
+          "residual": {
+            "min": -0.960507,
+            "max": 1.040555,
+            "span": 2.001062
+          }
+        },
+        "min": {
+          "base": {
+            "min": -0.935429,
+            "max": 3.046904,
+            "span": 3.982333
+          },
+          "residual": {
+            "min": 0.0,
+            "max": 2.001062,
+            "span": 2.001062
+          }
+        },
+        "max": {
+          "base": {
+            "min": -0.769905,
+            "max": 5.047966,
+            "span": 5.817871
+          },
+          "residual": {
+            "min": -2.001062,
+            "max": 0.0,
+            "span": 2.001062
+          }
+        }
+      }
+    },
+    {
+      "name": "LFP_blocks_list.3.operation2.0.act2",
+      "base_kinds": {
+        "mean": {
+          "base": {
+            "min": -0.977363,
+            "max": 0.854822,
+            "span": 1.832185
+          },
+          "residual": {
+            "min": -0.193302,
+            "max": 0.163851,
+            "span": 0.357153
+          }
+        },
+        "min": {
+          "base": {
+            "min": -1.170665,
+            "max": 0.799809,
+            "span": 1.970474
+          },
+          "residual": {
+            "min": 0.0,
+            "max": 0.357153,
+            "span": 0.357153
+          }
+        },
+        "max": {
+          "base": {
+            "min": -0.813512,
+            "max": 0.931087,
+            "span": 1.744599
+          },
+          "residual": {
+            "min": -0.357153,
+            "max": 0.0,
+            "span": 0.357153
+          }
+        }
+      }
+    }
+  ],
+  "quantization_fx_curve": [
+    {
+      "name": "LFP_blocks_list.0.operation1.0.act1",
+      "quantization": [
+        {
+          "bits": 8,
+          "mse": 8.652e-05,
+          "max_abs_err": 0.01638786,
+          "mean_abs_err": 0.00802302
+        },
+        {
+          "bits": 6,
+          "mse": 0.00145357,
+          "max_abs_err": 0.06714329,
+          "mean_abs_err": 0.032722
+        },
+        {
+          "bits": 4,
+          "mse": 0.02352806,
+          "max_abs_err": 0.29702876,
+          "mean_abs_err": 0.1298093
+        }
+      ]
+    },
+    {
+      "name": "LFP_blocks_list.0.operation1.0.act2",
+      "quantization": [
+        {
+          "bits": 8,
+          "mse": 7.19e-06,
+          "max_abs_err": 0.00466582,
+          "mean_abs_err": 0.00231789
+        },
+        {
+          "bits": 6,
+          "mse": 0.00012675,
+          "max_abs_err": 0.01908537,
+          "mean_abs_err": 0.00980277
+        },
+        {
+          "bits": 4,
+          "mse": 0.00253037,
+          "max_abs_err": 0.08455,
+          "mean_abs_err": 0.04394781
+        }
+      ]
+    },
+    {
+      "name": "LFP_blocks_list.0.operation2.0.act1",
+      "quantization": [
+        {
+          "bits": 8,
+          "mse": 0.00014459,
+          "max_abs_err": 0.01976815,
+          "mean_abs_err": 0.01065138
+        },
+        {
+          "bits": 6,
+          "mse": 0.00185711,
+          "max_abs_err": 0.08090485,
+          "mean_abs_err": 0.0367318
+        },
+        {
+          "bits": 4,
+          "mse": 0.02309196,
+          "max_abs_err": 0.35857652,
+          "mean_abs_err": 0.10972222
+        }
+      ]
+    },
+    {
+      "name": "LFP_blocks_list.0.operation2.0.act2",
+      "quantization": [
+        {
+          "bits": 8,
+          "mse": 5.5e-07,
+          "max_abs_err": 0.00131494,
+          "mean_abs_err": 0.00063638
+        },
+        {
+          "bits": 6,
+          "mse": 9.85e-06,
+          "max_abs_err": 0.00538647,
+          "mean_abs_err": 0.00273279
+        },
+        {
+          "bits": 4,
+          "mse": 0.00020504,
+          "max_abs_err": 0.02386169,
+          "mean_abs_err": 0.01264886
+        }
+      ]
+    },
+    {
+      "name": "LFP_blocks_list.1.operation1.0.act1",
+      "quantization": [
+        {
+          "bits": 8,
+          "mse": 0.00022927,
+          "max_abs_err": 0.02674711,
+          "mean_abs_err": 0.012917
+        },
+        {
+          "bits": 6,
+          "mse": 0.00464417,
+          "max_abs_err": 0.10961745,
+          "mean_abs_err": 0.06006472
+        },
+        {
+          "bits": 4,
+          "mse": 0.05834441,
+          "max_abs_err": 0.48526135,
+          "mean_abs_err": 0.20089116
+        }
+      ]
+    },
+    {
+      "name": "LFP_blocks_list.1.operation1.0.act2",
+      "quantization": [
+        {
+          "bits": 8,
+          "mse": 1.77e-05,
+          "max_abs_err": 0.00718725,
+          "mean_abs_err": 0.00365631
+        },
+        {
+          "bits": 6,
+          "mse": 0.00029703,
+          "max_abs_err": 0.02946304,
+          "mean_abs_err": 0.01487948
+        },
+        {
+          "bits": 4,
+          "mse": 0.00473318,
+          "max_abs_err": 0.13045638,
+          "mean_abs_err": 0.05839917
+        }
+      ]
+    },
+    {
+      "name": "LFP_blocks_list.1.operation2.0.act1",
+      "quantization": [
+        {
+          "bits": 8,
+          "mse": 0.00020644,
+          "max_abs_err": 0.0252821,
+          "mean_abs_err": 0.01251177
+        },
+        {
+          "bits": 6,
+          "mse": 0.00256703,
+          "max_abs_err": 0.10330672,
+          "mean_abs_err": 0.04307631
+        },
+        {
+          "bits": 4,
+          "mse": 0.03543222,
+          "max_abs_err": 0.45883269,
+          "mean_abs_err": 0.13161606
+        }
+      ]
+    },
+    {
+      "name": "LFP_blocks_list.1.operation2.0.act2",
+      "quantization": [
+        {
+          "bits": 8,
+          "mse": 9e-07,
+          "max_abs_err": 0.00156622,
+          "mean_abs_err": 0.00083805
+        },
+        {
+          "bits": 6,
+          "mse": 1.368e-05,
+          "max_abs_err": 0.00640632,
+          "mean_abs_err": 0.00322504
+        },
+        {
+          "bits": 4,
+          "mse": 0.00026573,
+          "max_abs_err": 0.02836927,
+          "mean_abs_err": 0.01433633
+        }
+      ]
+    },
+    {
+      "name": "LFP_blocks_list.2.operation1.0.act1",
+      "quantization": [
+        {
+          "bits": 8,
+          "mse": 0.00031511,
+          "max_abs_err": 0.03080235,
+          "mean_abs_err": 0.01533384
+        },
+        {
+          "bits": 6,
+          "mse": 0.00528174,
+          "max_abs_err": 0.12616628,
+          "mean_abs_err": 0.06283006
+        },
+        {
+          "bits": 4,
+          "mse": 0.09380409,
+          "max_abs_err": 0.5588261,
+          "mean_abs_err": 0.26198255
+        }
+      ]
+    },
+    {
+      "name": "LFP_blocks_list.2.operation1.0.act2",
+      "quantization": [
+        {
+          "bits": 8,
+          "mse": 3.31e-06,
+          "max_abs_err": 0.00317209,
+          "mean_abs_err": 0.00157913
+        },
+        {
+          "bits": 6,
+          "mse": 5.69e-05,
+          "max_abs_err": 0.01299692,
+          "mean_abs_err": 0.00655343
+        },
+        {
+          "bits": 4,
+          "mse": 0.00111687,
+          "max_abs_err": 0.05755294,
+          "mean_abs_err": 0.02931371
+        }
+      ]
+    },
+    {
+      "name": "LFP_blocks_list.2.operation2.0.act1",
+      "quantization": [
+        {
+          "bits": 8,
+          "mse": 0.00028926,
+          "max_abs_err": 0.02952707,
+          "mean_abs_err": 0.01471276
+        },
+        {
+          "bits": 6,
+          "mse": 0.00501388,
+          "max_abs_err": 0.12090176,
+          "mean_abs_err": 0.06173368
+        },
+        {
+          "bits": 4,
+          "mse": 0.07904418,
+          "max_abs_err": 0.53523667,
+          "mean_abs_err": 0.23281549
+        }
+      ]
+    },
+    {
+      "name": "LFP_blocks_list.2.operation2.0.act2",
+      "quantization": [
+        {
+          "bits": 8,
+          "mse": 0.00025459,
+          "max_abs_err": 0.02731385,
+          "mean_abs_err": 0.01389474
+        },
+        {
+          "bits": 6,
+          "mse": 0.00364366,
+          "max_abs_err": 0.11179373,
+          "mean_abs_err": 0.05120772
+        },
+        {
+          "bits": 4,
+          "mse": 0.079107,
+          "max_abs_err": 0.49555026,
+          "mean_abs_err": 0.23265686
+        }
+      ]
+    },
+    {
+      "name": "LFP_blocks_list.3.operation1.0.act1",
+      "quantization": [
+        {
+          "bits": 8,
+          "mse": 0.00073463,
+          "max_abs_err": 0.04678526,
+          "mean_abs_err": 0.02349162
+        },
+        {
+          "bits": 6,
+          "mse": 0.01227624,
+          "max_abs_err": 0.19200895,
+          "mean_abs_err": 0.09599905
+        },
+        {
+          "bits": 4,
+          "mse": 0.20507861,
+          "max_abs_err": 0.84998448,
+          "mean_abs_err": 0.38359227
+        }
+      ]
+    },
+    {
+      "name": "LFP_blocks_list.3.operation1.0.act2",
+      "quantization": [
+        {
+          "bits": 8,
+          "mse": 3.636e-05,
+          "max_abs_err": 0.01034359,
+          "mean_abs_err": 0.00522863
+        },
+        {
+          "bits": 6,
+          "mse": 0.00061942,
+          "max_abs_err": 0.04238954,
+          "mean_abs_err": 0.02156184
+        },
+        {
+          "bits": 4,
+          "mse": 0.00906811,
+          "max_abs_err": 0.18764168,
+          "mean_abs_err": 0.08008441
+        }
+      ]
+    },
+    {
+      "name": "LFP_blocks_list.3.operation2.0.act1",
+      "quantization": [
+        {
+          "bits": 8,
+          "mse": 0.00013053,
+          "max_abs_err": 0.01986731,
+          "mean_abs_err": 0.00987125
+        },
+        {
+          "bits": 6,
+          "mse": 0.00218672,
+          "max_abs_err": 0.08139876,
+          "mean_abs_err": 0.04071675
+        },
+        {
+          "bits": 4,
+          "mse": 0.02987871,
+          "max_abs_err": 0.36028588,
+          "mean_abs_err": 0.13939604
+        }
+      ]
+    },
+    {
+      "name": "LFP_blocks_list.3.operation2.0.act2",
+      "quantization": [
+        {
+          "bits": 8,
+          "mse": 6.86e-06,
+          "max_abs_err": 0.0046089,
+          "mean_abs_err": 0.00225614
+        },
+        {
+          "bits": 6,
+          "mse": 0.00011552,
+          "max_abs_err": 0.01886359,
+          "mean_abs_err": 0.00922317
+        },
+        {
+          "bits": 4,
+          "mse": 0.00234782,
+          "max_abs_err": 0.08361388,
+          "mean_abs_err": 0.04238465
+        }
+      ]
+    }
+  ],
+  "base_offset_quantization": [
+    {
+      "name": "LFP_blocks_list.0.operation1.0.act1",
+      "base_bits": 8,
+      "base_kind": "mean",
+      "offset_results": [
+        {
+          "base_bits": 8,
+          "offset_bits": 8,
+          "mse": 4.755e-05,
+          "max_abs_err": 0.01568205,
+          "mean_abs_err": 0.00578544
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 6,
+          "mse": 0.0001536,
+          "max_abs_err": 0.0317603,
+          "mean_abs_err": 0.01001746
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 4,
+          "mse": 0.00183598,
+          "max_abs_err": 0.10836067,
+          "mean_abs_err": 0.03087616
+        }
+      ]
+    },
+    {
+      "name": "LFP_blocks_list.0.operation1.0.act2",
+      "base_bits": 8,
+      "base_kind": "mean",
+      "offset_results": [
+        {
+          "base_bits": 8,
+          "offset_bits": 8,
+          "mse": 5.22e-06,
+          "max_abs_err": 0.00488514,
+          "mean_abs_err": 0.00194638
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 6,
+          "mse": 8.72e-06,
+          "max_abs_err": 0.00777035,
+          "mean_abs_err": 0.00241949
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 4,
+          "mse": 6.622e-05,
+          "max_abs_err": 0.02136658,
+          "mean_abs_err": 0.00621106
+        }
+      ]
+    },
+    {
+      "name": "LFP_blocks_list.0.operation2.0.act1",
+      "base_bits": 8,
+      "base_kind": "mean",
+      "offset_results": [
+        {
+          "base_bits": 8,
+          "offset_bits": 8,
+          "mse": 8.06e-05,
+          "max_abs_err": 0.02177444,
+          "mean_abs_err": 0.00753867
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 6,
+          "mse": 0.00018966,
+          "max_abs_err": 0.0416661,
+          "mean_abs_err": 0.01070452
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 4,
+          "mse": 0.00167312,
+          "max_abs_err": 0.13931845,
+          "mean_abs_err": 0.02498614
+        }
+      ]
+    },
+    {
+      "name": "LFP_blocks_list.0.operation2.0.act2",
+      "base_bits": 8,
+      "base_kind": "mean",
+      "offset_results": [
+        {
+          "base_bits": 8,
+          "offset_bits": 8,
+          "mse": 5.4e-07,
+          "max_abs_err": 0.0013252,
+          "mean_abs_err": 0.00063546
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 6,
+          "mse": 5.6e-07,
+          "max_abs_err": 0.0015491,
+          "mean_abs_err": 0.00064105
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 4,
+          "mse": 8.4e-07,
+          "max_abs_err": 0.0026461,
+          "mean_abs_err": 0.00074342
+        }
+      ]
+    },
+    {
+      "name": "LFP_blocks_list.1.operation1.0.act1",
+      "base_bits": 8,
+      "base_kind": "mean",
+      "offset_results": [
+        {
+          "base_bits": 8,
+          "offset_bits": 8,
+          "mse": 0.00012246,
+          "max_abs_err": 0.02582046,
+          "mean_abs_err": 0.00932427
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 6,
+          "mse": 0.00031976,
+          "max_abs_err": 0.051371,
+          "mean_abs_err": 0.01422767
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 4,
+          "mse": 0.00264185,
+          "max_abs_err": 0.17090285,
+          "mean_abs_err": 0.03326904
+        }
+      ]
+    },
+    {
+      "name": "LFP_blocks_list.1.operation1.0.act2",
+      "base_bits": 8,
+      "base_kind": "mean",
+      "offset_results": [
+        {
+          "base_bits": 8,
+          "offset_bits": 8,
+          "mse": 1.365e-05,
+          "max_abs_err": 0.00774874,
+          "mean_abs_err": 0.00315692
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 6,
+          "mse": 2.185e-05,
+          "max_abs_err": 0.01233652,
+          "mean_abs_err": 0.0038155
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 4,
+          "mse": 0.00010545,
+          "max_abs_err": 0.0342762,
+          "mean_abs_err": 0.00730887
+        }
+      ]
+    },
+    {
+      "name": "LFP_blocks_list.1.operation2.0.act1",
+      "base_bits": 8,
+      "base_kind": "mean",
+      "offset_results": [
+        {
+          "base_bits": 8,
+          "offset_bits": 8,
+          "mse": 0.00011827,
+          "max_abs_err": 0.02482122,
+          "mean_abs_err": 0.00930513
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 6,
+          "mse": 0.00024228,
+          "max_abs_err": 0.04686775,
+          "mean_abs_err": 0.01243056
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 4,
+          "mse": 0.00168028,
+          "max_abs_err": 0.14652547,
+          "mean_abs_err": 0.02586618
+        }
+      ]
+    },
+    {
+      "name": "LFP_blocks_list.1.operation2.0.act2",
+      "base_bits": 8,
+      "base_kind": "mean",
+      "offset_results": [
+        {
+          "base_bits": 8,
+          "offset_bits": 8,
+          "mse": 8.3e-07,
+          "max_abs_err": 0.00159716,
+          "mean_abs_err": 0.00080965
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 6,
+          "mse": 8.7e-07,
+          "max_abs_err": 0.00195996,
+          "mean_abs_err": 0.00082188
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 4,
+          "mse": 1.29e-06,
+          "max_abs_err": 0.00345381,
+          "mean_abs_err": 0.00095449
+        }
+      ]
+    },
+    {
+      "name": "LFP_blocks_list.2.operation1.0.act1",
+      "base_bits": 8,
+      "base_kind": "mean",
+      "offset_results": [
+        {
+          "base_bits": 8,
+          "offset_bits": 8,
+          "mse": 0.00018893,
+          "max_abs_err": 0.0304488,
+          "mean_abs_err": 0.01175653
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 6,
+          "mse": 0.00040354,
+          "max_abs_err": 0.05627974,
+          "mean_abs_err": 0.01617856
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 4,
+          "mse": 0.00366109,
+          "max_abs_err": 0.17396801,
+          "mean_abs_err": 0.04154715
+        }
+      ]
+    },
+    {
+      "name": "LFP_blocks_list.2.operation1.0.act2",
+      "base_bits": 8,
+      "base_kind": "mean",
+      "offset_results": [
+        {
+          "base_bits": 8,
+          "offset_bits": 8,
+          "mse": 2.92e-06,
+          "max_abs_err": 0.00363966,
+          "mean_abs_err": 0.00146401
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 6,
+          "mse": 5.08e-06,
+          "max_abs_err": 0.00600971,
+          "mean_abs_err": 0.00183123
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 4,
+          "mse": 4.59e-05,
+          "max_abs_err": 0.01666427,
+          "mean_abs_err": 0.00512045
+        }
+      ]
+    },
+    {
+      "name": "LFP_blocks_list.2.operation2.0.act1",
+      "base_bits": 8,
+      "base_kind": "mean",
+      "offset_results": [
+        {
+          "base_bits": 8,
+          "offset_bits": 8,
+          "mse": 0.00016179,
+          "max_abs_err": 0.02880858,
+          "mean_abs_err": 0.01073977
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 6,
+          "mse": 0.00043134,
+          "max_abs_err": 0.05709242,
+          "mean_abs_err": 0.01666703
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 4,
+          "mse": 0.00513196,
+          "max_abs_err": 0.18230567,
+          "mean_abs_err": 0.0505023
+        }
+      ]
+    },
+    {
+      "name": "LFP_blocks_list.2.operation2.0.act2",
+      "base_bits": 8,
+      "base_kind": "mean",
+      "offset_results": [
+        {
+          "base_bits": 8,
+          "offset_bits": 8,
+          "mse": 0.00011595,
+          "max_abs_err": 0.02646331,
+          "mean_abs_err": 0.00904084
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 6,
+          "mse": 0.00039592,
+          "max_abs_err": 0.05590875,
+          "mean_abs_err": 0.01573427
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 4,
+          "mse": 0.00313131,
+          "max_abs_err": 0.18861038,
+          "mean_abs_err": 0.03588493
+        }
+      ]
+    },
+    {
+      "name": "LFP_blocks_list.3.operation1.0.act1",
+      "base_bits": 8,
+      "base_kind": "mean",
+      "offset_results": [
+        {
+          "base_bits": 8,
+          "offset_bits": 8,
+          "mse": 0.00032769,
+          "max_abs_err": 0.04650189,
+          "mean_abs_err": 0.01505942
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 6,
+          "mse": 0.0013871,
+          "max_abs_err": 0.10352602,
+          "mean_abs_err": 0.02850817
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 4,
+          "mse": 0.01585716,
+          "max_abs_err": 0.38011732,
+          "mean_abs_err": 0.07965462
+        }
+      ]
+    },
+    {
+      "name": "LFP_blocks_list.3.operation1.0.act2",
+      "base_bits": 8,
+      "base_kind": "mean",
+      "offset_results": [
+        {
+          "base_bits": 8,
+          "offset_bits": 8,
+          "mse": 2.722e-05,
+          "max_abs_err": 0.01091819,
+          "mean_abs_err": 0.00449894
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 6,
+          "mse": 5.09e-05,
+          "max_abs_err": 0.01928992,
+          "mean_abs_err": 0.00576664
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 4,
+          "mse": 0.0003976,
+          "max_abs_err": 0.05741257,
+          "mean_abs_err": 0.01404056
+        }
+      ]
+    },
+    {
+      "name": "LFP_blocks_list.3.operation2.0.act1",
+      "base_bits": 8,
+      "base_kind": "mean",
+      "offset_results": [
+        {
+          "base_bits": 8,
+          "offset_bits": 8,
+          "mse": 9.152e-05,
+          "max_abs_err": 0.0198253,
+          "mean_abs_err": 0.00841149
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 6,
+          "mse": 0.00015922,
+          "max_abs_err": 0.03201838,
+          "mean_abs_err": 0.01052107
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 4,
+          "mse": 0.00118849,
+          "max_abs_err": 0.08840178,
+          "mean_abs_err": 0.02645596
+        }
+      ]
+    },
+    {
+      "name": "LFP_blocks_list.3.operation2.0.act2",
+      "base_bits": 8,
+      "base_kind": "mean",
+      "offset_results": [
+        {
+          "base_bits": 8,
+          "offset_bits": 8,
+          "mse": 4.74e-06,
+          "max_abs_err": 0.00455055,
+          "mean_abs_err": 0.00185292
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 6,
+          "mse": 6.78e-06,
+          "max_abs_err": 0.00686645,
+          "mean_abs_err": 0.00212776
+        },
+        {
+          "base_bits": 8,
+          "offset_bits": 4,
+          "mse": 4.485e-05,
+          "max_abs_err": 0.0172831,
+          "mean_abs_err": 0.00517525
+        }
+      ]
+    }
+  ]
+}

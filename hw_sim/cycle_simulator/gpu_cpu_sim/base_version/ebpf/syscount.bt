@@ -1,0 +1,11 @@
+#!/usr/bin/env bpftrace
+
+/*
+按进程名 comm 统计 syscall 次数
+可用于粗略观察推理过程中系统调用行为
+*/
+
+tracepoint:raw_syscalls:sys_enter
+{
+  @[comm] = count();
+}

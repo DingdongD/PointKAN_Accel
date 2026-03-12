@@ -1,0 +1,5 @@
+/opt/conda/envs/pointkan/lib/python3.8/site-packages/timm/models/layers/__init__.py:48: FutureWarning: Importing from timm.models.layers is deprecated, please import via timm.layers
+  warnings.warn(f"Importing from {__name__} is deprecated, please import via timm.layers", FutureWarning)
+WARNING:root:imports error 
+ You need to install pymongo>=3.9.0 in order to use MongoOutput 
+run_infer_random: task=scanobjectnn device=cpu batches=20 inference_only_s=11.463416 (model forward only, sum of 20 batches)

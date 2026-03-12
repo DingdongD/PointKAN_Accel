@@ -1,0 +1,13 @@
+FPS Radii Pipeline (hardware reference)
+========================================
+K=512  prefix_ratio=0.1  prefix_len=51  suffix_len=461
+in_dim=32  out_dim=64
+
+1. radii_ref [K]  = reference curve from ModelNet40 + FPS
+2. prefix [prefix_len=51] = radii_ref[0:prefix_len]
+3. input_32 [32] = linear_downsample(prefix, 32)  # model input
+4. output_64 [64] = model(input_32)
+5. suffix_recon [suffix_len=461] = linear_upsample(output_64, suffix_len)
+6. full_recon [K] = concat(prefix, suffix_recon)
+
+Saved arrays: radii_ref, prefix, suffix_gt, input_32, output_64, suffix_recon, full_recon

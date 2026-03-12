@@ -1,0 +1,30 @@
+{
+  "base_dir": "./runs",
+  "pattern": "fps_radii_kan_K512_pr*",
+  "runs": [
+    {
+      "save_dir": "./runs/fps_radii_kan_K512_pr0.05",
+      "prefix_ratio": 0.05,
+      "fps_steps": 512,
+      "best_test_mse": 5.808847779142059e-05
+    },
+    {
+      "save_dir": "./runs/fps_radii_kan_K512_pr0.10",
+      "prefix_ratio": 0.1,
+      "fps_steps": 512,
+      "best_test_mse": 2.8823645537172147e-05
+    },
+    {
+      "save_dir": "./runs/fps_radii_kan_K512_pr0.15",
+      "prefix_ratio": 0.15,
+      "fps_steps": 512,
+      "best_test_mse": 1.721266061935979e-05
+    },
+    {
+      "save_dir": "./runs/fps_radii_kan_K512_pr0.20",
+      "prefix_ratio": 0.2,
+      "fps_steps": 512,
+      "best_test_mse": 1.2021397600696472e-05
+    }
+  ]
+}

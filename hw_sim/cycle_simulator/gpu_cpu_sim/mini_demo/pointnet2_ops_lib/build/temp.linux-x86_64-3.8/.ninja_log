@@ -1,0 +1,10 @@
+# ninja log v7
+5	19394	1772120436641810071	/workspace/PointKAN-pytorch/pointnet2_ops_lib/build/temp.linux-x86_64-3.8/pointnet2_ops/_ext-src/src/sampling.o	f3022b5a3db69a34
+4	19517	1772120436641810071	/workspace/PointKAN-pytorch/pointnet2_ops_lib/build/temp.linux-x86_64-3.8/pointnet2_ops/_ext-src/src/interpolate.o	3ccbbb7b0e3727dd
+3	19809	1772120436637810071	/workspace/PointKAN-pytorch/pointnet2_ops_lib/build/temp.linux-x86_64-3.8/pointnet2_ops/_ext-src/src/group_points.o	b049d6887b1d78b1
+1	20155	1772120436637810071	/workspace/PointKAN-pytorch/pointnet2_ops_lib/build/temp.linux-x86_64-3.8/pointnet2_ops/_ext-src/src/ball_query.o	b1a2e294aff490ff
+2	20864	1772120436637810071	/workspace/PointKAN-pytorch/pointnet2_ops_lib/build/temp.linux-x86_64-3.8/pointnet2_ops/_ext-src/src/bindings.o	b947522c21a03842
+3	61062	1772120436637810071	/workspace/PointKAN-pytorch/pointnet2_ops_lib/build/temp.linux-x86_64-3.8/pointnet2_ops/_ext-src/src/group_points_gpu.o	fe78071995adae38
+1	63293	1772120436637810071	/workspace/PointKAN-pytorch/pointnet2_ops_lib/build/temp.linux-x86_64-3.8/pointnet2_ops/_ext-src/src/ball_query_gpu.o	df29d752212eadf7
+4	63481	1772120436641810071	/workspace/PointKAN-pytorch/pointnet2_ops_lib/build/temp.linux-x86_64-3.8/pointnet2_ops/_ext-src/src/interpolate_gpu.o	81bd48cacb9440c6
+6	67193	1772120436641810071	/workspace/PointKAN-pytorch/pointnet2_ops_lib/build/temp.linux-x86_64-3.8/pointnet2_ops/_ext-src/src/sampling_gpu.o	472bf6ff55e9816c

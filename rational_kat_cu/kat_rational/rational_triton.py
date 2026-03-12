@@ -31,7 +31,7 @@ def rational_fwd_kernel(
 ):
     pid = tl.program_id(axis=0)
     offs = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
-    x_size = tl.cast(x_size, tl.int64)
+    # 不使用 tl.cast（部分 Triton 版本无此 API）
     mask = offs < x_size
 
     # Load input elements.

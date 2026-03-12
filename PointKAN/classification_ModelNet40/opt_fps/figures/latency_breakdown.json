@@ -1,0 +1,29 @@
+{
+  "config": {
+    "model": "pointKAN",
+    "num_points": 1024,
+    "checkpoint": null,
+    "warmup": 20,
+    "repeat": 100
+  },
+  "full_forward_ms_mean": 72.05073112156242,
+  "full_forward_ms_std": 13.34205312177263,
+  "breakdown_ms": {
+    "embedding": 2.0531,
+    "stage0_GAM": 13.3562,
+    "stage0_LFP": 8.522,
+    "stage0_GFP": 2.527,
+    "stage1_GAM": 12.9659,
+    "stage1_LFP": 8.6005,
+    "stage1_GFP": 2.4768,
+    "stage2_GAM": 12.6132,
+    "stage2_LFP": 8.6834,
+    "stage2_GFP": 2.5173,
+    "stage3_GAM": 12.6686,
+    "stage3_LFP": 9.1779,
+    "stage3_GFP": 2.5295,
+    "pool": 2.495,
+    "classifier": 2.5288,
+    "full_forward": 103.7153
+  }
+}

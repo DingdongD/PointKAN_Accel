@@ -178,11 +178,12 @@ class Geometric_Affine_Module(nn.Module):
                 mean = torch.mean(grouped_points, dim=2, keepdim=True)
             if self.normalize =="anchor":
                 mean = torch.cat([new_points, new_xyz],dim=-1) if self.use_xyz else new_points
-                mean = mean.unsqueeze(dim=-2)  # [B, npoint, 1, d+3]
-
+                mean = mean.unsqueeze(dim=-2)  # [B, npoint, 1, d+3] 或 [B, npoint, 1, d]
+            # std需要进行[B, npoint, k, d]的计算 --> B*(npoint*k*d)的计算 --> 需要reshape
             std = torch.std((grouped_points-mean).reshape(B,-1),dim=-1,keepdim=True).unsqueeze(dim=-1).unsqueeze(dim=-1)
             grouped_points = (grouped_points-mean)/(std + 1e-5)  # 这两行和batchnorm是一致的 但是这里也需要求方差 
-            # affine_alpha: [1,1,1,channel + add_channel]
+            
+            # affine_alpha: [1,1,1,channel + add_channel] 
             # affine_beta: [1,1,1,channel + add_channel]
             grouped_points = self.affine_alpha*grouped_points + self.affine_beta # 仿射变换 
  

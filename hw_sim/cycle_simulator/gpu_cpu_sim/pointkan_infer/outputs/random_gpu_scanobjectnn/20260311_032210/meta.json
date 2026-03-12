@@ -1,0 +1,12 @@
+{
+  "cmd": "python3 /workspace/PointKAN-pytorch/hw_sim/cycle_simulator/gpu_cpu_sim/pointkan_infer/run_infer_random.py --task scanobjectnn --device cuda --batch-size 1 --max-batches 20",
+  "out_dir": "/workspace/PointKAN-pytorch/hw_sim/cycle_simulator/gpu_cpu_sim/pointkan_infer/outputs/random_gpu_scanobjectnn",
+  "mode": "gpu",
+  "warmup": 1,
+  "repeat": 2,
+  "gpu_index": 0,
+  "gpu_sample_ms": 50,
+  "cpu_sample_ms": 50,
+  "enable_perf": false,
+  "print_inference_only": true
+}
