@@ -13,16 +13,19 @@
 | **fp32_mul** | FP32 乘法器 | `1` (单次延迟) | 1 GHz | `2.5` | `2024` | 寄存器1拍输出 |
 | **fp32_add** | FP32 加法器 | `1` (单次延迟) | 1 GHz | `1.16` | `1273` | 寄存器1拍输出 |
 | **fp32_div** | FP32 除法器 (Newton-Raphson) | `~10` (单次延迟) | 1 GHz | `6307` | `2.59` | 3轮NR迭代 |
-| **baseline_bitonic_sort_1024_max_32min** | 双模式双调排序网络 (1024输入取max或32min) | max模式: `10`, 32min模式: `19`（固定延迟） | 1 GHz | `2097.4` | `2157561` | max模式和32min模式复用bitonic sort资源 |
+| **baseline_bitonic_sort_1024_max_32min** | 双模式双调排序网络 (1024输入取max或32min) | max模式: `10`, 32min模式: `19`（1024输入，其余输入见备注） | 1 GHz | `2097.4` | `2157561` | 512-32：17cycles；256-32：15cycles；128-32：13cycles |
 | **op_batch_norm_1d** | FP32 BatchNorm1d (推理模式, y=γx+β) | `T = N_elem + 1` | 1 GHz | `3.1718` | `3228` | 2级流水(fp32_mul→fp32_add)，延迟2cycles，吞吐1elem/cycle |
 | **affine_norm** | FP32 仿射归一化 (anchor模式, 双遍扫描) | `T = 2×(L/P + 1) + 46`, L=S×K×D, P=32 | 1 GHz | `212.7465` | `304976` | L=SxKxD=393216(对于网络模型所有该算子的调用处，均恒定)；P=32路并行 |
 | **quantize_pipeline (8bit)** | FP32→INT8 量化流水线 | `T = N + 6` | 1 GHz | `2.234` | `2460` | N=待量化元素数，6cycles流水线填充延迟 |
 | **quantize_pipeline (12bit)** | FP32→INT12 量化流水线 | `T = N + 6` | 1 GHz | `2.28` | `2525` | N=待量化元素数，6cycles流水线填充延迟 |
 | **dequantize_pipeline** | INT8→FP32 反量化流水线 | `T = N + 4` | 1 GHz | `2.30` | `2078` | N=待反量化元素数，4cycles流水线填充延迟 |
 | **grf** | GRF  | `19` (固定延迟) | 1 GHz | `23.7833` | `47887` | 无法流水，每次调用固定19cycles |
-| **fp32_resampler (64→512)** | FP32 重采样 (64点插值到512点) | `T = N + 2` | 1 GHz | `103` | `92269` | N=输出元素数，3cycles延迟，流水吞吐1elem/cycle |
+| **fp32_resampler(下采样，51->32，连续流水计算)** | FP32 下采样 | `T = N + 2` | 1 GHz | `3.95` | `4719` | N=输出元素数，3cycles延迟，流水吞吐1elem/cycle；下采样：51点插值至32点 |
+| **fp32_resampler(上采样，每次单点插值)** | FP32 上采样 | `T = 3` | 1 GHz | `3.95` | `4719` | N=输出元素数，3cycles延迟；上采样：64点插值到512点, 根据讨论每次进行单点插值，和距离计算并行（淹没时间）| 
+| **fp32_resampler_up_mem(下采样lut)** | 下采样ram | `T = 1` | 1 GHz | `0.094` | `13485` | 用于保存下采样所需的数据，需要51+32个周期（无阶段依赖，上电即可执行，故只需统计能耗） | 
+| **fp32_resampler_up_mem(上采样lut)** | 上采样ram | `T = 1` | 1 GHz | `0.094` | `85331` | 用于保存上采样所需的数据，需要64+512个周期（无阶段依赖，上电即可执行，故只需统计能耗） | 
 | **Coarse_filter** | FPS/KNN可重构粗筛电路 | `T_fps_mode1 = 1; T_fps_mode0 = 3; T_knn_mode = 4`| 1GHz | 265 | 644686 | fps_mode1对于前10%的采样点，每阶段针对sram-cim array输出的128个距离值进行max排序，每次开销1个cycle，持续工作8个阶段，最终得到1024个距离值中的max值，无需使用细筛电路；fps_mode0对于后90%的采样点，每个阶段对于128个距离值进行基于预测距离的粗筛，每次开销3个cycles(被隐藏在sram-cim array距离计算的6cycles周期中)，最终输出32个max候选距离值至细筛电路；knn_mode，在8组128个距离计算完，且最后一组FPS排序完成后，复用1024个距离值进行KNN粗筛，由于根据动态阈值进行调整，最多6次迭代周期，KNN粗筛开销4个周期+1个output周期，示例：KNN第1次阈值即满足要求，开销4+1=5cycles；第6次阈值满足要求，开销4*6+1=25cycles(也是最大开销)。最终将N个min值输出至细筛电路(32≥N≥24) |
 | **fine_filter** | FPS/KNN可重构细筛电路 | `T = 2` | 1GHz | 38 | 53261 | FPS和KNN细筛均2cycles |
 | **dist2_update_table** | 最小距离更新表 | `T = 1` | 1GHz | 30 | 26610 | FPS每阶段采样后更新最小距离表 |
-| **SRAM_CIM_array** | sram-cim_array 距离计算宏 | `T = (num_input_points / num_array_parrallelism) * (num_xyz_quant_bit / num_bit_slice)` | 1GHz | 6 | / | num_bit_slice=2; num_array_parralleism = 128; 每次计算128个距离值，开销(num_xyz_quant_bit / num_bit_slice)个周期 |
+| **SRAM_CIM_array** | sram-cim_array 距离计算宏 | `T = (num_input_points / num_array_parrallelism) * (num_xyz_quant_bit / num_bit_slice)` | 1GHz | 6+1.3*128 | / | num_bit_slice=2; num_array_parralleism = 128; 每次计算128个距离值，开销(num_xyz_quant_bit / num_bit_slice)个周期；1.3为Local Computing Unit中的移位加法器，128个LCU，用于每个bit_slice计算时进行移位累加 |
 | **dist2_merge_adder** | 将距离值的交叉项和自平方项聚合 | `T = 1` | 1GHz | 1.3 | 2179 | 在sram_cim_array距离计算后，执行1个周期；共128个 |
