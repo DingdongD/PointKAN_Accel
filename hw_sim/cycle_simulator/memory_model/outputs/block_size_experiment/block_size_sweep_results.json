@@ -1,0 +1,52 @@
+[
+  {
+    "block_size": 8,
+    "sram_cycles": 4608,
+    "dram_cycles": 2687,
+    "compute_cycles": 800,
+    "total_cycles": 8095,
+    "sram_energy_nj": 67.31651514,
+    "dram_energy_nj": 1045.6704000000002,
+    "total_energy_nj": 1112.9869151400003
+  },
+  {
+    "block_size": 16,
+    "sram_cycles": 2304,
+    "dram_cycles": 3204,
+    "compute_cycles": 800,
+    "total_cycles": 6308,
+    "sram_energy_nj": 53.17665288,
+    "dram_energy_nj": 1051.3344000000002,
+    "total_energy_nj": 1104.51105288
+  },
+  {
+    "block_size": 32,
+    "sram_cycles": 1152,
+    "dram_cycles": 3020,
+    "compute_cycles": 800,
+    "total_cycles": 4972,
+    "sram_energy_nj": 41.15885432,
+    "dram_energy_nj": 1045.6704000000002,
+    "total_energy_nj": 1086.8292543200002
+  },
+  {
+    "block_size": 64,
+    "sram_cycles": 576,
+    "dram_cycles": 3204,
+    "compute_cycles": 800,
+    "total_cycles": 4580,
+    "sram_energy_nj": 41.15657264000001,
+    "dram_energy_nj": 1051.3344000000002,
+    "total_energy_nj": 1092.49097264
+  },
+  {
+    "block_size": 128,
+    "sram_cycles": 288,
+    "dram_cycles": 3204,
+    "compute_cycles": 800,
+    "total_cycles": 4292,
+    "sram_energy_nj": 64.21510032,
+    "dram_energy_nj": 1051.3344000000002,
+    "total_energy_nj": 1115.54950032
+  }
+]

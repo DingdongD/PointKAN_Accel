@@ -2,7 +2,7 @@
   "num_samples": 1,
   "accuracy": 100.0,
   "balanced_accuracy": 100.0,
-  "test_loss": 1.3207426071166992,
+  "test_loss": 1.320739984512329,
   "end_to_end": {
     "total_cycles": 24099764,
     "cycles_per_sample": 24099764.0,

@@ -1,0 +1,54 @@
+{
+  "backend_compare": {
+    "int_vanilla": {
+      "mean_recall": 0.06433349609375,
+      "mean_iou": 0.06432932336345996,
+      "avg_candidate_ratio": 0.0010056304931640625,
+      "shortage_query_ratio": 1.0,
+      "avg_candidate_size": 1.029765625,
+      "n_shapes": 50
+    },
+    "safe_strict": {
+      "mean_recall": 0.06433349609375,
+      "mean_iou": 0.06432932336345996,
+      "avg_candidate_ratio": 0.0010056304931640625,
+      "shortage_query_ratio": 1.0,
+      "avg_candidate_size": 1.029765625,
+      "n_shapes": 50
+    },
+    "fastnn": {
+      "mean_recall": 0.06433349609375,
+      "mean_iou": 0.06432932336345996,
+      "avg_candidate_ratio": 0.0010056304931640625,
+      "shortage_query_ratio": 1.0,
+      "avg_candidate_size": 1.029765625,
+      "n_shapes": 50
+    }
+  },
+  "e2lsh_config": {
+    "L": 8,
+    "w": 0.2,
+    "candidate_mode": "intersection"
+  },
+  "config": {
+    "partition": "test",
+    "num_points": 1024,
+    "n_ref": 1024,
+    "n_queries": 0,
+    "k": 16,
+    "max_samples": 50,
+    "seed": 42,
+    "quant_mode": "dataset_range",
+    "coord_min": -1.0,
+    "coord_max": 1.0,
+    "quant_bits": 16,
+    "e2lsh_seed": 42,
+    "e2lsh_K": 4,
+    "e2lsh_table_size": 4096,
+    "e2lsh_C": 4294967291,
+    "skip_sweep": false,
+    "pick_L": 8,
+    "pick_w": 0.2,
+    "pick_candidate_mode": "intersection"
+  }
+}

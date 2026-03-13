@@ -1,0 +1,85 @@
+================================================================================
+  E2LSH 实验 (ModelNet40) — 参数扫 + E2LSH+backend 对比
+================================================================================
+  数据: partition=test  num_points=1024  n_ref=1024  k=16
+  max_samples=50  quant_mode=dataset_range  range=[-1.0,1.0]  bits=16
+
+--- Part 1: E2LSH 参数扫 (L, w, candidate_mode) ---
+  指标: candidate_ratio, shortage_ratio, recall@k
+
+  L=4  w=0.1  mode=union  ->  cand_ratio=0.80%  shortage=88.97%  recall@k=0.3540
+  L=4  w=0.1  mode=min_hits  ->  cand_ratio=0.21%  shortage=99.75%  recall@k=0.1315
+  L=4  w=0.2  mode=union  ->  cand_ratio=3.34%  shortage=19.46%  recall@k=0.7323
+  L=4  w=0.2  mode=min_hits  ->  cand_ratio=0.87%  shortage=87.81%  recall@k=0.3965
+  L=4  w=0.3  mode=union  ->  cand_ratio=7.27%  shortage=1.84%  recall@k=0.8872
+  L=4  w=0.3  mode=min_hits  ->  cand_ratio=2.07%  shortage=51.62%  recall@k=0.6189
+  L=4  w=0.5  mode=union  ->  cand_ratio=18.55%  shortage=0.05%  recall@k=0.9714
+  L=4  w=0.5  mode=min_hits  ->  cand_ratio=5.93%  shortage=7.64%  recall@k=0.8382
+  L=8  w=0.1  mode=union  ->  cand_ratio=1.32%  shortage=73.66%  recall@k=0.4955
+  L=8  w=0.1  mode=min_hits  ->  cand_ratio=0.43%  shortage=97.40%  recall@k=0.2461
+  L=8  w=0.2  mode=union  ->  cand_ratio=5.27%  shortage=4.45%  recall@k=0.8730
+  L=8  w=0.2  mode=min_hits  ->  cand_ratio=1.90%  shortage=54.04%  recall@k=0.6665
+  L=8  w=0.3  mode=union  ->  cand_ratio=11.13%  shortage=0.22%  recall@k=0.9691
+  L=8  w=0.3  mode=min_hits  ->  cand_ratio=4.32%  shortage=9.12%  recall@k=0.8765
+  L=8  w=0.5  mode=union  ->  cand_ratio=25.89%  shortage=0.00%  recall@k=0.9970
+  L=8  w=0.5  mode=min_hits  ->  cand_ratio=11.51%  shortage=0.21%  recall@k=0.9808
+  L=12  w=0.1  mode=union  ->  cand_ratio=1.57%  shortage=64.83%  recall@k=0.5554
+  L=12  w=0.1  mode=min_hits  ->  cand_ratio=0.56%  shortage=95.55%  recall@k=0.3069
+  L=12  w=0.2  mode=union  ->  cand_ratio=6.22%  shortage=2.23%  recall@k=0.9146
+  L=12  w=0.2  mode=min_hits  ->  cand_ratio=2.43%  shortage=37.30%  recall@k=0.7616
+  L=12  w=0.3  mode=union  ->  cand_ratio=12.94%  shortage=0.08%  recall@k=0.9848
+  L=12  w=0.3  mode=min_hits  ->  cand_ratio=5.49%  shortage=3.77%  recall@k=0.9358
+  L=12  w=0.5  mode=union  ->  cand_ratio=29.35%  shortage=0.00%  recall@k=0.9992
+  L=12  w=0.5  mode=min_hits  ->  cand_ratio=14.35%  shortage=0.04%  recall@k=0.9948
+
+  Part 1 汇总表 (candidate_ratio, shortage_ratio, recall@k):
+  ------------------------------------------------------------------------
+    L      w  cand_mode    cand_ratio%   shortage%    recall@k
+  ------------------------------------------------------------------------
+    4   0.10  union              0.80%      88.97%      0.3540
+    4   0.10  min_hits           0.21%      99.75%      0.1315
+    4   0.20  union              3.34%      19.46%      0.7323
+    4   0.20  min_hits           0.87%      87.81%      0.3965
+    4   0.30  union              7.27%       1.84%      0.8872
+    4   0.30  min_hits           2.07%      51.62%      0.6189
+    4   0.50  union             18.55%       0.05%      0.9714
+    4   0.50  min_hits           5.93%       7.64%      0.8382
+    8   0.10  union              1.32%      73.66%      0.4955
+    8   0.10  min_hits           0.43%      97.40%      0.2461
+    8   0.20  union              5.27%       4.45%      0.8730
+    8   0.20  min_hits           1.90%      54.04%      0.6665
+    8   0.30  union             11.13%       0.22%      0.9691
+    8   0.30  min_hits           4.32%       9.12%      0.8765
+    8   0.50  union             25.89%       0.00%      0.9970
+    8   0.50  min_hits          11.51%       0.21%      0.9808
+   12   0.10  union              1.57%      64.83%      0.5554
+   12   0.10  min_hits           0.56%      95.55%      0.3069
+   12   0.20  union              6.22%       2.23%      0.9146
+   12   0.20  min_hits           2.43%      37.30%      0.7616
+   12   0.30  union             12.94%       0.08%      0.9848
+   12   0.30  min_hits           5.49%       3.77%      0.9358
+   12   0.50  union             29.35%       0.00%      0.9992
+   12   0.50  min_hits          14.35%       0.04%      0.9948
+
+  已保存: /workspace/PointKAN-pytorch/PointKAN-elite/classification_ModelNet40/runs/e2lsh_experiments/sweep_results_20260312_081523.json
+
+--- Part 2: E2LSH + backend 对比 (固定 E2LSH 参数) ---
+  固定 E2LSH: L=8  w=0.2  candidate_mode=intersection  GT=float_vanilla
+
+  E2LSH + int_vanilla   ->  IoU=0.0643  Recall@k=0.0643  cand_ratio=0.10%  shortage=100.00%
+  E2LSH + safe_strict   ->  IoU=0.0643  Recall@k=0.0643  cand_ratio=0.10%  shortage=100.00%
+  E2LSH + fastnn        ->  IoU=0.0643  Recall@k=0.0643  cand_ratio=0.10%  shortage=100.00%
+
+  Part 2 汇总:
+  ------------------------------------------------------------
+  Backend             Mean IoU    Recall@k   cand_ratio%   shortage%
+  ------------------------------------------------------------
+  E2LSH+int_vanilla      0.0643      0.0643         0.10%     100.00%
+  E2LSH+safe_strict      0.0643      0.0643         0.10%     100.00%
+  E2LSH+fastnn          0.0643      0.0643         0.10%     100.00%
+  
+  已保存: /workspace/PointKAN-pytorch/PointKAN-elite/classification_ModelNet40/runs/e2lsh_experiments/backend_compare_20260312_081523.json
+
+================================================================================
+  日志已保存: /workspace/PointKAN-pytorch/PointKAN-elite/classification_ModelNet40/runs/e2lsh_experiments/experiment_20260312_081523.log
+================================================================================
