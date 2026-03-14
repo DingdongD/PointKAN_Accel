@@ -8,7 +8,7 @@
 | :--- | :--- | :--- | :---: | :---: | :---: | :--- |
 | **op_relu** | FP32 ReLU 逐元素激活 | `T = N_elements` | 1 GHz | `0.45` | `222` | 可并行 M 个 op_relu 电路，周期缩减为 `N_elements / M`，功耗和面积对应倍增 M |
 | **op_spool** | FP32 S-Pool (Softmax加权池化) | `T = 56 + (N - 1) × 47` | 1 GHz | `26.82` | `54926` | N = B × N_points × N_channels |
-| **op_layer_norm** | FP32 LayerNorm 双FSM流水线 | `T = (6D+32) + N_vec × 10D` | 1 GHz | `180` | `177025` | D=normalized_shape (需 D≥9)，N_vec=待归一化向量总数 |
+| **op_layer_norm** | FP32 LayerNorm 双FSM流水线 | `T = N x (3D/8 + 17)` | 1 GHz | `56` | `139582` | 移除内部寄存器组，由外部片上缓存输入数据，并且将原本寄存器的面积替换为更多的ALU单元，增加了模块内并行度，周期缩减 |
 | **op_adaptive_max_pool1d** | FP32 全并行MaxPool (output_size=1) | `T = N_fibers` | 1 GHz | `13.2` | `18406` | MAX_DIM=64；N_fibers=池化输出元素总数（池化维≤64）。举例：K近邻池化 [N_points, D, K]→[N_points, D] 时 N_fibers=N_points×D；全局池化 [D, N_points]→[D] 时 N_fibers=D |
 | **fp32_mul** | FP32 乘法器 | `1` (单次延迟) | 1 GHz | `2.5` | `2024` | 寄存器1拍输出 |
 | **fp32_add** | FP32 加法器 | `1` (单次延迟) | 1 GHz | `1.16` | `1273` | 寄存器1拍输出 |
@@ -41,4 +41,7 @@ sort_64in_batch32min模块，每次处理64个输入输出局部32min，分时�
 1、coarse_filter：不同模式功耗更新
 2、baseline_bitonic_sort_1024_max_32min：不同模式功耗更新
 3、新增dist2_engine对应的topk电路
-4、op_layer_norm：（待综合结束）更新电路设计，去除buffer，将原本buffer面积酌情替换为增加内部alu资源，以内部计算并行度；功耗和周期公式均需更新
+
+
+### 更新日志：3-15
+1、op_layer_norm：更新电路设计，去除buffer，将原本buffer面积酌情替换为增加内部alu资源，以内部计算并行度；功耗和周期公式均需更新
