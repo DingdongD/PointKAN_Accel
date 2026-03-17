@@ -50,7 +50,7 @@
 | **dispatcher.py** | op_type → handler 派发，按层链式调用并累加 cycle。Conv1d/Linear 使用 constants.OP_NAME_*。**归属**：算子派发与事件顺序。 |
 | **fps.py** | FPS 算子：距离计算 + Bitonic 排序，生成 Event（operator="FPS"）。**归属**：FPS 周期与功耗模型。 |
 | **knn.py** | KNN 算子：距离计算 + SRAM 写回 + Bitonic 取 k 近邻。**归属**：KNN 周期与功耗模型。 |
-| **layer_buffer_ops.py** | 层间 buffer 读/写、spill、首层输入加载（**gen_first_layer_input_load_events**）、Phase2 距离事件。依赖 **utils.math_utils.safe_div_ceil**。**归属**：内存与首层/距离阶段事件。 |
+| **layer_buffer_ops.py** | 层间 buffer 读/写、spill、首层输入加载（**gen_first_layer_input_load_events**）、Phase2 距离事件。周期与能耗经 **integration.memory_model_adapter**（query_sram_cycles_energy / query_dram_cycles_energy，仅 CACTI/DRAMSim3 回填）。**归属**：内存与首层/距离阶段事件。 |
 | **mnsim_adapter.py** | MNSIM PE 级延迟/能耗估算，供 common_ops 中 Conv1d/Linear 无全 NetStruct 时使用。**归属**：MNSIM 对接。 |
 
 ---

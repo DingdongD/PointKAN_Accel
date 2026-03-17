@@ -1,0 +1,182 @@
+[2026-03-15 17:31:24] INFO     | Logger initialized: pointcloud_ppa_sim
+[2026-03-15 17:31:24] INFO     | Log level: INFO
+[2026-03-15 17:31:24] INFO     | Log file: sim_log/simulation_20260315_173124.log
+[2026-03-15 17:31:24] INFO     | ============================================================
+[2026-03-15 17:31:24] INFO     |  真实数据评估：ModelNet40 样本 + checkpoint 权重 + MNSIM 对应层 PPA
+[2026-03-15 17:31:24] INFO     | ============================================================
+[2026-03-15 17:31:24] INFO     | Checkpoint: /workspace/PointKAN-pytorch/PointKAN-elite/classification_ModelNet40/checkpoints/pointKANElite-pointkan_elite_exp-42
+[2026-03-15 17:31:24] INFO     | num_points=1024, num_classes=40, batch_size=1
+[2026-03-15 17:31:28] INFO     | 加速器: baseline (BASELINE)
+[2026-03-15 17:31:28] INFO     | CIM 并行度: 128
+[2026-03-15 17:31:28] INFO     | Bit-serial 周期: 6
+[2026-03-15 17:31:28] INFO     | 层间 buffer: size=65536 B, bandwidth=256 B/cycle, spill_to_dram=True
+[2026-03-15 17:31:28] INFO     | 层间量化/反量化: 未启用 (默认，假定 W8A8 已就绪)
+[2026-03-15 17:31:28] INFO     | BN 融合: 启用 (BN 不单独计入)
+[2026-03-15 17:31:28] INFO     | SCALE-Sim 脉动 Conv/Linear: 启用（周期与 MAC/访问由 SCALE-Sim 统计，能耗仍用本工程内存建模）
+[2026-03-15 17:31:28] INFO     | 脉动阵列尺寸: 64×64 (ArrayHeight×ArrayWidth)
+[2026-03-15 17:31:28] INFO     | 数字逻辑时钟: 1.0000 ns (1000.00 MHz) (由 --logic_clk_freq 设置)
+[2026-03-15 17:31:28] INFO     | 
+[2026-03-15 17:31:29] INFO     | 真实前向共 36 个 conv/linear（baseline 脉动由 SCALE-Sim 逐层统计）
+[2026-03-15 17:31:29] INFO     | SCALE-Sim 阵列尺寸: 64×64（conv1d 首层 conv1d，后续层同）
+[2026-03-15 17:32:53] INFO     | 
+运行仿真: 6020 个事件, 约 11,252,776 周期...
+[2026-03-15 17:32:53] INFO     | ============================================================
+[2026-03-15 17:32:53] INFO     | 真实数据评估结果 (ModelNet40 测试集)
+[2026-03-15 17:32:53] INFO     | ============================================================
+[2026-03-15 17:32:53] INFO     |   样本数:        1
+[2026-03-15 17:32:53] INFO     |   准确率:        100.00%
+[2026-03-15 17:32:53] INFO     |   平衡准确率:    100.00%
+[2026-03-15 17:32:53] INFO     |   Test Loss:     1.3207
+[2026-03-15 17:32:53] INFO     |   总周期:        11,252,776 cycles
+[2026-03-15 17:32:53] INFO     |   总能耗:        1287018.28 nJ
+[2026-03-15 17:32:53] INFO     |   端到端延迟:    14.6864 ms (每样本, 各模块按自身时钟换算 ns 后累加)
+[2026-03-15 17:32:53] INFO     |   每样本周期:    11252776.0 cycles
+[2026-03-15 17:32:53] INFO     |   每样本能耗:    1287018.28 nJ
+[2026-03-15 17:32:53] INFO     | ============================================================
+[2026-03-15 17:34:21] INFO     | 
+运行仿真: 6020 个事件, 约 11,252,776 周期...
+[2026-03-15 17:34:21] INFO     | ============================================================
+[2026-03-15 17:34:21] INFO     | 端到端延迟、能耗与面积构成 (每样本，按算子类型；面积来自 NeuroSim/MNSIM 或逻辑模块)
+[2026-03-15 17:34:21] INFO     |   说明: Conv/Linear 用 NeuroSim 时钟（NEUROSIM_CLK_FREQ 传入，可变）；数字逻辑用 --logic_clk_freq/LOGIC_CLK_FREQ 接口，默认 1 GHz。
+[2026-03-15 17:34:21] INFO     |   AffineNorm=GAM 仿射归一化（不含 BN）；BN 在 BN_EN=1 时融合进 Conv/Linear 不单独出现，BN_EN=0 时单独列出为 BN；QD_EN=1 时 Quant/Dequant 已单独列出。
+[2026-03-15 17:34:21] INFO     |   查看入口: AffineNorm=pointkan_sim.operators.common_ops.gen_affine_norm_events；BN=gen_bn_events；BN 融合=dispatcher；Quant/Dequant=common_ops.gen_quant_events/gen_dequant_events。
+[2026-03-15 17:34:21] INFO     |   内存: LayerBuffer=层间 SRAM 读写（breakdown 即 SRAM buffer）；DRAM=首层点云加载与 spill。
+[2026-03-15 17:34:21] INFO     |   能耗: 除 SRAM CIM Array 用用户数据外，LayerBuffer 仅来自 CACTI 仿真（fill_inter_layer_buffer_from_cacti）；首层与 spill 的 DRAM 仅来自 trace→DRAMSim3（repo_root + hw_config.dram.dramsim3_bin 时自动跑）。无回退。详见 ARCHITECTURE.md §1.4。
+[2026-03-15 17:34:21] INFO     | ============================================================
+[2026-03-15 17:34:21] INFO     |   算子                         cycles  cycles%    latency(ns) latency%   energy(nJ)  energy%    area(um2)    area%
+[2026-03-15 17:34:21] INFO     |   --------------------------------------------------------------------------------------------------------------
+[2026-03-15 17:34:21] INFO     |   KAN                     4,980,736    33.9%    4,980,736.0    33.9%   118,456.84     9.2%    47,887.00    18.3%
+[2026-03-15 17:34:21] INFO     |   LayerBuffer             3,619,588    24.6%    3,619,588.0    24.6%    47,420.98     3.7%         0.00     0.0%
+[2026-03-15 17:34:21] INFO     |   DRAM                    3,307,368    22.5%    3,307,368.0    22.5%   935,965.94    72.7%         0.00     0.0%
+[2026-03-15 17:34:21] INFO     |   SPool                   1,572,908    10.7%    1,572,908.0    10.7%   102,647.98     8.0%    54,926.00    20.9%
+[2026-03-15 17:34:21] INFO     |   ADD                       528,896     3.6%      528,896.0     3.6%       838.57     0.1%     1,273.00     0.5%
+[2026-03-15 17:34:21] INFO     |   AdaptiveMaxPool1d         163,840     1.1%      163,840.0     1.1%     2,162.69     0.2%    18,406.00     7.0%
+[2026-03-15 17:34:21] INFO     |   LayerNorm                 130,944     0.9%      130,944.0     0.9%     7,332.86     0.6%   139,582.00    53.2%
+[2026-03-15 17:34:21] INFO     |   AffineNorm                 98,496     0.7%       98,496.0     0.7%     5,515.78     0.4%         0.00     0.0%
+[2026-03-15 17:34:21] INFO     |   Linear                     84,021     0.6%       84,021.0     0.6%    12,831.31     1.0%         0.00     0.0%
+[2026-03-15 17:34:21] INFO     |   Conv1d                     67,177     0.5%       67,177.0     0.5%    10,666.90     0.8%         0.00     0.0%
+[2026-03-15 17:34:21] INFO     |   KNN                        51,840     0.4%       51,840.0     0.4%    28,089.60     2.2%         0.00     0.0%
+[2026-03-15 17:34:21] INFO     |   FPS                        43,200     0.3%       43,200.0     0.3%    15,072.00     1.2%         0.00     0.0%
+[2026-03-15 17:34:21] INFO     |   ReLU                       37,376     0.3%       37,376.0     0.3%        16.82     0.0%       222.00     0.1%
+[2026-03-15 17:34:21] INFO     |   --------------------------------------------------------------------------------------------------------------
+[2026-03-15 17:34:21] INFO     |   合计                     14,686,390   100.0%   14,686,390.0   100.0% 1,287,018.28   100.0%   262,296.00   100.0%
+[2026-03-15 17:34:21] INFO     |   端到端延迟合计: 14.6864 ms  |  能耗合计: 1287018.28 nJ  |  系统总面积: 262296.00 um^2
+[2026-03-15 17:34:21] INFO     | ============================================================
+[2026-03-15 17:34:21] INFO     | ============================================================
+[2026-03-15 17:34:21] INFO     | 每个算子 cycle 的详细构成（按算子类型 + 层名）
+[2026-03-15 17:34:21] INFO     |   operator_cycle_detail 按 (算子, 层名) 聚合；以下按算子类型分组，组内按 cycles 降序。
+[2026-03-15 17:34:21] INFO     | ============================================================
+[2026-03-15 17:34:21] INFO     |   [KAN] 合计: cycles=4,980,736, latency_ns=4,980,736.0, energy_nJ=118456.84, area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage0'  cycles=1,245,184  latency_ns=1,245,184.0  energy_nJ=29614.21  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage1'  cycles=1,245,184  latency_ns=1,245,184.0  energy_nJ=29614.21  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage2'  cycles=1,245,184  latency_ns=1,245,184.0  energy_nJ=29614.21  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage3'  cycles=1,245,184  latency_ns=1,245,184.0  energy_nJ=29614.21  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |   [LayerBuffer] 合计: cycles=3,619,588, latency_ns=3,619,588.0, energy_nJ=47420.98, area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage3'  cycles=1,654,928  latency_ns=1,654,928.0  energy_nJ=23056.21  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='stage-3'  cycles=574,704  latency_ns=574,704.0  energy_nJ=7696.19  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='classifier'  cycles=434,776  latency_ns=434,776.0  energy_nJ=5912.45  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage2'  cycles=430,144  latency_ns=430,144.0  energy_nJ=5774.03  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='stage-2'  cycles=160,880  latency_ns=160,880.0  energy_nJ=1935.33  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage1'  cycles=117,784  latency_ns=117,784.0  energy_nJ=1453.42  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='stage-1'  cycles=51,248  latency_ns=51,248.0  energy_nJ=495.07  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='global_maxpool'  cycles=37,136  latency_ns=37,136.0  energy_nJ=13.61  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='embedding'  cycles=36,960  latency_ns=36,960.0  energy_nJ=464.28  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage0'  cycles=33,540  latency_ns=33,540.0  energy_nJ=373.24  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='GAM-stage3'  cycles=29,808  latency_ns=29,808.0  energy_nJ=28.05  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='GAM-stage2'  cycles=21,552  latency_ns=21,552.0  energy_nJ=28.05  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='stage-0'  cycles=17,680  latency_ns=17,680.0  energy_nJ=134.97  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='GAM-stage1'  cycles=13,328  latency_ns=13,328.0  energy_nJ=28.05  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='GAM-stage0'  cycles=5,120  latency_ns=5,120.0  energy_nJ=28.05  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |   [DRAM] 合计: cycles=3,307,368, latency_ns=3,307,368.0, energy_nJ=935965.94, area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage3'  cycles=1,601,921  latency_ns=1,601,921.0  energy_nJ=376825.96  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='stage-3'  cycles=534,528  latency_ns=534,528.0  energy_nJ=127674.47  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='classifier'  cycles=411,040  latency_ns=411,040.0  energy_nJ=101726.21  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage2'  cycles=402,916  latency_ns=402,916.0  energy_nJ=128867.90  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='stage-2'  cycles=134,656  latency_ns=134,656.0  energy_nJ=45029.34  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage1'  cycles=102,017  latency_ns=102,017.0  energy_nJ=66593.28  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='embedding'  cycles=37,595  latency_ns=37,595.0  energy_nJ=8099.52  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='stage-1'  cycles=34,560  latency_ns=34,560.0  energy_nJ=24263.58  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage0'  cycles=26,752  latency_ns=26,752.0  energy_nJ=16539.34  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='stage-0'  cycles=9,472  latency_ns=9,472.0  energy_nJ=7578.93  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='GAM-stage2'  cycles=3,049  latency_ns=3,049.0  energy_nJ=7242.47  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='GAM-stage3'  cycles=2,579  latency_ns=2,579.0  energy_nJ=7219.81  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='GAM-stage0'  cycles=2,443  latency_ns=2,443.0  energy_nJ=7219.81  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='GAM-stage1'  cycles=2,432  latency_ns=2,432.0  energy_nJ=7219.81  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='global_maxpool'  cycles=1,408  latency_ns=1,408.0  energy_nJ=3865.50  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |   [SPool] 合计: cycles=1,572,908, latency_ns=1,572,908.0, energy_nJ=102647.98, area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='GAM-stage0'  cycles=393,227  latency_ns=393,227.0  energy_nJ=25661.99  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='GAM-stage1'  cycles=393,227  latency_ns=393,227.0  energy_nJ=25661.99  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='GAM-stage2'  cycles=393,227  latency_ns=393,227.0  energy_nJ=25661.99  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='GAM-stage3'  cycles=393,227  latency_ns=393,227.0  energy_nJ=25661.99  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |   [ADD] 合计: cycles=528,896, latency_ns=528,896.0, energy_nJ=838.57, area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage0'  cycles=99,072  latency_ns=99,072.0  energy_nJ=152.43  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage1'  cycles=99,072  latency_ns=99,072.0  energy_nJ=152.43  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage2'  cycles=99,072  latency_ns=99,072.0  energy_nJ=152.43  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage3'  cycles=99,072  latency_ns=99,072.0  energy_nJ=152.43  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='stage-0'  cycles=33,152  latency_ns=33,152.0  energy_nJ=57.21  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='stage-1'  cycles=33,152  latency_ns=33,152.0  energy_nJ=57.21  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='stage-2'  cycles=33,152  latency_ns=33,152.0  energy_nJ=57.21  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='stage-3'  cycles=33,152  latency_ns=33,152.0  energy_nJ=57.21  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |   [AdaptiveMaxPool1d] 合计: cycles=163,840, latency_ns=163,840.0, energy_nJ=2162.69, area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage0'  cycles=32,768  latency_ns=32,768.0  energy_nJ=432.54  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage1'  cycles=32,768  latency_ns=32,768.0  energy_nJ=432.54  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage2'  cycles=32,768  latency_ns=32,768.0  energy_nJ=432.54  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage3'  cycles=32,768  latency_ns=32,768.0  energy_nJ=432.54  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='global_maxpool'  cycles=32,768  latency_ns=32,768.0  energy_nJ=432.54  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |   [LayerNorm] 合计: cycles=130,944, latency_ns=130,944.0, energy_nJ=7332.86, area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage0'  cycles=41,984  latency_ns=41,984.0  energy_nJ=2351.10  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage1'  cycles=33,280  latency_ns=33,280.0  energy_nJ=1863.68  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage2'  cycles=28,928  latency_ns=28,928.0  energy_nJ=1619.97  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage3'  cycles=26,752  latency_ns=26,752.0  energy_nJ=1498.11  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |   [AffineNorm] 合计: cycles=98,496, latency_ns=98,496.0, energy_nJ=5515.78, area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='GAM-stage0'  cycles=24,624  latency_ns=24,624.0  energy_nJ=1378.94  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='GAM-stage1'  cycles=24,624  latency_ns=24,624.0  energy_nJ=1378.94  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='GAM-stage2'  cycles=24,624  latency_ns=24,624.0  energy_nJ=1378.94  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='GAM-stage3'  cycles=24,624  latency_ns=24,624.0  energy_nJ=1378.94  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |   [Linear] 合计: cycles=84,021, latency_ns=84,021.0, energy_nJ=12831.31, area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage3'  cycles=48,892  latency_ns=48,892.0  energy_nJ=7491.03  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='classifier'  cycles=19,097  latency_ns=19,097.0  energy_nJ=2882.29  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage2'  cycles=12,220  latency_ns=12,220.0  energy_nJ=1872.76  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage1'  cycles=3,052  latency_ns=3,052.0  energy_nJ=468.19  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage0'  cycles=760  latency_ns=760.0  energy_nJ=117.05  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |   [Conv1d] 合计: cycles=67,177, latency_ns=67,177.0, energy_nJ=10666.90, area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage3'  cycles=24,448  latency_ns=24,448.0  energy_nJ=3745.54  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='stage-3'  cycles=24,448  latency_ns=24,448.0  energy_nJ=3745.54  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage2'  cycles=6,112  latency_ns=6,112.0  energy_nJ=936.41  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='stage-2'  cycles=6,112  latency_ns=6,112.0  energy_nJ=936.41  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='embedding'  cycles=2,237  latency_ns=2,237.0  energy_nJ=717.64  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage1'  cycles=1,528  latency_ns=1,528.0  energy_nJ=234.12  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='stage-1'  cycles=1,528  latency_ns=1,528.0  energy_nJ=234.12  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage0'  cycles=382  latency_ns=382.0  energy_nJ=58.55  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='stage-0'  cycles=382  latency_ns=382.0  energy_nJ=58.55  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |   [KNN] 合计: cycles=51,840, latency_ns=51,840.0, energy_nJ=28089.60, area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='GAM-stage0'  cycles=34,816  latency_ns=34,816.0  energy_nJ=14981.12  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='GAM-stage1'  cycles=11,264  latency_ns=11,264.0  energy_nJ=7490.56  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='GAM-stage2'  cycles=4,096  latency_ns=4,096.0  energy_nJ=3745.28  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='GAM-stage3'  cycles=1,664  latency_ns=1,664.0  energy_nJ=1872.64  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |   [FPS] 合计: cycles=43,200, latency_ns=43,200.0, energy_nJ=15072.00, area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='GAM-stage0'  cycles=30,208  latency_ns=30,208.0  energy_nJ=8038.40  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='GAM-stage1'  cycles=8,960  latency_ns=8,960.0  energy_nJ=4019.20  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='GAM-stage2'  cycles=2,944  latency_ns=2,944.0  energy_nJ=2009.60  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='GAM-stage3'  cycles=1,088  latency_ns=1,088.0  energy_nJ=1004.80  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |   [ReLU] 合计: cycles=37,376, latency_ns=37,376.0, energy_nJ=16.82, area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='embedding'  cycles=32,768  latency_ns=32,768.0  energy_nJ=14.75  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage3'  cycles=1,024  latency_ns=1,024.0  energy_nJ=0.46  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='stage-3'  cycles=1,024  latency_ns=1,024.0  energy_nJ=0.46  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='classifier'  cycles=768  latency_ns=768.0  energy_nJ=0.35  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage2'  cycles=512  latency_ns=512.0  energy_nJ=0.23  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='stage-2'  cycles=512  latency_ns=512.0  energy_nJ=0.23  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage1'  cycles=256  latency_ns=256.0  energy_nJ=0.12  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='stage-1'  cycles=256  latency_ns=256.0  energy_nJ=0.12  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='LFP-stage0'  cycles=128  latency_ns=128.0  energy_nJ=0.06  area_um2=0.00
+[2026-03-15 17:34:21] INFO     |     layer='stage-0'  cycles=128  latency_ns=128.0  energy_nJ=0.06  area_um2=0.00
+[2026-03-15 17:34:21] INFO     | ============================================================
+[2026-03-15 17:34:21] INFO     | PPA 与 breakdown 输出目录: sim_results_baseline_scalesim（按仿真模式自动命名）
+[2026-03-15 17:34:21] INFO     | PPA 报告已写入: sim_results_baseline_scalesim/report.json
+[2026-03-15 17:34:22] INFO     | PPA 图表已写入: sim_results_baseline_scalesim (2 张)
+[2026-03-15 17:34:22] INFO     | 完整硬件算子序列已写入: sim_results_baseline_scalesim/operator_sequence.txt（共 6020 条）
+[2026-03-15 17:34:22] INFO     | 算子 cycle 构成明细已写入: sim_results_baseline_scalesim/operator_cycle_detail.txt
+[2026-03-15 17:34:22] INFO     | KAN/KAT 逐条激活 shape 与 cycle/energy 已写入: sim_results_baseline_scalesim/kan_kat_layers.csv（共 8 条，仅有效 KAT/act2；Identity act1 未计入）
+[2026-03-15 17:34:22] INFO     | SCALE-Sim 逐层 Conv/Linear（周期、利用率、能耗、每层激活 shape）已写入: sim_results_baseline_scalesim/scalesim_conv_linear_layers.csv（共 36 层）
+[2026-03-15 17:34:22] INFO     | 内存交互事务已写入: sim_results_baseline_scalesim/memory_transactions.txt（共 2027 条）
+[2026-03-15 17:34:22] INFO     | 内存交互聚合已写入: sim_results_baseline_scalesim/memory_transactions_summary.txt

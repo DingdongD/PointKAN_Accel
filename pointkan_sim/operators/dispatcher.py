@@ -22,7 +22,9 @@ from ..constants import OP_NAME_CONV1D, OP_NAME_LINEAR
 from ..simulator.event import Event
 from .common_ops import (
     gen_conv1d_rram_cim_events,
+    gen_conv1d_systolic_events,
     gen_linear_rram_cim_events,
+    gen_linear_systolic_events,
     gen_quant_events,
     gen_dequant_events,
     gen_bn_events,
@@ -34,6 +36,7 @@ from .common_ops import (
     gen_adaptive_max_pool_events,
     gen_add_events,
     gen_mul_events,
+    gen_div_events,
 )
 
 if TYPE_CHECKING:
@@ -53,7 +56,16 @@ def _gen_conv1d(
     hw_config: 'HardwareConfig',
     context: Optional[Dict[str, Any]] = None,
 ) -> List[Event]:
-    """Conv1d：若有 mnsim_context 则用 MNSIM 全 NetStruct 的延迟/能耗生成事件（算子名 PascalCase）；否则走 PE 级 common_ops。"""
+    """
+    Conv1d：base_v1/base_v2 仅通过 SCALE-Sim 脉动阵列仿真（FXP16）；acc 用 MNSIM/NeuroSim 或 RRAM-CIM（可含量化/反量化）；其他配置 raise。
+    """
+    is_baseline = getattr(hw_config, "is_baseline", False)
+    has_systolic = getattr(hw_config, "systolic_array", None) is not None
+    if is_baseline:
+        if not has_systolic:
+            raise RuntimeError("Conv1d not supported: baseline (base_v1/base_v2) requires systolic_array and SCALE-Sim.")
+        return gen_conv1d_systolic_events(op_ref.params, hw_config)
+    # acc：MNSIM/NeuroSim（全 NetStruct 或 PE 级 RRAM-CIM）
     if context and "mnsim_latency_ns" in context and "mnsim_energy_nj" in context:
         idx = context.get("mnsim_index", 0)
         lat_ns = context["mnsim_latency_ns"]
@@ -98,7 +110,10 @@ def _gen_conv1d(
                 d_ev.cycle = mnsim_ev.cycle + mnsim_ev.duration
                 return [q_ev, mnsim_ev, d_ev]
             return [mnsim_ev]
-    return gen_conv1d_rram_cim_events(op_ref.params, hw_config)
+    # acc 且无全网络 MNSIM：单层 RRAM-CIM
+    if not is_baseline:
+        return gen_conv1d_rram_cim_events(op_ref.params, hw_config)
+    raise RuntimeError("Conv1d not supported: unknown accelerator mode (neither baseline with SCALE-Sim nor acc).")
 
 
 def _gen_linear(
@@ -106,7 +121,16 @@ def _gen_linear(
     hw_config: 'HardwareConfig',
     context: Optional[Dict[str, Any]] = None,
 ) -> List[Event]:
-    """Linear：若有 mnsim_context 则用 MNSIM 全 NetStruct 的延迟/能耗生成事件（算子名 PascalCase）；否则走 PE 级 common_ops。"""
+    """
+    Linear：base_v1/base_v2 仅通过 SCALE-Sim 脉动阵列仿真（FXP16）；acc 用 MNSIM/NeuroSim 或 RRAM-CIM（可含量化/反量化）；其他配置 raise。
+    """
+    is_baseline = getattr(hw_config, "is_baseline", False)
+    has_systolic = getattr(hw_config, "systolic_array", None) is not None
+    if is_baseline:
+        if not has_systolic:
+            raise RuntimeError("Linear not supported: baseline (base_v1/base_v2) requires systolic_array and SCALE-Sim.")
+        return gen_linear_systolic_events(op_ref.params, hw_config)
+    # acc：MNSIM/NeuroSim
     if context and "mnsim_latency_ns" in context and "mnsim_energy_nj" in context:
         idx = context.get("mnsim_index", 0)
         lat_ns = context["mnsim_latency_ns"]
@@ -150,7 +174,10 @@ def _gen_linear(
                 d_ev.cycle = mnsim_ev.cycle + mnsim_ev.duration
                 return [q_ev, mnsim_ev, d_ev]
             return [mnsim_ev]
-    return gen_linear_rram_cim_events(op_ref.params, hw_config)
+    # acc 且无全网络 MNSIM：单层 RRAM-CIM
+    if not is_baseline:
+        return gen_linear_rram_cim_events(op_ref.params, hw_config)
+    raise RuntimeError("Linear not supported: unknown accelerator mode (neither baseline with SCALE-Sim nor acc).")
 
 
 def _gen_bn(
@@ -206,7 +233,21 @@ def _gen_fps(
     """
     FPS：当 distance_in_phase2 时，先插入 Phase2 距离计算（每查询 12/2*ceil(N/128) 周期），
     再插入 FPS 引擎 bitonic；baseline 下与 KNN 串行（共享 bitonic 比较器）。
+    acc 模式下仅第一层跑 FPS，后续层复用第一层 FPS 结果（0 周期占位）。
     """
+    # acc：仅第一层有 FPS 的层跑 FPS，后续层复用第一层结果，不产生周期/能耗
+    if getattr(hw_config, "is_acc", False) and context is not None:
+        first_fps = context.get("first_layer_with_fps")
+        layer_index = context.get("layer_index")
+        if first_fps is not None and layer_index is not None and layer_index != first_fps:
+            clock_ns = getattr(hw_config, "clock_period", 1.0)
+            return [
+                Event(
+                    0, 0, "FPS", "reuse", "fps_reuse", "fps", "fps_reuse_first_layer",
+                    0.0, 0, clock_ns, metadata={"fps_reuse": True},
+                )
+            ]
+
     from .fps import FPSOperator, FPSParams
     from .layer_buffer_ops import gen_phase2_distance_events
 
@@ -226,6 +267,8 @@ def _gen_fps(
     per_query_cycles = _phase2_distance_cycles_per_query(input_points, hw_config)
     all_events: List[Event] = []
     current_cycle = 0
+    mdt_cfg = getattr(getattr(hw_config, "sorting_circuit", None), "min_distance_table", None)
+    mdt_power = float(getattr(mdt_cfg, "power", 0.0) or 0.0)
     for i in range(sampled_points_num):
         evs_d = gen_phase2_distance_events(
             1,
@@ -239,10 +282,44 @@ def _gen_fps(
             e.cycle += current_cycle
         all_events.extend(evs_d)
         current_cycle += per_query_cycles
-        one_bitonic = fps_op.generate_single_bitonic_event()
-        one_bitonic.cycle = current_cycle
-        all_events.append(one_bitonic)
-        current_cycle += one_bitonic.duration
+        min_table_ev = Event(
+            len(all_events), current_cycle, "FPS", "min_distance_update", "table_update", "min_distance_table", "min_distance_compare",
+            mdt_power, 1, clock_ns,
+            metadata={"iteration": i, "buffer_name": "fps_min_distance_table_sram", "buffer_phase": "update", "bytes": int(input_points) * 8, "resource_id": "fps_min_table_shared", "exclusive": True, "reset_scope": "fps_iteration"},
+        )
+        all_events.append(min_table_ev)
+        current_cycle += 1
+        if getattr(hw_config, "is_acc", False) or str(getattr(hw_config, "fps_engine_mode", "baseline")).lower() == "fuse":
+            # acc / fuse：coarse+fine 专用路径（FPS MAX）
+            fuse_evs = fps_op.generate_single_fuse_events()
+            for fe in fuse_evs:
+                fe.cycle += current_cycle
+            all_events.extend(fuse_evs)
+            current_cycle += sum(e.duration for e in fuse_evs)
+        elif getattr(hw_config, "is_baseline_v2", False):
+            sort_evs = fps_op._generate_single_merge_sort_iteration_events()
+            critical_cy = 0
+            for e in sort_evs:
+                e.cycle += current_cycle
+                if not getattr(e, "overlapped", False):
+                    critical_cy = max(critical_cy, e.cycle + e.duration - current_cycle)
+            all_events.extend(sort_evs)
+            # 关键路径 = 每批 merge_sort + reg_read（写 overlapped 不占）
+            batches_fps = math.ceil(input_points / int(getattr(fps_params, "cim_parallelism", 64)))
+            ms = getattr(hw_config.sorting_circuit, "merge_sort", None)
+            reg = getattr(ms, "reg_file", None) if ms is not None else None
+            if ms is not None and reg is not None:
+                current_cycle += batches_fps * (ms.cycles_max + getattr(reg, "cycles_per_read", 1))
+            else:
+                current_cycle += sum(e.duration for e in sort_evs if not getattr(e, "overlapped", False))
+        else:
+            one_bitonic = fps_op.generate_single_bitonic_event()
+            one_bitonic.cycle = current_cycle
+            meta = dict(getattr(one_bitonic, "metadata", {}) or {})
+            meta.update({"buffer_name": "fps_min_distance_table_sram", "buffer_phase": "sort_read", "bytes": int(input_points) * 4})
+            one_bitonic.metadata = meta
+            all_events.append(one_bitonic)
+            current_cycle += one_bitonic.duration
     return all_events
 
 
@@ -299,8 +376,11 @@ def _gen_knn(
     clock_ns = getattr(hw_config, "clock_period", 1.0)
     per_query_cycles = _phase2_distance_cycles_per_query(input_points, hw_config)
     knn_mode = str(getattr(hw_config, "knn_engine_mode", "baseline")).lower()
+    use_fuse = knn_mode == "fuse" or getattr(hw_config, "is_acc", False)
     all_events = []
     current_cycle = 0
+    ob = getattr(getattr(hw_config, "sram_cim_macro", None), "output_buffer", None)
+    write_power = float(ob.get_write_power_mw(clock_ns) if (ob is not None and hasattr(ob, "get_write_power_mw")) else getattr(ob, "power", 0.5) if ob is not None else 0.5)
     for q in range(query_points):
         evs_d = gen_phase2_distance_events(
             1,
@@ -314,16 +394,46 @@ def _gen_knn(
             e.cycle += current_cycle
         all_events.extend(evs_d)
         current_cycle += per_query_cycles
+        dist_write_ev = Event(
+            len(all_events), current_cycle, "KNN", "sram_write", "distance_write", "output_buffer", "sram_write",
+            write_power, 1, clock_ns,
+            metadata={"query": q, "buffer_name": "dist_sram_buffer", "buffer_phase": "write", "bytes": int(input_points) * 4, "resource_id": "dist_sram_shared", "exclusive": True, "reset_scope": "query_boundary"},
+        )
+        all_events.append(dist_write_ev)
+        current_cycle += 1
 
-        if knn_mode == "fuse":
+        if use_fuse:
             fuse_events = knn_op.generate_single_fuse_events()
             for fe in fuse_events:
                 fe.cycle += current_cycle
             all_events.extend(fuse_events)
             current_cycle = max(fe.cycle + fe.duration for fe in fuse_events)
+        elif getattr(hw_config, "is_baseline_v2", False):
+            reg_read_ev = knn_op._generate_merge_sort_reg_file_read_event(
+                current_cycle, len(all_events), num_reads=32,
+            )
+            if reg_read_ev is not None:
+                all_events.append(reg_read_ev)
+                current_cycle += reg_read_ev.duration
+            one_sort = knn_op._generate_single_merge_sort_event()
+            one_sort.cycle = current_cycle
+            meta = dict(getattr(one_sort, "metadata", {}) or {})
+            meta.update({"buffer_name": "sort_cache_sram", "buffer_phase": "sort_read", "bytes": 32 * 4, "resource_id": "merge_sort_shared", "exclusive": True, "reset_scope": "batch_boundary"})
+            one_sort.metadata = meta
+            all_events.append(one_sort)
+            current_cycle += one_sort.duration
+            reg_ev = knn_op._generate_merge_sort_reg_file_event(
+                current_cycle, len(all_events), num_writes=32, overlapped=True,
+            )
+            if reg_ev is not None:
+                all_events.append(reg_ev)
+                # 写与下一批重叠，不占关键路径
         else:
             one_bitonic = knn_op.generate_single_bitonic_event()
             one_bitonic.cycle = current_cycle
+            meta = dict(getattr(one_bitonic, "metadata", {}) or {})
+            meta.update({"buffer_name": "dist_sram_buffer", "buffer_phase": "sort_read", "bytes": int(input_points) * 4})
+            one_bitonic.metadata = meta
             all_events.append(one_bitonic)
             current_cycle += one_bitonic.duration
     return all_events
@@ -374,6 +484,15 @@ def _gen_mul(
     return gen_mul_events(op_ref.params, hw_config)
 
 
+def _gen_div(
+    op_ref: 'OperatorRef',
+    hw_config: 'HardwareConfig',
+    context: Optional[Dict[str, Any]] = None,
+) -> List[Event]:
+    """Element-wise division generic model."""
+    return gen_div_events(op_ref.params, hw_config)
+
+
 # =============================================================================
 # Dispatcher Registry & Public API
 # =============================================================================
@@ -395,6 +514,9 @@ _OP_TYPE_HANDLERS: Dict[str, Callable] = {
     'mul':                   _gen_mul,
     'multiplication':        _gen_mul,
     'element_multiply':      _gen_mul,
+    'div':                   _gen_div,
+    'division':              _gen_div,
+    'element_divide':        _gen_div,
 }
 
 

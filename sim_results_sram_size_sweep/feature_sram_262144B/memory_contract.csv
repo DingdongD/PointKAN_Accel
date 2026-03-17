@@ -1,0 +1,614 @@
+layer_name,op_name,tensor_name,src_tier,src_name,dst_tier,dst_name,src,dst,bytes,mib,note
+embedding,layer_input,point_cloud_input,DRAM,offchip_dram,SRAM,xyz_sram_buffer,DRAM,SRAM,12288,0.011719,Phase1 initial point-cloud load
+embedding,layer_output,inter_layer_activation,COMPUTE,compute_fabric,SRAM,inter_layer_sram,COMPUTE,SRAM,131072,0.125000,Layer output write to inter-layer SRAM
+embedding,conv1d,input_activation,SRAM,feature_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,12288,0.011719,Feature activations consumed from persistent feature SRAM or prior refill
+embedding,conv1d,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,384,0.000366,Conv1d weight staging for systolic/CIM engine
+embedding,conv1d,weights_staged,SRAM,weight_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,384,0.000366,Weights streamed from local SRAM to compute engine
+embedding,conv1d,partial_sums,COMPUTE,conv_engine,REGFILE,conv_psum_reg,COMPUTE,REGFILE,131072,0.125000,Partial sums accumulated before output commit
+embedding,conv1d,output_activation,REGFILE,conv_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,131072,0.125000,Operator output committed back to persistent feature SRAM
+embedding,bn,input_activation,SRAM,feature_sram_buffer,COMPUTE,bn_engine,SRAM,COMPUTE,131072,0.125000,Normalization input activations
+embedding,bn,norm_parameters,DRAM,offchip_dram,SRAM,bn_param_sram,DRAM,SRAM,512,0.000488,BN affine/stat parameter staging
+embedding,bn,norm_parameters_staged,SRAM,bn_param_sram,COMPUTE,bn_engine,SRAM,COMPUTE,512,0.000488,Normalization parameters streamed from local SRAM
+embedding,bn,reduction_state,COMPUTE,bn_engine,REGFILE,bn_reduce_reg,COMPUTE,REGFILE,256,0.000244,Mean/variance or affine reduction state
+embedding,bn,output_activation,COMPUTE,bn_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,131072,0.125000,Normalized activations written back to persistent feature SRAM
+embedding,relu,input_activation,SRAM,feature_sram_buffer,COMPUTE,relu_engine,SRAM,COMPUTE,131072,0.125000,Streaming activation read for ReLU
+embedding,relu,activation_lane,COMPUTE,relu_engine,REGFILE,relu_lane_reg,COMPUTE,REGFILE,128,0.000122,Per-lane compare/max state
+embedding,relu,output_activation,COMPUTE,relu_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,131072,0.125000,ReLU output written back to feature SRAM
+GAM-stage0,layer_input,inter_layer_activation,SRAM,inter_layer_sram,COMPUTE,compute_fabric,SRAM,COMPUTE,131072,0.125000,Layer input read from inter-layer SRAM
+GAM-stage0,layer_output,inter_layer_activation,COMPUTE,compute_fabric,SRAM,inter_layer_sram,COMPUTE,SRAM,131072,0.125000,Layer output write to inter-layer SRAM
+GAM-stage0,fps,query_points,DRAM,offchip_dram,COMPUTE,fps_engine,DRAM,COMPUTE,6144,0.005859,Phase2 query-point reads
+GAM-stage0,fps,cim_array_preload,SRAM,xyz_sram_buffer,SRAM,sram_cim_array,SRAM,SRAM,12288,0.011719,Load key point cloud into SRAM-CIM array
+GAM-stage0,fps,dist_accum_reg_write,COMPUTE,dist2_mac,REGFILE,dist_accum_reg_128x32b,COMPUTE,REGFILE,2097152,2.000000,CIM distance batches accumulated to regfile (supports overlap)
+GAM-stage0,fps,dist_accum_reg_to_sram,REGFILE,dist_accum_reg_128x32b,SRAM,fps_dist_sram,REGFILE,SRAM,2097152,2.000000,Write accumulated distances to FPS distance SRAM (multi-bank advised)
+GAM-stage0,fps,distance_table_read,SRAM,fps_dist_sram,COMPUTE,fps_sorter,SRAM,COMPUTE,2097152,2.000000,Per-iteration sorter reads
+GAM-stage0,fps,fps_index,COMPUTE,fps_sorter,REGFILE,fps_index_regfile,COMPUTE,REGFILE,2048,0.001953,Sampled center indices
+GAM-stage0,knn,query_points,DRAM,offchip_dram,COMPUTE,knn_engine,DRAM,COMPUTE,6144,0.005859,Phase2 query-point reads
+GAM-stage0,knn,cim_array_preload,SRAM,xyz_sram_buffer,SRAM,sram_cim_array,SRAM,SRAM,12288,0.011719,Load key point cloud into SRAM-CIM array
+GAM-stage0,knn,dist_accum_reg_write,COMPUTE,dist2_mac,REGFILE,dist_accum_reg_128x32b,COMPUTE,REGFILE,2097152,2.000000,CIM distance batches accumulated to regfile (supports overlap)
+GAM-stage0,knn,dist_accum_reg_to_sram,REGFILE,dist_accum_reg_128x32b,SRAM,knn_dist_sram,REGFILE,SRAM,2097152,2.000000,Write accumulated distances to KNN distance SRAM (multi-bank advised)
+GAM-stage0,knn,distance_table_read,SRAM,knn_dist_sram,COMPUTE,knn_sorter,SRAM,COMPUTE,2097152,2.000000,Per-query sorter reads
+GAM-stage0,knn,knn_topk_index,COMPUTE,knn_sorter,REGFILE,knn_topk_regfile,COMPUTE,REGFILE,49152,0.046875,Top-k neighbor indices
+GAM-stage0,knn,neighbor_features_spill,SRAM,inter_layer_sram,DRAM,offchip_dram,SRAM,DRAM,1572864,1.500000,"Gather workspace exceeds SRAM, spill to DRAM"
+GAM-stage0,affine_norm,input_activation,SRAM,feature_sram_buffer,COMPUTE,affine_norm_engine,SRAM,COMPUTE,65536,0.062500,Normalization input activations
+GAM-stage0,affine_norm,norm_parameters,DRAM,offchip_dram,SRAM,affine_norm_param_sram,DRAM,SRAM,256,0.000244,AffineNorm alpha/beta staging
+GAM-stage0,affine_norm,norm_parameters_staged,SRAM,affine_norm_param_sram,COMPUTE,affine_norm_engine,SRAM,COMPUTE,256,0.000244,Normalization parameters streamed from local SRAM
+GAM-stage0,affine_norm,reduction_state,COMPUTE,affine_norm_engine,REGFILE,affine_norm_reduce_reg,COMPUTE,REGFILE,256,0.000244,Mean/variance or affine reduction state
+GAM-stage0,affine_norm,output_activation,COMPUTE,affine_norm_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,65536,0.062500,Normalized activations written back to persistent feature SRAM
+GAM-stage0,s-pool,pool_input,SRAM,feature_sram_buffer,SRAM,spool_workspace_sram,SRAM,SRAM,3145728,3.000000,Pool input window materialized before reduction
+GAM-stage0,s-pool,pool_workspace,SRAM,spool_workspace_sram,COMPUTE,spool_engine,SRAM,COMPUTE,3145728,3.000000,Pool workspace streamed to reduction engine
+GAM-stage0,s-pool,pool_reduce_state,COMPUTE,spool_engine,REGFILE,spool_reduce_reg,COMPUTE,REGFILE,131072,0.125000,Per-channel max/accumulator state
+GAM-stage0,s-pool,pool_output,REGFILE,spool_reduce_reg,SRAM,spool_workspace_sram,REGFILE,SRAM,131072,0.125000,Pool result kept on-chip for downstream operator or layer output
+LFP-stage0,layer_input,inter_layer_activation,SRAM,inter_layer_sram,COMPUTE,compute_fabric,SRAM,COMPUTE,131072,0.125000,Layer input read from inter-layer SRAM
+LFP-stage0,layer_output,inter_layer_activation,COMPUTE,compute_fabric,SRAM,inter_layer_sram,COMPUTE,SRAM,256,0.000244,Layer output write to inter-layer SRAM
+LFP-stage0,lfp_path,local_path_tensor,COMPUTE,compute_fabric,REGFILE,lfp_local_path_reg,COMPUTE,REGFILE,131072,0.125000,lfp local-path intermediate (stream_through)
+LFP-stage0,lfp_path,center_path_tensor,COMPUTE,compute_fabric,REGFILE,lfp_center_path_reg,COMPUTE,REGFILE,131072,0.125000,lfp center-path intermediate (stream_through)
+LFP-stage0,lfp_path,pooled_local_tensor,COMPUTE,compute_fabric,REGFILE,lfp_pool_path_reg,COMPUTE,REGFILE,256,0.000244,lfp pooled tensor (stream_through)
+LFP-stage0,conv1d,input_activation,SRAM,feature_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,256,0.000244,Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage0,conv1d,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,16384,0.015625,Conv1d weight staging for systolic/CIM engine
+LFP-stage0,conv1d,weights_staged,SRAM,weight_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,16384,0.015625,Weights streamed from local SRAM to compute engine
+LFP-stage0,conv1d,partial_sums,COMPUTE,conv_engine,REGFILE,conv_psum_reg,COMPUTE,REGFILE,256,0.000244,Partial sums accumulated before output commit
+LFP-stage0,conv1d,output_activation,REGFILE,conv_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,256,0.000244,Operator output committed back to persistent feature SRAM
+LFP-stage0,bn,input_activation,SRAM,feature_sram_buffer,COMPUTE,bn_engine,SRAM,COMPUTE,256,0.000244,Normalization input activations
+LFP-stage0,bn,norm_parameters,DRAM,offchip_dram,SRAM,bn_param_sram,DRAM,SRAM,1024,0.000977,BN affine/stat parameter staging
+LFP-stage0,bn,norm_parameters_staged,SRAM,bn_param_sram,COMPUTE,bn_engine,SRAM,COMPUTE,1024,0.000977,Normalization parameters streamed from local SRAM
+LFP-stage0,bn,reduction_state,COMPUTE,bn_engine,REGFILE,bn_reduce_reg,COMPUTE,REGFILE,512,0.000488,Mean/variance or affine reduction state
+LFP-stage0,bn,output_activation,COMPUTE,bn_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,256,0.000244,Normalized activations written back to persistent feature SRAM
+LFP-stage0,relu,input_activation,SRAM,feature_sram_buffer,COMPUTE,relu_engine,SRAM,COMPUTE,256,0.000244,Streaming activation read for ReLU
+LFP-stage0,relu,activation_lane,COMPUTE,relu_engine,REGFILE,relu_lane_reg,COMPUTE,REGFILE,256,0.000244,Per-lane compare/max state
+LFP-stage0,relu,output_activation,COMPUTE,relu_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,256,0.000244,ReLU output written back to feature SRAM
+LFP-stage0,layernorm,input_activation,SRAM,feature_sram_buffer,COMPUTE,layernorm_engine,SRAM,COMPUTE,131072,0.125000,Normalization input activations
+LFP-stage0,layernorm,norm_parameters,DRAM,offchip_dram,SRAM,layernorm_param_sram,DRAM,SRAM,512,0.000488,LayerNorm gamma/beta staging
+LFP-stage0,layernorm,norm_parameters_staged,SRAM,layernorm_param_sram,COMPUTE,layernorm_engine,SRAM,COMPUTE,512,0.000488,Normalization parameters streamed from local SRAM
+LFP-stage0,layernorm,reduction_state,COMPUTE,layernorm_engine,REGFILE,layernorm_reduce_reg,COMPUTE,REGFILE,512,0.000488,Mean/variance or affine reduction state
+LFP-stage0,layernorm,output_activation,COMPUTE,layernorm_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,131072,0.125000,Normalized activations written back to persistent feature SRAM
+LFP-stage0,linear,input_activation,SRAM,feature_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,256,0.000244,Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage0,linear,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,16384,0.015625,Linear weight staging for systolic/CIM engine
+LFP-stage0,linear,weights_staged,SRAM,weight_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,16384,0.015625,Weights streamed from local SRAM to compute engine
+LFP-stage0,linear,partial_sums,COMPUTE,linear_engine,REGFILE,linear_psum_reg,COMPUTE,REGFILE,256,0.000244,Partial sums accumulated before output commit
+LFP-stage0,linear,output_activation,REGFILE,linear_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,256,0.000244,Operator output committed back to persistent feature SRAM
+LFP-stage0,kan,input_activation,SRAM,feature_sram_buffer,COMPUTE,kan_engine,SRAM,COMPUTE,131072,0.125000,KAN/KAT input activations
+LFP-stage0,kan,activation_coefficients,DRAM,offchip_dram,SRAM,kan_param_sram,DRAM,SRAM,2560,0.002441,Rational activation coefficients staged on-chip
+LFP-stage0,kan,activation_coefficients_staged,SRAM,kan_param_sram,COMPUTE,kan_engine,SRAM,COMPUTE,2560,0.002441,KAN parameters streamed from local SRAM
+LFP-stage0,kan,kan_workspace,COMPUTE,kan_engine,SRAM,kan_workspace_sram,COMPUTE,SRAM,131072,0.125000,KAN nonlinear output workspace
+LFP-stage0,linear,input_activation,SRAM,feature_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,256,0.000244,Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage0,linear,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,16384,0.015625,Linear weight staging for systolic/CIM engine
+LFP-stage0,linear,weights_staged,SRAM,weight_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,16384,0.015625,Weights streamed from local SRAM to compute engine
+LFP-stage0,linear,partial_sums,COMPUTE,linear_engine,REGFILE,linear_psum_reg,COMPUTE,REGFILE,256,0.000244,Partial sums accumulated before output commit
+LFP-stage0,linear,output_activation,REGFILE,linear_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,256,0.000244,Operator output committed back to persistent feature SRAM
+LFP-stage0,add,main_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+LFP-stage0,add,residual_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=True, stream_through)"
+LFP-stage0,add,add_output_write,COMPUTE,add_unit,REGFILE,lfp_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+LFP-stage0,adaptive_max_pool1d,pool_input,SRAM,feature_sram_buffer,SRAM,adaptive_pool_workspace_sram,SRAM,SRAM,131072,0.125000,Pool input window materialized before reduction
+LFP-stage0,adaptive_max_pool1d,pool_workspace,SRAM,adaptive_pool_workspace_sram,COMPUTE,adaptive_pool_engine,SRAM,COMPUTE,131072,0.125000,Pool workspace streamed to reduction engine
+LFP-stage0,adaptive_max_pool1d,pool_reduce_state,COMPUTE,adaptive_pool_engine,REGFILE,adaptive_pool_reduce_reg,COMPUTE,REGFILE,256,0.000244,Per-channel max/accumulator state
+LFP-stage0,adaptive_max_pool1d,pool_output,REGFILE,adaptive_pool_reduce_reg,SRAM,adaptive_pool_workspace_sram,REGFILE,SRAM,256,0.000244,Pool result kept on-chip for downstream operator or layer output
+LFP-stage0,conv1d,input_activation,SRAM,feature_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,256,0.000244,Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage0,conv1d,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,16384,0.015625,Conv1d weight staging for systolic/CIM engine
+LFP-stage0,conv1d,weights_staged,SRAM,weight_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,16384,0.015625,Weights streamed from local SRAM to compute engine
+LFP-stage0,conv1d,partial_sums,COMPUTE,conv_engine,REGFILE,conv_psum_reg,COMPUTE,REGFILE,256,0.000244,Partial sums accumulated before output commit
+LFP-stage0,conv1d,output_activation,REGFILE,conv_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,256,0.000244,Operator output committed back to persistent feature SRAM
+LFP-stage0,bn,input_activation,SRAM,feature_sram_buffer,COMPUTE,bn_engine,SRAM,COMPUTE,256,0.000244,Normalization input activations
+LFP-stage0,bn,norm_parameters,DRAM,offchip_dram,SRAM,bn_param_sram,DRAM,SRAM,1024,0.000977,BN affine/stat parameter staging
+LFP-stage0,bn,norm_parameters_staged,SRAM,bn_param_sram,COMPUTE,bn_engine,SRAM,COMPUTE,1024,0.000977,Normalization parameters streamed from local SRAM
+LFP-stage0,bn,reduction_state,COMPUTE,bn_engine,REGFILE,bn_reduce_reg,COMPUTE,REGFILE,512,0.000488,Mean/variance or affine reduction state
+LFP-stage0,bn,output_activation,COMPUTE,bn_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,256,0.000244,Normalized activations written back to persistent feature SRAM
+LFP-stage0,relu,input_activation,SRAM,feature_sram_buffer,COMPUTE,relu_engine,SRAM,COMPUTE,256,0.000244,Streaming activation read for ReLU
+LFP-stage0,relu,activation_lane,COMPUTE,relu_engine,REGFILE,relu_lane_reg,COMPUTE,REGFILE,256,0.000244,Per-lane compare/max state
+LFP-stage0,relu,output_activation,COMPUTE,relu_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,256,0.000244,ReLU output written back to feature SRAM
+LFP-stage0,layernorm,input_activation,SRAM,feature_sram_buffer,COMPUTE,layernorm_engine,SRAM,COMPUTE,131072,0.125000,Normalization input activations
+LFP-stage0,layernorm,norm_parameters,DRAM,offchip_dram,SRAM,layernorm_param_sram,DRAM,SRAM,512,0.000488,LayerNorm gamma/beta staging
+LFP-stage0,layernorm,norm_parameters_staged,SRAM,layernorm_param_sram,COMPUTE,layernorm_engine,SRAM,COMPUTE,512,0.000488,Normalization parameters streamed from local SRAM
+LFP-stage0,layernorm,reduction_state,COMPUTE,layernorm_engine,REGFILE,layernorm_reduce_reg,COMPUTE,REGFILE,512,0.000488,Mean/variance or affine reduction state
+LFP-stage0,layernorm,output_activation,COMPUTE,layernorm_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,131072,0.125000,Normalized activations written back to persistent feature SRAM
+LFP-stage0,linear,input_activation,SRAM,feature_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,256,0.000244,Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage0,linear,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,16384,0.015625,Linear weight staging for systolic/CIM engine
+LFP-stage0,linear,weights_staged,SRAM,weight_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,16384,0.015625,Weights streamed from local SRAM to compute engine
+LFP-stage0,linear,partial_sums,COMPUTE,linear_engine,REGFILE,linear_psum_reg,COMPUTE,REGFILE,256,0.000244,Partial sums accumulated before output commit
+LFP-stage0,linear,output_activation,REGFILE,linear_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,256,0.000244,Operator output committed back to persistent feature SRAM
+LFP-stage0,kan,input_activation,SRAM,feature_sram_buffer,COMPUTE,kan_engine,SRAM,COMPUTE,131072,0.125000,KAN/KAT input activations
+LFP-stage0,kan,activation_coefficients,DRAM,offchip_dram,SRAM,kan_param_sram,DRAM,SRAM,2560,0.002441,Rational activation coefficients staged on-chip
+LFP-stage0,kan,activation_coefficients_staged,SRAM,kan_param_sram,COMPUTE,kan_engine,SRAM,COMPUTE,2560,0.002441,KAN parameters streamed from local SRAM
+LFP-stage0,kan,kan_workspace,COMPUTE,kan_engine,SRAM,kan_workspace_sram,COMPUTE,SRAM,131072,0.125000,KAN nonlinear output workspace
+LFP-stage0,linear,input_activation,SRAM,feature_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,256,0.000244,Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage0,linear,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,16384,0.015625,Linear weight staging for systolic/CIM engine
+LFP-stage0,linear,weights_staged,SRAM,weight_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,16384,0.015625,Weights streamed from local SRAM to compute engine
+LFP-stage0,linear,partial_sums,COMPUTE,linear_engine,REGFILE,linear_psum_reg,COMPUTE,REGFILE,256,0.000244,Partial sums accumulated before output commit
+LFP-stage0,linear,output_activation,REGFILE,linear_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,256,0.000244,Operator output committed back to persistent feature SRAM
+LFP-stage0,add,main_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+LFP-stage0,add,residual_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=True, stream_through)"
+LFP-stage0,add,add_output_write,COMPUTE,add_unit,REGFILE,lfp_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+LFP-stage0,add,main_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+LFP-stage0,add,residual_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=False, stream_through)"
+LFP-stage0,add,add_output_write,COMPUTE,add_unit,REGFILE,lfp_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+stage-0,layer_input,inter_layer_activation,SRAM,inter_layer_sram,COMPUTE,compute_fabric,SRAM,COMPUTE,256,0.000244,Layer input read from inter-layer SRAM
+stage-0,layer_output,inter_layer_activation,COMPUTE,compute_fabric,SRAM,inter_layer_sram,COMPUTE,SRAM,131072,0.125000,Layer output write to inter-layer SRAM
+stage-0,stage_path,local_path_tensor,COMPUTE,compute_fabric,REGFILE,stage_local_path_reg,COMPUTE,REGFILE,256,0.000244,stage local-path intermediate (stream_through)
+stage-0,stage_path,center_path_tensor,COMPUTE,compute_fabric,REGFILE,stage_center_path_reg,COMPUTE,REGFILE,256,0.000244,stage center-path intermediate (stream_through)
+stage-0,stage_path,pooled_local_tensor,COMPUTE,compute_fabric,REGFILE,stage_pool_path_reg,COMPUTE,REGFILE,256,0.000244,stage pooled tensor (stream_through)
+stage-0,conv1d,input_activation,SRAM,feature_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,131072,0.125000,Feature activations consumed from persistent feature SRAM or prior refill
+stage-0,conv1d,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,16384,0.015625,Conv1d weight staging for systolic/CIM engine
+stage-0,conv1d,weights_staged,SRAM,weight_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,16384,0.015625,Weights streamed from local SRAM to compute engine
+stage-0,conv1d,partial_sums,COMPUTE,conv_engine,REGFILE,conv_psum_reg,COMPUTE,REGFILE,131072,0.125000,Partial sums accumulated before output commit
+stage-0,conv1d,output_activation,REGFILE,conv_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,131072,0.125000,Operator output committed back to persistent feature SRAM
+stage-0,bn,input_activation,SRAM,feature_sram_buffer,COMPUTE,bn_engine,SRAM,COMPUTE,131072,0.125000,Normalization input activations
+stage-0,bn,norm_parameters,DRAM,offchip_dram,SRAM,bn_param_sram,DRAM,SRAM,1024,0.000977,BN affine/stat parameter staging
+stage-0,bn,norm_parameters_staged,SRAM,bn_param_sram,COMPUTE,bn_engine,SRAM,COMPUTE,1024,0.000977,Normalization parameters streamed from local SRAM
+stage-0,bn,reduction_state,COMPUTE,bn_engine,REGFILE,bn_reduce_reg,COMPUTE,REGFILE,512,0.000488,Mean/variance or affine reduction state
+stage-0,bn,output_activation,COMPUTE,bn_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,131072,0.125000,Normalized activations written back to persistent feature SRAM
+stage-0,relu,input_activation,SRAM,feature_sram_buffer,COMPUTE,relu_engine,SRAM,COMPUTE,131072,0.125000,Streaming activation read for ReLU
+stage-0,relu,activation_lane,COMPUTE,relu_engine,REGFILE,relu_lane_reg,COMPUTE,REGFILE,256,0.000244,Per-lane compare/max state
+stage-0,relu,output_activation,COMPUTE,relu_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,131072,0.125000,ReLU output written back to feature SRAM
+stage-0,conv1d,input_activation,SRAM,feature_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,131072,0.125000,Feature activations consumed from persistent feature SRAM or prior refill
+stage-0,conv1d,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,16384,0.015625,Conv1d weight staging for systolic/CIM engine
+stage-0,conv1d,weights_staged,SRAM,weight_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,16384,0.015625,Weights streamed from local SRAM to compute engine
+stage-0,conv1d,partial_sums,COMPUTE,conv_engine,REGFILE,conv_psum_reg,COMPUTE,REGFILE,131072,0.125000,Partial sums accumulated before output commit
+stage-0,conv1d,output_activation,REGFILE,conv_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,131072,0.125000,Operator output committed back to persistent feature SRAM
+stage-0,bn,input_activation,SRAM,feature_sram_buffer,COMPUTE,bn_engine,SRAM,COMPUTE,131072,0.125000,Normalization input activations
+stage-0,bn,norm_parameters,DRAM,offchip_dram,SRAM,bn_param_sram,DRAM,SRAM,1024,0.000977,BN affine/stat parameter staging
+stage-0,bn,norm_parameters_staged,SRAM,bn_param_sram,COMPUTE,bn_engine,SRAM,COMPUTE,1024,0.000977,Normalization parameters streamed from local SRAM
+stage-0,bn,reduction_state,COMPUTE,bn_engine,REGFILE,bn_reduce_reg,COMPUTE,REGFILE,512,0.000488,Mean/variance or affine reduction state
+stage-0,bn,output_activation,COMPUTE,bn_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,131072,0.125000,Normalized activations written back to persistent feature SRAM
+stage-0,add,main_tensor_read,REGFILE,stage_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+stage-0,add,residual_tensor_read,REGFILE,stage_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=True, stream_through)"
+stage-0,add,add_output_write,COMPUTE,add_unit,REGFILE,stage_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+stage-0,relu,input_activation,SRAM,feature_sram_buffer,COMPUTE,relu_engine,SRAM,COMPUTE,131072,0.125000,Streaming activation read for ReLU
+stage-0,relu,activation_lane,COMPUTE,relu_engine,REGFILE,relu_lane_reg,COMPUTE,REGFILE,256,0.000244,Per-lane compare/max state
+stage-0,relu,output_activation,COMPUTE,relu_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,131072,0.125000,ReLU output written back to feature SRAM
+GAM-stage1,layer_input,inter_layer_activation,SRAM,inter_layer_sram,COMPUTE,compute_fabric,SRAM,COMPUTE,131072,0.125000,Layer input read from inter-layer SRAM
+GAM-stage1,layer_output,inter_layer_activation,COMPUTE,compute_fabric,SRAM,inter_layer_sram,COMPUTE,SRAM,131072,0.125000,Layer output write to inter-layer SRAM
+GAM-stage1,fps,query_points,DRAM,offchip_dram,COMPUTE,fps_engine,DRAM,COMPUTE,3072,0.002930,Phase2 query-point reads
+GAM-stage1,fps,cim_array_preload,SRAM,xyz_sram_buffer,SRAM,sram_cim_array,SRAM,SRAM,6144,0.005859,Load key point cloud into SRAM-CIM array
+GAM-stage1,fps,dist_accum_reg_write,COMPUTE,dist2_mac,REGFILE,dist_accum_reg_128x32b,COMPUTE,REGFILE,524288,0.500000,CIM distance batches accumulated to regfile (supports overlap)
+GAM-stage1,fps,dist_accum_reg_to_sram,REGFILE,dist_accum_reg_128x32b,SRAM,fps_dist_sram,REGFILE,SRAM,524288,0.500000,Write accumulated distances to FPS distance SRAM (multi-bank advised)
+GAM-stage1,fps,distance_table_read,SRAM,fps_dist_sram,COMPUTE,fps_sorter,SRAM,COMPUTE,524288,0.500000,Per-iteration sorter reads
+GAM-stage1,fps,fps_index,COMPUTE,fps_sorter,REGFILE,fps_index_regfile,COMPUTE,REGFILE,1024,0.000977,Sampled center indices
+GAM-stage1,knn,query_points,DRAM,offchip_dram,COMPUTE,knn_engine,DRAM,COMPUTE,3072,0.002930,Phase2 query-point reads
+GAM-stage1,knn,cim_array_preload,SRAM,xyz_sram_buffer,SRAM,sram_cim_array,SRAM,SRAM,6144,0.005859,Load key point cloud into SRAM-CIM array
+GAM-stage1,knn,dist_accum_reg_write,COMPUTE,dist2_mac,REGFILE,dist_accum_reg_128x32b,COMPUTE,REGFILE,524288,0.500000,CIM distance batches accumulated to regfile (supports overlap)
+GAM-stage1,knn,dist_accum_reg_to_sram,REGFILE,dist_accum_reg_128x32b,SRAM,knn_dist_sram,REGFILE,SRAM,524288,0.500000,Write accumulated distances to KNN distance SRAM (multi-bank advised)
+GAM-stage1,knn,distance_table_read,SRAM,knn_dist_sram,COMPUTE,knn_sorter,SRAM,COMPUTE,524288,0.500000,Per-query sorter reads
+GAM-stage1,knn,knn_topk_index,COMPUTE,knn_sorter,REGFILE,knn_topk_regfile,COMPUTE,REGFILE,24576,0.023438,Top-k neighbor indices
+GAM-stage1,knn,neighbor_features_spill,SRAM,inter_layer_sram,DRAM,offchip_dram,SRAM,DRAM,1572864,1.500000,"Gather workspace exceeds SRAM, spill to DRAM"
+GAM-stage1,affine_norm,input_activation,SRAM,feature_sram_buffer,COMPUTE,affine_norm_engine,SRAM,COMPUTE,65536,0.062500,Normalization input activations
+GAM-stage1,affine_norm,norm_parameters,DRAM,offchip_dram,SRAM,affine_norm_param_sram,DRAM,SRAM,512,0.000488,AffineNorm alpha/beta staging
+GAM-stage1,affine_norm,norm_parameters_staged,SRAM,affine_norm_param_sram,COMPUTE,affine_norm_engine,SRAM,COMPUTE,512,0.000488,Normalization parameters streamed from local SRAM
+GAM-stage1,affine_norm,reduction_state,COMPUTE,affine_norm_engine,REGFILE,affine_norm_reduce_reg,COMPUTE,REGFILE,512,0.000488,Mean/variance or affine reduction state
+GAM-stage1,affine_norm,output_activation,COMPUTE,affine_norm_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,65536,0.062500,Normalized activations written back to persistent feature SRAM
+GAM-stage1,s-pool,pool_input,SRAM,feature_sram_buffer,SRAM,spool_workspace_sram,SRAM,SRAM,3145728,3.000000,Pool input window materialized before reduction
+GAM-stage1,s-pool,pool_workspace,SRAM,spool_workspace_sram,COMPUTE,spool_engine,SRAM,COMPUTE,3145728,3.000000,Pool workspace streamed to reduction engine
+GAM-stage1,s-pool,pool_reduce_state,COMPUTE,spool_engine,REGFILE,spool_reduce_reg,COMPUTE,REGFILE,131072,0.125000,Per-channel max/accumulator state
+GAM-stage1,s-pool,pool_output,REGFILE,spool_reduce_reg,SRAM,spool_workspace_sram,REGFILE,SRAM,131072,0.125000,Pool result kept on-chip for downstream operator or layer output
+LFP-stage1,layer_input,inter_layer_activation,SRAM,inter_layer_sram,COMPUTE,compute_fabric,SRAM,COMPUTE,131072,0.125000,Layer input read from inter-layer SRAM
+LFP-stage1,layer_output,inter_layer_activation,COMPUTE,compute_fabric,SRAM,inter_layer_sram,COMPUTE,SRAM,512,0.000488,Layer output write to inter-layer SRAM
+LFP-stage1,lfp_path,local_path_tensor,COMPUTE,compute_fabric,REGFILE,lfp_local_path_reg,COMPUTE,REGFILE,131072,0.125000,lfp local-path intermediate (stream_through)
+LFP-stage1,lfp_path,center_path_tensor,COMPUTE,compute_fabric,REGFILE,lfp_center_path_reg,COMPUTE,REGFILE,131072,0.125000,lfp center-path intermediate (stream_through)
+LFP-stage1,lfp_path,pooled_local_tensor,COMPUTE,compute_fabric,REGFILE,lfp_pool_path_reg,COMPUTE,REGFILE,512,0.000488,lfp pooled tensor (stream_through)
+LFP-stage1,conv1d,input_activation,SRAM,feature_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,512,0.000488,Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage1,conv1d,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,65536,0.062500,Conv1d weight staging for systolic/CIM engine
+LFP-stage1,conv1d,weights_staged,SRAM,weight_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,65536,0.062500,Weights streamed from local SRAM to compute engine
+LFP-stage1,conv1d,partial_sums,COMPUTE,conv_engine,REGFILE,conv_psum_reg,COMPUTE,REGFILE,512,0.000488,Partial sums accumulated before output commit
+LFP-stage1,conv1d,output_activation,REGFILE,conv_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,512,0.000488,Operator output committed back to persistent feature SRAM
+LFP-stage1,bn,input_activation,SRAM,feature_sram_buffer,COMPUTE,bn_engine,SRAM,COMPUTE,512,0.000488,Normalization input activations
+LFP-stage1,bn,norm_parameters,DRAM,offchip_dram,SRAM,bn_param_sram,DRAM,SRAM,2048,0.001953,BN affine/stat parameter staging
+LFP-stage1,bn,norm_parameters_staged,SRAM,bn_param_sram,COMPUTE,bn_engine,SRAM,COMPUTE,2048,0.001953,Normalization parameters streamed from local SRAM
+LFP-stage1,bn,reduction_state,COMPUTE,bn_engine,REGFILE,bn_reduce_reg,COMPUTE,REGFILE,1024,0.000977,Mean/variance or affine reduction state
+LFP-stage1,bn,output_activation,COMPUTE,bn_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,512,0.000488,Normalized activations written back to persistent feature SRAM
+LFP-stage1,relu,input_activation,SRAM,feature_sram_buffer,COMPUTE,relu_engine,SRAM,COMPUTE,512,0.000488,Streaming activation read for ReLU
+LFP-stage1,relu,activation_lane,COMPUTE,relu_engine,REGFILE,relu_lane_reg,COMPUTE,REGFILE,512,0.000488,Per-lane compare/max state
+LFP-stage1,relu,output_activation,COMPUTE,relu_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,512,0.000488,ReLU output written back to feature SRAM
+LFP-stage1,layernorm,input_activation,SRAM,feature_sram_buffer,COMPUTE,layernorm_engine,SRAM,COMPUTE,131072,0.125000,Normalization input activations
+LFP-stage1,layernorm,norm_parameters,DRAM,offchip_dram,SRAM,layernorm_param_sram,DRAM,SRAM,1024,0.000977,LayerNorm gamma/beta staging
+LFP-stage1,layernorm,norm_parameters_staged,SRAM,layernorm_param_sram,COMPUTE,layernorm_engine,SRAM,COMPUTE,1024,0.000977,Normalization parameters streamed from local SRAM
+LFP-stage1,layernorm,reduction_state,COMPUTE,layernorm_engine,REGFILE,layernorm_reduce_reg,COMPUTE,REGFILE,1024,0.000977,Mean/variance or affine reduction state
+LFP-stage1,layernorm,output_activation,COMPUTE,layernorm_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,131072,0.125000,Normalized activations written back to persistent feature SRAM
+LFP-stage1,linear,input_activation,SRAM,feature_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,512,0.000488,Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage1,linear,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,65536,0.062500,Linear weight staging for systolic/CIM engine
+LFP-stage1,linear,weights_staged,SRAM,weight_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,65536,0.062500,Weights streamed from local SRAM to compute engine
+LFP-stage1,linear,partial_sums,COMPUTE,linear_engine,REGFILE,linear_psum_reg,COMPUTE,REGFILE,512,0.000488,Partial sums accumulated before output commit
+LFP-stage1,linear,output_activation,REGFILE,linear_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,512,0.000488,Operator output committed back to persistent feature SRAM
+LFP-stage1,kan,input_activation,SRAM,feature_sram_buffer,COMPUTE,kan_engine,SRAM,COMPUTE,131072,0.125000,KAN/KAT input activations
+LFP-stage1,kan,activation_coefficients,DRAM,offchip_dram,SRAM,kan_param_sram,DRAM,SRAM,5120,0.004883,Rational activation coefficients staged on-chip
+LFP-stage1,kan,activation_coefficients_staged,SRAM,kan_param_sram,COMPUTE,kan_engine,SRAM,COMPUTE,5120,0.004883,KAN parameters streamed from local SRAM
+LFP-stage1,kan,kan_workspace,COMPUTE,kan_engine,SRAM,kan_workspace_sram,COMPUTE,SRAM,131072,0.125000,KAN nonlinear output workspace
+LFP-stage1,linear,input_activation,SRAM,feature_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,512,0.000488,Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage1,linear,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,65536,0.062500,Linear weight staging for systolic/CIM engine
+LFP-stage1,linear,weights_staged,SRAM,weight_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,65536,0.062500,Weights streamed from local SRAM to compute engine
+LFP-stage1,linear,partial_sums,COMPUTE,linear_engine,REGFILE,linear_psum_reg,COMPUTE,REGFILE,512,0.000488,Partial sums accumulated before output commit
+LFP-stage1,linear,output_activation,REGFILE,linear_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,512,0.000488,Operator output committed back to persistent feature SRAM
+LFP-stage1,add,main_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+LFP-stage1,add,residual_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=True, stream_through)"
+LFP-stage1,add,add_output_write,COMPUTE,add_unit,REGFILE,lfp_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+LFP-stage1,adaptive_max_pool1d,pool_input,SRAM,feature_sram_buffer,SRAM,adaptive_pool_workspace_sram,SRAM,SRAM,131072,0.125000,Pool input window materialized before reduction
+LFP-stage1,adaptive_max_pool1d,pool_workspace,SRAM,adaptive_pool_workspace_sram,COMPUTE,adaptive_pool_engine,SRAM,COMPUTE,131072,0.125000,Pool workspace streamed to reduction engine
+LFP-stage1,adaptive_max_pool1d,pool_reduce_state,COMPUTE,adaptive_pool_engine,REGFILE,adaptive_pool_reduce_reg,COMPUTE,REGFILE,512,0.000488,Per-channel max/accumulator state
+LFP-stage1,adaptive_max_pool1d,pool_output,REGFILE,adaptive_pool_reduce_reg,SRAM,adaptive_pool_workspace_sram,REGFILE,SRAM,512,0.000488,Pool result kept on-chip for downstream operator or layer output
+LFP-stage1,conv1d,input_activation,SRAM,feature_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,512,0.000488,Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage1,conv1d,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,65536,0.062500,Conv1d weight staging for systolic/CIM engine
+LFP-stage1,conv1d,weights_staged,SRAM,weight_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,65536,0.062500,Weights streamed from local SRAM to compute engine
+LFP-stage1,conv1d,partial_sums,COMPUTE,conv_engine,REGFILE,conv_psum_reg,COMPUTE,REGFILE,512,0.000488,Partial sums accumulated before output commit
+LFP-stage1,conv1d,output_activation,REGFILE,conv_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,512,0.000488,Operator output committed back to persistent feature SRAM
+LFP-stage1,bn,input_activation,SRAM,feature_sram_buffer,COMPUTE,bn_engine,SRAM,COMPUTE,512,0.000488,Normalization input activations
+LFP-stage1,bn,norm_parameters,DRAM,offchip_dram,SRAM,bn_param_sram,DRAM,SRAM,2048,0.001953,BN affine/stat parameter staging
+LFP-stage1,bn,norm_parameters_staged,SRAM,bn_param_sram,COMPUTE,bn_engine,SRAM,COMPUTE,2048,0.001953,Normalization parameters streamed from local SRAM
+LFP-stage1,bn,reduction_state,COMPUTE,bn_engine,REGFILE,bn_reduce_reg,COMPUTE,REGFILE,1024,0.000977,Mean/variance or affine reduction state
+LFP-stage1,bn,output_activation,COMPUTE,bn_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,512,0.000488,Normalized activations written back to persistent feature SRAM
+LFP-stage1,relu,input_activation,SRAM,feature_sram_buffer,COMPUTE,relu_engine,SRAM,COMPUTE,512,0.000488,Streaming activation read for ReLU
+LFP-stage1,relu,activation_lane,COMPUTE,relu_engine,REGFILE,relu_lane_reg,COMPUTE,REGFILE,512,0.000488,Per-lane compare/max state
+LFP-stage1,relu,output_activation,COMPUTE,relu_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,512,0.000488,ReLU output written back to feature SRAM
+LFP-stage1,layernorm,input_activation,SRAM,feature_sram_buffer,COMPUTE,layernorm_engine,SRAM,COMPUTE,131072,0.125000,Normalization input activations
+LFP-stage1,layernorm,norm_parameters,DRAM,offchip_dram,SRAM,layernorm_param_sram,DRAM,SRAM,1024,0.000977,LayerNorm gamma/beta staging
+LFP-stage1,layernorm,norm_parameters_staged,SRAM,layernorm_param_sram,COMPUTE,layernorm_engine,SRAM,COMPUTE,1024,0.000977,Normalization parameters streamed from local SRAM
+LFP-stage1,layernorm,reduction_state,COMPUTE,layernorm_engine,REGFILE,layernorm_reduce_reg,COMPUTE,REGFILE,1024,0.000977,Mean/variance or affine reduction state
+LFP-stage1,layernorm,output_activation,COMPUTE,layernorm_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,131072,0.125000,Normalized activations written back to persistent feature SRAM
+LFP-stage1,linear,input_activation,SRAM,feature_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,512,0.000488,Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage1,linear,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,65536,0.062500,Linear weight staging for systolic/CIM engine
+LFP-stage1,linear,weights_staged,SRAM,weight_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,65536,0.062500,Weights streamed from local SRAM to compute engine
+LFP-stage1,linear,partial_sums,COMPUTE,linear_engine,REGFILE,linear_psum_reg,COMPUTE,REGFILE,512,0.000488,Partial sums accumulated before output commit
+LFP-stage1,linear,output_activation,REGFILE,linear_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,512,0.000488,Operator output committed back to persistent feature SRAM
+LFP-stage1,kan,input_activation,SRAM,feature_sram_buffer,COMPUTE,kan_engine,SRAM,COMPUTE,131072,0.125000,KAN/KAT input activations
+LFP-stage1,kan,activation_coefficients,DRAM,offchip_dram,SRAM,kan_param_sram,DRAM,SRAM,5120,0.004883,Rational activation coefficients staged on-chip
+LFP-stage1,kan,activation_coefficients_staged,SRAM,kan_param_sram,COMPUTE,kan_engine,SRAM,COMPUTE,5120,0.004883,KAN parameters streamed from local SRAM
+LFP-stage1,kan,kan_workspace,COMPUTE,kan_engine,SRAM,kan_workspace_sram,COMPUTE,SRAM,131072,0.125000,KAN nonlinear output workspace
+LFP-stage1,linear,input_activation,SRAM,feature_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,512,0.000488,Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage1,linear,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,65536,0.062500,Linear weight staging for systolic/CIM engine
+LFP-stage1,linear,weights_staged,SRAM,weight_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,65536,0.062500,Weights streamed from local SRAM to compute engine
+LFP-stage1,linear,partial_sums,COMPUTE,linear_engine,REGFILE,linear_psum_reg,COMPUTE,REGFILE,512,0.000488,Partial sums accumulated before output commit
+LFP-stage1,linear,output_activation,REGFILE,linear_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,512,0.000488,Operator output committed back to persistent feature SRAM
+LFP-stage1,add,main_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+LFP-stage1,add,residual_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=True, stream_through)"
+LFP-stage1,add,add_output_write,COMPUTE,add_unit,REGFILE,lfp_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+LFP-stage1,add,main_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+LFP-stage1,add,residual_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=False, stream_through)"
+LFP-stage1,add,add_output_write,COMPUTE,add_unit,REGFILE,lfp_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+stage-1,layer_input,inter_layer_activation,SRAM,inter_layer_sram,COMPUTE,compute_fabric,SRAM,COMPUTE,512,0.000488,Layer input read from inter-layer SRAM
+stage-1,layer_output,inter_layer_activation,COMPUTE,compute_fabric,SRAM,inter_layer_sram,COMPUTE,SRAM,131072,0.125000,Layer output write to inter-layer SRAM
+stage-1,stage_path,local_path_tensor,COMPUTE,compute_fabric,REGFILE,stage_local_path_reg,COMPUTE,REGFILE,512,0.000488,stage local-path intermediate (stream_through)
+stage-1,stage_path,center_path_tensor,COMPUTE,compute_fabric,REGFILE,stage_center_path_reg,COMPUTE,REGFILE,512,0.000488,stage center-path intermediate (stream_through)
+stage-1,stage_path,pooled_local_tensor,COMPUTE,compute_fabric,REGFILE,stage_pool_path_reg,COMPUTE,REGFILE,512,0.000488,stage pooled tensor (stream_through)
+stage-1,conv1d,input_activation,SRAM,feature_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,131072,0.125000,Feature activations consumed from persistent feature SRAM or prior refill
+stage-1,conv1d,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,65536,0.062500,Conv1d weight staging for systolic/CIM engine
+stage-1,conv1d,weights_staged,SRAM,weight_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,65536,0.062500,Weights streamed from local SRAM to compute engine
+stage-1,conv1d,partial_sums,COMPUTE,conv_engine,REGFILE,conv_psum_reg,COMPUTE,REGFILE,131072,0.125000,Partial sums accumulated before output commit
+stage-1,conv1d,output_activation,REGFILE,conv_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,131072,0.125000,Operator output committed back to persistent feature SRAM
+stage-1,bn,input_activation,SRAM,feature_sram_buffer,COMPUTE,bn_engine,SRAM,COMPUTE,131072,0.125000,Normalization input activations
+stage-1,bn,norm_parameters,DRAM,offchip_dram,SRAM,bn_param_sram,DRAM,SRAM,2048,0.001953,BN affine/stat parameter staging
+stage-1,bn,norm_parameters_staged,SRAM,bn_param_sram,COMPUTE,bn_engine,SRAM,COMPUTE,2048,0.001953,Normalization parameters streamed from local SRAM
+stage-1,bn,reduction_state,COMPUTE,bn_engine,REGFILE,bn_reduce_reg,COMPUTE,REGFILE,1024,0.000977,Mean/variance or affine reduction state
+stage-1,bn,output_activation,COMPUTE,bn_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,131072,0.125000,Normalized activations written back to persistent feature SRAM
+stage-1,relu,input_activation,SRAM,feature_sram_buffer,COMPUTE,relu_engine,SRAM,COMPUTE,131072,0.125000,Streaming activation read for ReLU
+stage-1,relu,activation_lane,COMPUTE,relu_engine,REGFILE,relu_lane_reg,COMPUTE,REGFILE,512,0.000488,Per-lane compare/max state
+stage-1,relu,output_activation,COMPUTE,relu_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,131072,0.125000,ReLU output written back to feature SRAM
+stage-1,conv1d,input_activation,SRAM,feature_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,131072,0.125000,Feature activations consumed from persistent feature SRAM or prior refill
+stage-1,conv1d,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,65536,0.062500,Conv1d weight staging for systolic/CIM engine
+stage-1,conv1d,weights_staged,SRAM,weight_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,65536,0.062500,Weights streamed from local SRAM to compute engine
+stage-1,conv1d,partial_sums,COMPUTE,conv_engine,REGFILE,conv_psum_reg,COMPUTE,REGFILE,131072,0.125000,Partial sums accumulated before output commit
+stage-1,conv1d,output_activation,REGFILE,conv_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,131072,0.125000,Operator output committed back to persistent feature SRAM
+stage-1,bn,input_activation,SRAM,feature_sram_buffer,COMPUTE,bn_engine,SRAM,COMPUTE,131072,0.125000,Normalization input activations
+stage-1,bn,norm_parameters,DRAM,offchip_dram,SRAM,bn_param_sram,DRAM,SRAM,2048,0.001953,BN affine/stat parameter staging
+stage-1,bn,norm_parameters_staged,SRAM,bn_param_sram,COMPUTE,bn_engine,SRAM,COMPUTE,2048,0.001953,Normalization parameters streamed from local SRAM
+stage-1,bn,reduction_state,COMPUTE,bn_engine,REGFILE,bn_reduce_reg,COMPUTE,REGFILE,1024,0.000977,Mean/variance or affine reduction state
+stage-1,bn,output_activation,COMPUTE,bn_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,131072,0.125000,Normalized activations written back to persistent feature SRAM
+stage-1,add,main_tensor_read,REGFILE,stage_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+stage-1,add,residual_tensor_read,REGFILE,stage_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=True, stream_through)"
+stage-1,add,add_output_write,COMPUTE,add_unit,REGFILE,stage_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+stage-1,relu,input_activation,SRAM,feature_sram_buffer,COMPUTE,relu_engine,SRAM,COMPUTE,131072,0.125000,Streaming activation read for ReLU
+stage-1,relu,activation_lane,COMPUTE,relu_engine,REGFILE,relu_lane_reg,COMPUTE,REGFILE,512,0.000488,Per-lane compare/max state
+stage-1,relu,output_activation,COMPUTE,relu_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,131072,0.125000,ReLU output written back to feature SRAM
+GAM-stage2,layer_input,inter_layer_activation,SRAM,inter_layer_sram,COMPUTE,compute_fabric,SRAM,COMPUTE,131072,0.125000,Layer input read from inter-layer SRAM
+GAM-stage2,layer_output,inter_layer_activation,COMPUTE,compute_fabric,SRAM,inter_layer_sram,COMPUTE,SRAM,131072,0.125000,Layer output write to inter-layer SRAM
+GAM-stage2,fps,query_points,DRAM,offchip_dram,COMPUTE,fps_engine,DRAM,COMPUTE,1536,0.001465,Phase2 query-point reads
+GAM-stage2,fps,cim_array_preload,SRAM,xyz_sram_buffer,SRAM,sram_cim_array,SRAM,SRAM,3072,0.002930,Load key point cloud into SRAM-CIM array
+GAM-stage2,fps,dist_accum_reg_write,COMPUTE,dist2_mac,REGFILE,dist_accum_reg_128x32b,COMPUTE,REGFILE,131072,0.125000,CIM distance batches accumulated to regfile (supports overlap)
+GAM-stage2,fps,dist_accum_reg_to_sram,REGFILE,dist_accum_reg_128x32b,SRAM,fps_dist_sram,REGFILE,SRAM,131072,0.125000,Write accumulated distances to FPS distance SRAM (multi-bank advised)
+GAM-stage2,fps,distance_table_read,SRAM,fps_dist_sram,COMPUTE,fps_sorter,SRAM,COMPUTE,131072,0.125000,Per-iteration sorter reads
+GAM-stage2,fps,fps_index,COMPUTE,fps_sorter,REGFILE,fps_index_regfile,COMPUTE,REGFILE,512,0.000488,Sampled center indices
+GAM-stage2,knn,query_points,DRAM,offchip_dram,COMPUTE,knn_engine,DRAM,COMPUTE,1536,0.001465,Phase2 query-point reads
+GAM-stage2,knn,cim_array_preload,SRAM,xyz_sram_buffer,SRAM,sram_cim_array,SRAM,SRAM,3072,0.002930,Load key point cloud into SRAM-CIM array
+GAM-stage2,knn,dist_accum_reg_write,COMPUTE,dist2_mac,REGFILE,dist_accum_reg_128x32b,COMPUTE,REGFILE,131072,0.125000,CIM distance batches accumulated to regfile (supports overlap)
+GAM-stage2,knn,dist_accum_reg_to_sram,REGFILE,dist_accum_reg_128x32b,SRAM,knn_dist_sram,REGFILE,SRAM,131072,0.125000,Write accumulated distances to KNN distance SRAM (multi-bank advised)
+GAM-stage2,knn,distance_table_read,SRAM,knn_dist_sram,COMPUTE,knn_sorter,SRAM,COMPUTE,131072,0.125000,Per-query sorter reads
+GAM-stage2,knn,knn_topk_index,COMPUTE,knn_sorter,REGFILE,knn_topk_regfile,COMPUTE,REGFILE,12288,0.011719,Top-k neighbor indices
+GAM-stage2,knn,neighbor_features_spill,SRAM,inter_layer_sram,DRAM,offchip_dram,SRAM,DRAM,1572864,1.500000,"Gather workspace exceeds SRAM, spill to DRAM"
+GAM-stage2,affine_norm,input_activation,SRAM,feature_sram_buffer,COMPUTE,affine_norm_engine,SRAM,COMPUTE,65536,0.062500,Normalization input activations
+GAM-stage2,affine_norm,norm_parameters,DRAM,offchip_dram,SRAM,affine_norm_param_sram,DRAM,SRAM,1024,0.000977,AffineNorm alpha/beta staging
+GAM-stage2,affine_norm,norm_parameters_staged,SRAM,affine_norm_param_sram,COMPUTE,affine_norm_engine,SRAM,COMPUTE,1024,0.000977,Normalization parameters streamed from local SRAM
+GAM-stage2,affine_norm,reduction_state,COMPUTE,affine_norm_engine,REGFILE,affine_norm_reduce_reg,COMPUTE,REGFILE,1024,0.000977,Mean/variance or affine reduction state
+GAM-stage2,affine_norm,output_activation,COMPUTE,affine_norm_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,65536,0.062500,Normalized activations written back to persistent feature SRAM
+GAM-stage2,s-pool,pool_input,SRAM,feature_sram_buffer,SRAM,spool_workspace_sram,SRAM,SRAM,3145728,3.000000,Pool input window materialized before reduction
+GAM-stage2,s-pool,pool_workspace,SRAM,spool_workspace_sram,COMPUTE,spool_engine,SRAM,COMPUTE,3145728,3.000000,Pool workspace streamed to reduction engine
+GAM-stage2,s-pool,pool_reduce_state,COMPUTE,spool_engine,REGFILE,spool_reduce_reg,COMPUTE,REGFILE,131072,0.125000,Per-channel max/accumulator state
+GAM-stage2,s-pool,pool_output,REGFILE,spool_reduce_reg,SRAM,spool_workspace_sram,REGFILE,SRAM,131072,0.125000,Pool result kept on-chip for downstream operator or layer output
+LFP-stage2,layer_input,inter_layer_activation,SRAM,inter_layer_sram,COMPUTE,compute_fabric,SRAM,COMPUTE,131072,0.125000,Layer input read from inter-layer SRAM
+LFP-stage2,layer_output,inter_layer_activation,COMPUTE,compute_fabric,SRAM,inter_layer_sram,COMPUTE,SRAM,1024,0.000977,Layer output write to inter-layer SRAM
+LFP-stage2,lfp_path,local_path_tensor,COMPUTE,compute_fabric,REGFILE,lfp_local_path_reg,COMPUTE,REGFILE,131072,0.125000,lfp local-path intermediate (stream_through)
+LFP-stage2,lfp_path,center_path_tensor,COMPUTE,compute_fabric,REGFILE,lfp_center_path_reg,COMPUTE,REGFILE,131072,0.125000,lfp center-path intermediate (stream_through)
+LFP-stage2,lfp_path,pooled_local_tensor,COMPUTE,compute_fabric,REGFILE,lfp_pool_path_reg,COMPUTE,REGFILE,1024,0.000977,lfp pooled tensor (stream_through)
+LFP-stage2,conv1d,input_activation,SRAM,feature_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,1024,0.000977,Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage2,conv1d,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,262144,0.250000,Conv1d weight staging for systolic/CIM engine
+LFP-stage2,conv1d,weights_staged,SRAM,weight_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,262144,0.250000,Weights streamed from local SRAM to compute engine
+LFP-stage2,conv1d,partial_sums,COMPUTE,conv_engine,REGFILE,conv_psum_reg,COMPUTE,REGFILE,1024,0.000977,Partial sums accumulated before output commit
+LFP-stage2,conv1d,output_activation,REGFILE,conv_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,1024,0.000977,Operator output committed back to persistent feature SRAM
+LFP-stage2,bn,input_activation,SRAM,feature_sram_buffer,COMPUTE,bn_engine,SRAM,COMPUTE,1024,0.000977,Normalization input activations
+LFP-stage2,bn,norm_parameters,DRAM,offchip_dram,SRAM,bn_param_sram,DRAM,SRAM,4096,0.003906,BN affine/stat parameter staging
+LFP-stage2,bn,norm_parameters_staged,SRAM,bn_param_sram,COMPUTE,bn_engine,SRAM,COMPUTE,4096,0.003906,Normalization parameters streamed from local SRAM
+LFP-stage2,bn,reduction_state,COMPUTE,bn_engine,REGFILE,bn_reduce_reg,COMPUTE,REGFILE,2048,0.001953,Mean/variance or affine reduction state
+LFP-stage2,bn,output_activation,COMPUTE,bn_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,1024,0.000977,Normalized activations written back to persistent feature SRAM
+LFP-stage2,relu,input_activation,SRAM,feature_sram_buffer,COMPUTE,relu_engine,SRAM,COMPUTE,1024,0.000977,Streaming activation read for ReLU
+LFP-stage2,relu,activation_lane,COMPUTE,relu_engine,REGFILE,relu_lane_reg,COMPUTE,REGFILE,1024,0.000977,Per-lane compare/max state
+LFP-stage2,relu,output_activation,COMPUTE,relu_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,1024,0.000977,ReLU output written back to feature SRAM
+LFP-stage2,layernorm,input_activation,SRAM,feature_sram_buffer,COMPUTE,layernorm_engine,SRAM,COMPUTE,131072,0.125000,Normalization input activations
+LFP-stage2,layernorm,norm_parameters,DRAM,offchip_dram,SRAM,layernorm_param_sram,DRAM,SRAM,2048,0.001953,LayerNorm gamma/beta staging
+LFP-stage2,layernorm,norm_parameters_staged,SRAM,layernorm_param_sram,COMPUTE,layernorm_engine,SRAM,COMPUTE,2048,0.001953,Normalization parameters streamed from local SRAM
+LFP-stage2,layernorm,reduction_state,COMPUTE,layernorm_engine,REGFILE,layernorm_reduce_reg,COMPUTE,REGFILE,2048,0.001953,Mean/variance or affine reduction state
+LFP-stage2,layernorm,output_activation,COMPUTE,layernorm_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,131072,0.125000,Normalized activations written back to persistent feature SRAM
+LFP-stage2,linear,input_activation,SRAM,feature_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,1024,0.000977,Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage2,linear,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,262144,0.250000,Linear weight staging for systolic/CIM engine
+LFP-stage2,linear,weights_staged,SRAM,weight_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,262144,0.250000,Weights streamed from local SRAM to compute engine
+LFP-stage2,linear,partial_sums,COMPUTE,linear_engine,REGFILE,linear_psum_reg,COMPUTE,REGFILE,1024,0.000977,Partial sums accumulated before output commit
+LFP-stage2,linear,output_activation,REGFILE,linear_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,1024,0.000977,Operator output committed back to persistent feature SRAM
+LFP-stage2,kan,input_activation,SRAM,feature_sram_buffer,COMPUTE,kan_engine,SRAM,COMPUTE,131072,0.125000,KAN/KAT input activations
+LFP-stage2,kan,activation_coefficients,DRAM,offchip_dram,SRAM,kan_param_sram,DRAM,SRAM,10240,0.009766,Rational activation coefficients staged on-chip
+LFP-stage2,kan,activation_coefficients_staged,SRAM,kan_param_sram,COMPUTE,kan_engine,SRAM,COMPUTE,10240,0.009766,KAN parameters streamed from local SRAM
+LFP-stage2,kan,kan_workspace,COMPUTE,kan_engine,SRAM,kan_workspace_sram,COMPUTE,SRAM,131072,0.125000,KAN nonlinear output workspace
+LFP-stage2,linear,input_activation,SRAM,feature_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,1024,0.000977,Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage2,linear,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,262144,0.250000,Linear weight staging for systolic/CIM engine
+LFP-stage2,linear,weights_staged,SRAM,weight_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,262144,0.250000,Weights streamed from local SRAM to compute engine
+LFP-stage2,linear,partial_sums,COMPUTE,linear_engine,REGFILE,linear_psum_reg,COMPUTE,REGFILE,1024,0.000977,Partial sums accumulated before output commit
+LFP-stage2,linear,output_activation,REGFILE,linear_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,1024,0.000977,Operator output committed back to persistent feature SRAM
+LFP-stage2,add,main_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+LFP-stage2,add,residual_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=True, stream_through)"
+LFP-stage2,add,add_output_write,COMPUTE,add_unit,REGFILE,lfp_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+LFP-stage2,adaptive_max_pool1d,pool_input,SRAM,feature_sram_buffer,SRAM,adaptive_pool_workspace_sram,SRAM,SRAM,131072,0.125000,Pool input window materialized before reduction
+LFP-stage2,adaptive_max_pool1d,pool_workspace,SRAM,adaptive_pool_workspace_sram,COMPUTE,adaptive_pool_engine,SRAM,COMPUTE,131072,0.125000,Pool workspace streamed to reduction engine
+LFP-stage2,adaptive_max_pool1d,pool_reduce_state,COMPUTE,adaptive_pool_engine,REGFILE,adaptive_pool_reduce_reg,COMPUTE,REGFILE,1024,0.000977,Per-channel max/accumulator state
+LFP-stage2,adaptive_max_pool1d,pool_output,REGFILE,adaptive_pool_reduce_reg,SRAM,adaptive_pool_workspace_sram,REGFILE,SRAM,1024,0.000977,Pool result kept on-chip for downstream operator or layer output
+LFP-stage2,conv1d,input_activation,SRAM,feature_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,1024,0.000977,Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage2,conv1d,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,262144,0.250000,Conv1d weight staging for systolic/CIM engine
+LFP-stage2,conv1d,weights_staged,SRAM,weight_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,262144,0.250000,Weights streamed from local SRAM to compute engine
+LFP-stage2,conv1d,partial_sums,COMPUTE,conv_engine,REGFILE,conv_psum_reg,COMPUTE,REGFILE,1024,0.000977,Partial sums accumulated before output commit
+LFP-stage2,conv1d,output_activation,REGFILE,conv_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,1024,0.000977,Operator output committed back to persistent feature SRAM
+LFP-stage2,bn,input_activation,SRAM,feature_sram_buffer,COMPUTE,bn_engine,SRAM,COMPUTE,1024,0.000977,Normalization input activations
+LFP-stage2,bn,norm_parameters,DRAM,offchip_dram,SRAM,bn_param_sram,DRAM,SRAM,4096,0.003906,BN affine/stat parameter staging
+LFP-stage2,bn,norm_parameters_staged,SRAM,bn_param_sram,COMPUTE,bn_engine,SRAM,COMPUTE,4096,0.003906,Normalization parameters streamed from local SRAM
+LFP-stage2,bn,reduction_state,COMPUTE,bn_engine,REGFILE,bn_reduce_reg,COMPUTE,REGFILE,2048,0.001953,Mean/variance or affine reduction state
+LFP-stage2,bn,output_activation,COMPUTE,bn_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,1024,0.000977,Normalized activations written back to persistent feature SRAM
+LFP-stage2,relu,input_activation,SRAM,feature_sram_buffer,COMPUTE,relu_engine,SRAM,COMPUTE,1024,0.000977,Streaming activation read for ReLU
+LFP-stage2,relu,activation_lane,COMPUTE,relu_engine,REGFILE,relu_lane_reg,COMPUTE,REGFILE,1024,0.000977,Per-lane compare/max state
+LFP-stage2,relu,output_activation,COMPUTE,relu_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,1024,0.000977,ReLU output written back to feature SRAM
+LFP-stage2,layernorm,input_activation,SRAM,feature_sram_buffer,COMPUTE,layernorm_engine,SRAM,COMPUTE,131072,0.125000,Normalization input activations
+LFP-stage2,layernorm,norm_parameters,DRAM,offchip_dram,SRAM,layernorm_param_sram,DRAM,SRAM,2048,0.001953,LayerNorm gamma/beta staging
+LFP-stage2,layernorm,norm_parameters_staged,SRAM,layernorm_param_sram,COMPUTE,layernorm_engine,SRAM,COMPUTE,2048,0.001953,Normalization parameters streamed from local SRAM
+LFP-stage2,layernorm,reduction_state,COMPUTE,layernorm_engine,REGFILE,layernorm_reduce_reg,COMPUTE,REGFILE,2048,0.001953,Mean/variance or affine reduction state
+LFP-stage2,layernorm,output_activation,COMPUTE,layernorm_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,131072,0.125000,Normalized activations written back to persistent feature SRAM
+LFP-stage2,linear,input_activation,SRAM,feature_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,1024,0.000977,Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage2,linear,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,262144,0.250000,Linear weight staging for systolic/CIM engine
+LFP-stage2,linear,weights_staged,SRAM,weight_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,262144,0.250000,Weights streamed from local SRAM to compute engine
+LFP-stage2,linear,partial_sums,COMPUTE,linear_engine,REGFILE,linear_psum_reg,COMPUTE,REGFILE,1024,0.000977,Partial sums accumulated before output commit
+LFP-stage2,linear,output_activation,REGFILE,linear_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,1024,0.000977,Operator output committed back to persistent feature SRAM
+LFP-stage2,kan,input_activation,SRAM,feature_sram_buffer,COMPUTE,kan_engine,SRAM,COMPUTE,131072,0.125000,KAN/KAT input activations
+LFP-stage2,kan,activation_coefficients,DRAM,offchip_dram,SRAM,kan_param_sram,DRAM,SRAM,10240,0.009766,Rational activation coefficients staged on-chip
+LFP-stage2,kan,activation_coefficients_staged,SRAM,kan_param_sram,COMPUTE,kan_engine,SRAM,COMPUTE,10240,0.009766,KAN parameters streamed from local SRAM
+LFP-stage2,kan,kan_workspace,COMPUTE,kan_engine,SRAM,kan_workspace_sram,COMPUTE,SRAM,131072,0.125000,KAN nonlinear output workspace
+LFP-stage2,linear,input_activation,SRAM,feature_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,1024,0.000977,Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage2,linear,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,262144,0.250000,Linear weight staging for systolic/CIM engine
+LFP-stage2,linear,weights_staged,SRAM,weight_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,262144,0.250000,Weights streamed from local SRAM to compute engine
+LFP-stage2,linear,partial_sums,COMPUTE,linear_engine,REGFILE,linear_psum_reg,COMPUTE,REGFILE,1024,0.000977,Partial sums accumulated before output commit
+LFP-stage2,linear,output_activation,REGFILE,linear_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,1024,0.000977,Operator output committed back to persistent feature SRAM
+LFP-stage2,add,main_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+LFP-stage2,add,residual_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=True, stream_through)"
+LFP-stage2,add,add_output_write,COMPUTE,add_unit,REGFILE,lfp_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+LFP-stage2,add,main_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+LFP-stage2,add,residual_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=False, stream_through)"
+LFP-stage2,add,add_output_write,COMPUTE,add_unit,REGFILE,lfp_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+stage-2,layer_input,inter_layer_activation,SRAM,inter_layer_sram,COMPUTE,compute_fabric,SRAM,COMPUTE,1024,0.000977,Layer input read from inter-layer SRAM
+stage-2,layer_output,inter_layer_activation,COMPUTE,compute_fabric,SRAM,inter_layer_sram,COMPUTE,SRAM,131072,0.125000,Layer output write to inter-layer SRAM
+stage-2,stage_path,local_path_tensor,COMPUTE,compute_fabric,REGFILE,stage_local_path_reg,COMPUTE,REGFILE,1024,0.000977,stage local-path intermediate (stream_through)
+stage-2,stage_path,center_path_tensor,COMPUTE,compute_fabric,REGFILE,stage_center_path_reg,COMPUTE,REGFILE,1024,0.000977,stage center-path intermediate (stream_through)
+stage-2,stage_path,pooled_local_tensor,COMPUTE,compute_fabric,REGFILE,stage_pool_path_reg,COMPUTE,REGFILE,1024,0.000977,stage pooled tensor (stream_through)
+stage-2,conv1d,input_activation,SRAM,feature_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,131072,0.125000,Feature activations consumed from persistent feature SRAM or prior refill
+stage-2,conv1d,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,262144,0.250000,Conv1d weight staging for systolic/CIM engine
+stage-2,conv1d,weights_staged,SRAM,weight_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,262144,0.250000,Weights streamed from local SRAM to compute engine
+stage-2,conv1d,partial_sums,COMPUTE,conv_engine,REGFILE,conv_psum_reg,COMPUTE,REGFILE,131072,0.125000,Partial sums accumulated before output commit
+stage-2,conv1d,output_activation,REGFILE,conv_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,131072,0.125000,Operator output committed back to persistent feature SRAM
+stage-2,bn,input_activation,SRAM,feature_sram_buffer,COMPUTE,bn_engine,SRAM,COMPUTE,131072,0.125000,Normalization input activations
+stage-2,bn,norm_parameters,DRAM,offchip_dram,SRAM,bn_param_sram,DRAM,SRAM,4096,0.003906,BN affine/stat parameter staging
+stage-2,bn,norm_parameters_staged,SRAM,bn_param_sram,COMPUTE,bn_engine,SRAM,COMPUTE,4096,0.003906,Normalization parameters streamed from local SRAM
+stage-2,bn,reduction_state,COMPUTE,bn_engine,REGFILE,bn_reduce_reg,COMPUTE,REGFILE,2048,0.001953,Mean/variance or affine reduction state
+stage-2,bn,output_activation,COMPUTE,bn_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,131072,0.125000,Normalized activations written back to persistent feature SRAM
+stage-2,relu,input_activation,SRAM,feature_sram_buffer,COMPUTE,relu_engine,SRAM,COMPUTE,131072,0.125000,Streaming activation read for ReLU
+stage-2,relu,activation_lane,COMPUTE,relu_engine,REGFILE,relu_lane_reg,COMPUTE,REGFILE,1024,0.000977,Per-lane compare/max state
+stage-2,relu,output_activation,COMPUTE,relu_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,131072,0.125000,ReLU output written back to feature SRAM
+stage-2,conv1d,input_activation,SRAM,feature_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,131072,0.125000,Feature activations consumed from persistent feature SRAM or prior refill
+stage-2,conv1d,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,262144,0.250000,Conv1d weight staging for systolic/CIM engine
+stage-2,conv1d,weights_staged,SRAM,weight_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,262144,0.250000,Weights streamed from local SRAM to compute engine
+stage-2,conv1d,partial_sums,COMPUTE,conv_engine,REGFILE,conv_psum_reg,COMPUTE,REGFILE,131072,0.125000,Partial sums accumulated before output commit
+stage-2,conv1d,output_activation,REGFILE,conv_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,131072,0.125000,Operator output committed back to persistent feature SRAM
+stage-2,bn,input_activation,SRAM,feature_sram_buffer,COMPUTE,bn_engine,SRAM,COMPUTE,131072,0.125000,Normalization input activations
+stage-2,bn,norm_parameters,DRAM,offchip_dram,SRAM,bn_param_sram,DRAM,SRAM,4096,0.003906,BN affine/stat parameter staging
+stage-2,bn,norm_parameters_staged,SRAM,bn_param_sram,COMPUTE,bn_engine,SRAM,COMPUTE,4096,0.003906,Normalization parameters streamed from local SRAM
+stage-2,bn,reduction_state,COMPUTE,bn_engine,REGFILE,bn_reduce_reg,COMPUTE,REGFILE,2048,0.001953,Mean/variance or affine reduction state
+stage-2,bn,output_activation,COMPUTE,bn_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,131072,0.125000,Normalized activations written back to persistent feature SRAM
+stage-2,add,main_tensor_read,REGFILE,stage_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+stage-2,add,residual_tensor_read,REGFILE,stage_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=True, stream_through)"
+stage-2,add,add_output_write,COMPUTE,add_unit,REGFILE,stage_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+stage-2,relu,input_activation,SRAM,feature_sram_buffer,COMPUTE,relu_engine,SRAM,COMPUTE,131072,0.125000,Streaming activation read for ReLU
+stage-2,relu,activation_lane,COMPUTE,relu_engine,REGFILE,relu_lane_reg,COMPUTE,REGFILE,1024,0.000977,Per-lane compare/max state
+stage-2,relu,output_activation,COMPUTE,relu_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,131072,0.125000,ReLU output written back to feature SRAM
+GAM-stage3,layer_input,inter_layer_activation,SRAM,inter_layer_sram,COMPUTE,compute_fabric,SRAM,COMPUTE,131072,0.125000,Layer input read from inter-layer SRAM
+GAM-stage3,layer_output,inter_layer_activation,COMPUTE,compute_fabric,SRAM,inter_layer_sram,COMPUTE,SRAM,131072,0.125000,Layer output write to inter-layer SRAM
+GAM-stage3,fps,query_points,DRAM,offchip_dram,COMPUTE,fps_engine,DRAM,COMPUTE,768,0.000732,Phase2 query-point reads
+GAM-stage3,fps,cim_array_preload,SRAM,xyz_sram_buffer,SRAM,sram_cim_array,SRAM,SRAM,1536,0.001465,Load key point cloud into SRAM-CIM array
+GAM-stage3,fps,dist_accum_reg_write,COMPUTE,dist2_mac,REGFILE,dist_accum_reg_128x32b,COMPUTE,REGFILE,32768,0.031250,CIM distance batches accumulated to regfile (supports overlap)
+GAM-stage3,fps,dist_accum_reg_to_sram,REGFILE,dist_accum_reg_128x32b,SRAM,fps_dist_sram,REGFILE,SRAM,32768,0.031250,Write accumulated distances to FPS distance SRAM (multi-bank advised)
+GAM-stage3,fps,distance_table_read,SRAM,fps_dist_sram,COMPUTE,fps_sorter,SRAM,COMPUTE,32768,0.031250,Per-iteration sorter reads
+GAM-stage3,fps,fps_index,COMPUTE,fps_sorter,REGFILE,fps_index_regfile,COMPUTE,REGFILE,256,0.000244,Sampled center indices
+GAM-stage3,knn,query_points,DRAM,offchip_dram,COMPUTE,knn_engine,DRAM,COMPUTE,768,0.000732,Phase2 query-point reads
+GAM-stage3,knn,cim_array_preload,SRAM,xyz_sram_buffer,SRAM,sram_cim_array,SRAM,SRAM,1536,0.001465,Load key point cloud into SRAM-CIM array
+GAM-stage3,knn,dist_accum_reg_write,COMPUTE,dist2_mac,REGFILE,dist_accum_reg_128x32b,COMPUTE,REGFILE,32768,0.031250,CIM distance batches accumulated to regfile (supports overlap)
+GAM-stage3,knn,dist_accum_reg_to_sram,REGFILE,dist_accum_reg_128x32b,SRAM,knn_dist_sram,REGFILE,SRAM,32768,0.031250,Write accumulated distances to KNN distance SRAM (multi-bank advised)
+GAM-stage3,knn,distance_table_read,SRAM,knn_dist_sram,COMPUTE,knn_sorter,SRAM,COMPUTE,32768,0.031250,Per-query sorter reads
+GAM-stage3,knn,knn_topk_index,COMPUTE,knn_sorter,REGFILE,knn_topk_regfile,COMPUTE,REGFILE,6144,0.005859,Top-k neighbor indices
+GAM-stage3,knn,neighbor_features_spill,SRAM,inter_layer_sram,DRAM,offchip_dram,SRAM,DRAM,1572864,1.500000,"Gather workspace exceeds SRAM, spill to DRAM"
+GAM-stage3,affine_norm,input_activation,SRAM,feature_sram_buffer,COMPUTE,affine_norm_engine,SRAM,COMPUTE,65536,0.062500,Normalization input activations
+GAM-stage3,affine_norm,norm_parameters,DRAM,offchip_dram,SRAM,affine_norm_param_sram,DRAM,SRAM,2048,0.001953,AffineNorm alpha/beta staging
+GAM-stage3,affine_norm,norm_parameters_staged,SRAM,affine_norm_param_sram,COMPUTE,affine_norm_engine,SRAM,COMPUTE,2048,0.001953,Normalization parameters streamed from local SRAM
+GAM-stage3,affine_norm,reduction_state,COMPUTE,affine_norm_engine,REGFILE,affine_norm_reduce_reg,COMPUTE,REGFILE,2048,0.001953,Mean/variance or affine reduction state
+GAM-stage3,affine_norm,output_activation,COMPUTE,affine_norm_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,65536,0.062500,Normalized activations written back to persistent feature SRAM
+GAM-stage3,s-pool,pool_input,SRAM,feature_sram_buffer,SRAM,spool_workspace_sram,SRAM,SRAM,3145728,3.000000,Pool input window materialized before reduction
+GAM-stage3,s-pool,pool_workspace,SRAM,spool_workspace_sram,COMPUTE,spool_engine,SRAM,COMPUTE,3145728,3.000000,Pool workspace streamed to reduction engine
+GAM-stage3,s-pool,pool_reduce_state,COMPUTE,spool_engine,REGFILE,spool_reduce_reg,COMPUTE,REGFILE,131072,0.125000,Per-channel max/accumulator state
+GAM-stage3,s-pool,pool_output,REGFILE,spool_reduce_reg,SRAM,spool_workspace_sram,REGFILE,SRAM,131072,0.125000,Pool result kept on-chip for downstream operator or layer output
+LFP-stage3,layer_input,inter_layer_activation,SRAM,inter_layer_sram,COMPUTE,compute_fabric,SRAM,COMPUTE,131072,0.125000,Layer input read from inter-layer SRAM
+LFP-stage3,layer_output,inter_layer_activation,COMPUTE,compute_fabric,SRAM,inter_layer_sram,COMPUTE,SRAM,2048,0.001953,Layer output write to inter-layer SRAM
+LFP-stage3,lfp_path,local_path_tensor,COMPUTE,compute_fabric,REGFILE,lfp_local_path_reg,COMPUTE,REGFILE,131072,0.125000,lfp local-path intermediate (stream_through)
+LFP-stage3,lfp_path,center_path_tensor,COMPUTE,compute_fabric,REGFILE,lfp_center_path_reg,COMPUTE,REGFILE,131072,0.125000,lfp center-path intermediate (stream_through)
+LFP-stage3,lfp_path,pooled_local_tensor,COMPUTE,compute_fabric,REGFILE,lfp_pool_path_reg,COMPUTE,REGFILE,2048,0.001953,lfp pooled tensor (stream_through)
+LFP-stage3,conv1d,input_activation,SRAM,feature_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,2048,0.001953,Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage3,conv1d,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,1048576,1.000000,Conv1d weight staging for systolic/CIM engine
+LFP-stage3,conv1d,weights_staged,SRAM,weight_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,1048576,1.000000,Weights streamed from local SRAM to compute engine
+LFP-stage3,conv1d,partial_sums,COMPUTE,conv_engine,REGFILE,conv_psum_reg,COMPUTE,REGFILE,2048,0.001953,Partial sums accumulated before output commit
+LFP-stage3,conv1d,output_activation,REGFILE,conv_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,2048,0.001953,Operator output committed back to persistent feature SRAM
+LFP-stage3,bn,input_activation,SRAM,feature_sram_buffer,COMPUTE,bn_engine,SRAM,COMPUTE,2048,0.001953,Normalization input activations
+LFP-stage3,bn,norm_parameters,DRAM,offchip_dram,SRAM,bn_param_sram,DRAM,SRAM,8192,0.007812,BN affine/stat parameter staging
+LFP-stage3,bn,norm_parameters_staged,SRAM,bn_param_sram,COMPUTE,bn_engine,SRAM,COMPUTE,8192,0.007812,Normalization parameters streamed from local SRAM
+LFP-stage3,bn,reduction_state,COMPUTE,bn_engine,REGFILE,bn_reduce_reg,COMPUTE,REGFILE,4096,0.003906,Mean/variance or affine reduction state
+LFP-stage3,bn,output_activation,COMPUTE,bn_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,2048,0.001953,Normalized activations written back to persistent feature SRAM
+LFP-stage3,relu,input_activation,SRAM,feature_sram_buffer,COMPUTE,relu_engine,SRAM,COMPUTE,2048,0.001953,Streaming activation read for ReLU
+LFP-stage3,relu,activation_lane,COMPUTE,relu_engine,REGFILE,relu_lane_reg,COMPUTE,REGFILE,2048,0.001953,Per-lane compare/max state
+LFP-stage3,relu,output_activation,COMPUTE,relu_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,2048,0.001953,ReLU output written back to feature SRAM
+LFP-stage3,layernorm,input_activation,SRAM,feature_sram_buffer,COMPUTE,layernorm_engine,SRAM,COMPUTE,131072,0.125000,Normalization input activations
+LFP-stage3,layernorm,norm_parameters,DRAM,offchip_dram,SRAM,layernorm_param_sram,DRAM,SRAM,4096,0.003906,LayerNorm gamma/beta staging
+LFP-stage3,layernorm,norm_parameters_staged,SRAM,layernorm_param_sram,COMPUTE,layernorm_engine,SRAM,COMPUTE,4096,0.003906,Normalization parameters streamed from local SRAM
+LFP-stage3,layernorm,reduction_state,COMPUTE,layernorm_engine,REGFILE,layernorm_reduce_reg,COMPUTE,REGFILE,4096,0.003906,Mean/variance or affine reduction state
+LFP-stage3,layernorm,output_activation,COMPUTE,layernorm_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,131072,0.125000,Normalized activations written back to persistent feature SRAM
+LFP-stage3,linear,input_activation,SRAM,feature_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,2048,0.001953,Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage3,linear,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,1048576,1.000000,Linear weight staging for systolic/CIM engine
+LFP-stage3,linear,weights_staged,SRAM,weight_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,1048576,1.000000,Weights streamed from local SRAM to compute engine
+LFP-stage3,linear,partial_sums,COMPUTE,linear_engine,REGFILE,linear_psum_reg,COMPUTE,REGFILE,2048,0.001953,Partial sums accumulated before output commit
+LFP-stage3,linear,output_activation,REGFILE,linear_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,2048,0.001953,Operator output committed back to persistent feature SRAM
+LFP-stage3,kan,input_activation,SRAM,feature_sram_buffer,COMPUTE,kan_engine,SRAM,COMPUTE,131072,0.125000,KAN/KAT input activations
+LFP-stage3,kan,activation_coefficients,DRAM,offchip_dram,SRAM,kan_param_sram,DRAM,SRAM,20480,0.019531,Rational activation coefficients staged on-chip
+LFP-stage3,kan,activation_coefficients_staged,SRAM,kan_param_sram,COMPUTE,kan_engine,SRAM,COMPUTE,20480,0.019531,KAN parameters streamed from local SRAM
+LFP-stage3,kan,kan_workspace,COMPUTE,kan_engine,SRAM,kan_workspace_sram,COMPUTE,SRAM,131072,0.125000,KAN nonlinear output workspace
+LFP-stage3,linear,input_activation,SRAM,feature_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,2048,0.001953,Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage3,linear,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,1048576,1.000000,Linear weight staging for systolic/CIM engine
+LFP-stage3,linear,weights_staged,SRAM,weight_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,1048576,1.000000,Weights streamed from local SRAM to compute engine
+LFP-stage3,linear,partial_sums,COMPUTE,linear_engine,REGFILE,linear_psum_reg,COMPUTE,REGFILE,2048,0.001953,Partial sums accumulated before output commit
+LFP-stage3,linear,output_activation,REGFILE,linear_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,2048,0.001953,Operator output committed back to persistent feature SRAM
+LFP-stage3,add,main_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+LFP-stage3,add,residual_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=True, stream_through)"
+LFP-stage3,add,add_output_write,COMPUTE,add_unit,REGFILE,lfp_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+LFP-stage3,adaptive_max_pool1d,pool_input,SRAM,feature_sram_buffer,SRAM,adaptive_pool_workspace_sram,SRAM,SRAM,131072,0.125000,Pool input window materialized before reduction
+LFP-stage3,adaptive_max_pool1d,pool_workspace,SRAM,adaptive_pool_workspace_sram,COMPUTE,adaptive_pool_engine,SRAM,COMPUTE,131072,0.125000,Pool workspace streamed to reduction engine
+LFP-stage3,adaptive_max_pool1d,pool_reduce_state,COMPUTE,adaptive_pool_engine,REGFILE,adaptive_pool_reduce_reg,COMPUTE,REGFILE,2048,0.001953,Per-channel max/accumulator state
+LFP-stage3,adaptive_max_pool1d,pool_output,REGFILE,adaptive_pool_reduce_reg,SRAM,adaptive_pool_workspace_sram,REGFILE,SRAM,2048,0.001953,Pool result kept on-chip for downstream operator or layer output
+LFP-stage3,conv1d,input_activation,SRAM,feature_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,2048,0.001953,Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage3,conv1d,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,1048576,1.000000,Conv1d weight staging for systolic/CIM engine
+LFP-stage3,conv1d,weights_staged,SRAM,weight_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,1048576,1.000000,Weights streamed from local SRAM to compute engine
+LFP-stage3,conv1d,partial_sums,COMPUTE,conv_engine,REGFILE,conv_psum_reg,COMPUTE,REGFILE,2048,0.001953,Partial sums accumulated before output commit
+LFP-stage3,conv1d,output_activation,REGFILE,conv_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,2048,0.001953,Operator output committed back to persistent feature SRAM
+LFP-stage3,bn,input_activation,SRAM,feature_sram_buffer,COMPUTE,bn_engine,SRAM,COMPUTE,2048,0.001953,Normalization input activations
+LFP-stage3,bn,norm_parameters,DRAM,offchip_dram,SRAM,bn_param_sram,DRAM,SRAM,8192,0.007812,BN affine/stat parameter staging
+LFP-stage3,bn,norm_parameters_staged,SRAM,bn_param_sram,COMPUTE,bn_engine,SRAM,COMPUTE,8192,0.007812,Normalization parameters streamed from local SRAM
+LFP-stage3,bn,reduction_state,COMPUTE,bn_engine,REGFILE,bn_reduce_reg,COMPUTE,REGFILE,4096,0.003906,Mean/variance or affine reduction state
+LFP-stage3,bn,output_activation,COMPUTE,bn_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,2048,0.001953,Normalized activations written back to persistent feature SRAM
+LFP-stage3,relu,input_activation,SRAM,feature_sram_buffer,COMPUTE,relu_engine,SRAM,COMPUTE,2048,0.001953,Streaming activation read for ReLU
+LFP-stage3,relu,activation_lane,COMPUTE,relu_engine,REGFILE,relu_lane_reg,COMPUTE,REGFILE,2048,0.001953,Per-lane compare/max state
+LFP-stage3,relu,output_activation,COMPUTE,relu_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,2048,0.001953,ReLU output written back to feature SRAM
+LFP-stage3,layernorm,input_activation,SRAM,feature_sram_buffer,COMPUTE,layernorm_engine,SRAM,COMPUTE,131072,0.125000,Normalization input activations
+LFP-stage3,layernorm,norm_parameters,DRAM,offchip_dram,SRAM,layernorm_param_sram,DRAM,SRAM,4096,0.003906,LayerNorm gamma/beta staging
+LFP-stage3,layernorm,norm_parameters_staged,SRAM,layernorm_param_sram,COMPUTE,layernorm_engine,SRAM,COMPUTE,4096,0.003906,Normalization parameters streamed from local SRAM
+LFP-stage3,layernorm,reduction_state,COMPUTE,layernorm_engine,REGFILE,layernorm_reduce_reg,COMPUTE,REGFILE,4096,0.003906,Mean/variance or affine reduction state
+LFP-stage3,layernorm,output_activation,COMPUTE,layernorm_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,131072,0.125000,Normalized activations written back to persistent feature SRAM
+LFP-stage3,linear,input_activation,SRAM,feature_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,2048,0.001953,Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage3,linear,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,1048576,1.000000,Linear weight staging for systolic/CIM engine
+LFP-stage3,linear,weights_staged,SRAM,weight_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,1048576,1.000000,Weights streamed from local SRAM to compute engine
+LFP-stage3,linear,partial_sums,COMPUTE,linear_engine,REGFILE,linear_psum_reg,COMPUTE,REGFILE,2048,0.001953,Partial sums accumulated before output commit
+LFP-stage3,linear,output_activation,REGFILE,linear_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,2048,0.001953,Operator output committed back to persistent feature SRAM
+LFP-stage3,kan,input_activation,SRAM,feature_sram_buffer,COMPUTE,kan_engine,SRAM,COMPUTE,131072,0.125000,KAN/KAT input activations
+LFP-stage3,kan,activation_coefficients,DRAM,offchip_dram,SRAM,kan_param_sram,DRAM,SRAM,20480,0.019531,Rational activation coefficients staged on-chip
+LFP-stage3,kan,activation_coefficients_staged,SRAM,kan_param_sram,COMPUTE,kan_engine,SRAM,COMPUTE,20480,0.019531,KAN parameters streamed from local SRAM
+LFP-stage3,kan,kan_workspace,COMPUTE,kan_engine,SRAM,kan_workspace_sram,COMPUTE,SRAM,131072,0.125000,KAN nonlinear output workspace
+LFP-stage3,linear,input_activation,SRAM,feature_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,2048,0.001953,Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage3,linear,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,1048576,1.000000,Linear weight staging for systolic/CIM engine
+LFP-stage3,linear,weights_staged,SRAM,weight_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,1048576,1.000000,Weights streamed from local SRAM to compute engine
+LFP-stage3,linear,partial_sums,COMPUTE,linear_engine,REGFILE,linear_psum_reg,COMPUTE,REGFILE,2048,0.001953,Partial sums accumulated before output commit
+LFP-stage3,linear,output_activation,REGFILE,linear_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,2048,0.001953,Operator output committed back to persistent feature SRAM
+LFP-stage3,add,main_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+LFP-stage3,add,residual_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=True, stream_through)"
+LFP-stage3,add,add_output_write,COMPUTE,add_unit,REGFILE,lfp_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+LFP-stage3,add,main_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+LFP-stage3,add,residual_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=False, stream_through)"
+LFP-stage3,add,add_output_write,COMPUTE,add_unit,REGFILE,lfp_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+stage-3,layer_input,inter_layer_activation,SRAM,inter_layer_sram,COMPUTE,compute_fabric,SRAM,COMPUTE,2048,0.001953,Layer input read from inter-layer SRAM
+stage-3,layer_output,inter_layer_activation,COMPUTE,compute_fabric,SRAM,inter_layer_sram,COMPUTE,SRAM,131072,0.125000,Layer output write to inter-layer SRAM
+stage-3,stage_path,local_path_tensor,COMPUTE,compute_fabric,REGFILE,stage_local_path_reg,COMPUTE,REGFILE,2048,0.001953,stage local-path intermediate (stream_through)
+stage-3,stage_path,center_path_tensor,COMPUTE,compute_fabric,REGFILE,stage_center_path_reg,COMPUTE,REGFILE,2048,0.001953,stage center-path intermediate (stream_through)
+stage-3,stage_path,pooled_local_tensor,COMPUTE,compute_fabric,REGFILE,stage_pool_path_reg,COMPUTE,REGFILE,2048,0.001953,stage pooled tensor (stream_through)
+stage-3,conv1d,input_activation,SRAM,feature_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,131072,0.125000,Feature activations consumed from persistent feature SRAM or prior refill
+stage-3,conv1d,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,1048576,1.000000,Conv1d weight staging for systolic/CIM engine
+stage-3,conv1d,weights_staged,SRAM,weight_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,1048576,1.000000,Weights streamed from local SRAM to compute engine
+stage-3,conv1d,partial_sums,COMPUTE,conv_engine,REGFILE,conv_psum_reg,COMPUTE,REGFILE,131072,0.125000,Partial sums accumulated before output commit
+stage-3,conv1d,output_activation,REGFILE,conv_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,131072,0.125000,Operator output committed back to persistent feature SRAM
+stage-3,bn,input_activation,SRAM,feature_sram_buffer,COMPUTE,bn_engine,SRAM,COMPUTE,131072,0.125000,Normalization input activations
+stage-3,bn,norm_parameters,DRAM,offchip_dram,SRAM,bn_param_sram,DRAM,SRAM,8192,0.007812,BN affine/stat parameter staging
+stage-3,bn,norm_parameters_staged,SRAM,bn_param_sram,COMPUTE,bn_engine,SRAM,COMPUTE,8192,0.007812,Normalization parameters streamed from local SRAM
+stage-3,bn,reduction_state,COMPUTE,bn_engine,REGFILE,bn_reduce_reg,COMPUTE,REGFILE,4096,0.003906,Mean/variance or affine reduction state
+stage-3,bn,output_activation,COMPUTE,bn_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,131072,0.125000,Normalized activations written back to persistent feature SRAM
+stage-3,relu,input_activation,SRAM,feature_sram_buffer,COMPUTE,relu_engine,SRAM,COMPUTE,131072,0.125000,Streaming activation read for ReLU
+stage-3,relu,activation_lane,COMPUTE,relu_engine,REGFILE,relu_lane_reg,COMPUTE,REGFILE,2048,0.001953,Per-lane compare/max state
+stage-3,relu,output_activation,COMPUTE,relu_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,131072,0.125000,ReLU output written back to feature SRAM
+stage-3,conv1d,input_activation,SRAM,feature_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,131072,0.125000,Feature activations consumed from persistent feature SRAM or prior refill
+stage-3,conv1d,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,1048576,1.000000,Conv1d weight staging for systolic/CIM engine
+stage-3,conv1d,weights_staged,SRAM,weight_sram_buffer,COMPUTE,conv_engine,SRAM,COMPUTE,1048576,1.000000,Weights streamed from local SRAM to compute engine
+stage-3,conv1d,partial_sums,COMPUTE,conv_engine,REGFILE,conv_psum_reg,COMPUTE,REGFILE,131072,0.125000,Partial sums accumulated before output commit
+stage-3,conv1d,output_activation,REGFILE,conv_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,131072,0.125000,Operator output committed back to persistent feature SRAM
+stage-3,bn,input_activation,SRAM,feature_sram_buffer,COMPUTE,bn_engine,SRAM,COMPUTE,131072,0.125000,Normalization input activations
+stage-3,bn,norm_parameters,DRAM,offchip_dram,SRAM,bn_param_sram,DRAM,SRAM,8192,0.007812,BN affine/stat parameter staging
+stage-3,bn,norm_parameters_staged,SRAM,bn_param_sram,COMPUTE,bn_engine,SRAM,COMPUTE,8192,0.007812,Normalization parameters streamed from local SRAM
+stage-3,bn,reduction_state,COMPUTE,bn_engine,REGFILE,bn_reduce_reg,COMPUTE,REGFILE,4096,0.003906,Mean/variance or affine reduction state
+stage-3,bn,output_activation,COMPUTE,bn_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,131072,0.125000,Normalized activations written back to persistent feature SRAM
+stage-3,add,main_tensor_read,REGFILE,stage_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+stage-3,add,residual_tensor_read,REGFILE,stage_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=True, stream_through)"
+stage-3,add,add_output_write,COMPUTE,add_unit,REGFILE,stage_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+stage-3,relu,input_activation,SRAM,feature_sram_buffer,COMPUTE,relu_engine,SRAM,COMPUTE,131072,0.125000,Streaming activation read for ReLU
+stage-3,relu,activation_lane,COMPUTE,relu_engine,REGFILE,relu_lane_reg,COMPUTE,REGFILE,2048,0.001953,Per-lane compare/max state
+stage-3,relu,output_activation,COMPUTE,relu_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,131072,0.125000,ReLU output written back to feature SRAM
+global_maxpool,layer_input,inter_layer_activation,SRAM,inter_layer_sram,COMPUTE,compute_fabric,SRAM,COMPUTE,131072,0.125000,Layer input read from inter-layer SRAM
+global_maxpool,layer_output,inter_layer_activation,COMPUTE,compute_fabric,SRAM,inter_layer_sram,COMPUTE,SRAM,2048,0.001953,Layer output write to inter-layer SRAM
+global_maxpool,adaptive_max_pool1d,pool_input,SRAM,feature_sram_buffer,SRAM,adaptive_pool_workspace_sram,SRAM,SRAM,131072,0.125000,Pool input window materialized before reduction
+global_maxpool,adaptive_max_pool1d,pool_workspace,SRAM,adaptive_pool_workspace_sram,COMPUTE,adaptive_pool_engine,SRAM,COMPUTE,131072,0.125000,Pool workspace streamed to reduction engine
+global_maxpool,adaptive_max_pool1d,pool_reduce_state,COMPUTE,adaptive_pool_engine,REGFILE,adaptive_pool_reduce_reg,COMPUTE,REGFILE,2048,0.001953,Per-channel max/accumulator state
+global_maxpool,adaptive_max_pool1d,pool_output,REGFILE,adaptive_pool_reduce_reg,SRAM,adaptive_pool_workspace_sram,REGFILE,SRAM,2048,0.001953,Pool result kept on-chip for downstream operator or layer output
+classifier,layer_input,inter_layer_activation,SRAM,inter_layer_sram,COMPUTE,compute_fabric,SRAM,COMPUTE,2048,0.001953,Layer input read from inter-layer SRAM
+classifier,linear,input_activation,SRAM,feature_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,2048,0.001953,Feature activations consumed from persistent feature SRAM or prior refill
+classifier,linear,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,1048576,1.000000,Linear weight staging for systolic/CIM engine
+classifier,linear,weights_staged,SRAM,weight_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,1048576,1.000000,Weights streamed from local SRAM to compute engine
+classifier,linear,partial_sums,COMPUTE,linear_engine,REGFILE,linear_psum_reg,COMPUTE,REGFILE,2048,0.001953,Partial sums accumulated before output commit
+classifier,linear,output_activation,REGFILE,linear_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,2048,0.001953,Operator output committed back to persistent feature SRAM
+classifier,batchnorm1d,input_activation,SRAM,feature_sram_buffer,COMPUTE,bn_engine,SRAM,COMPUTE,2048,0.001953,Normalization input activations
+classifier,batchnorm1d,norm_parameters,DRAM,offchip_dram,SRAM,bn_param_sram,DRAM,SRAM,8192,0.007812,BN affine/stat parameter staging
+classifier,batchnorm1d,norm_parameters_staged,SRAM,bn_param_sram,COMPUTE,bn_engine,SRAM,COMPUTE,8192,0.007812,Normalization parameters streamed from local SRAM
+classifier,batchnorm1d,reduction_state,COMPUTE,bn_engine,REGFILE,bn_reduce_reg,COMPUTE,REGFILE,4096,0.003906,Mean/variance or affine reduction state
+classifier,batchnorm1d,output_activation,COMPUTE,bn_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,2048,0.001953,Normalized activations written back to persistent feature SRAM
+classifier,relu,input_activation,SRAM,feature_sram_buffer,COMPUTE,relu_engine,SRAM,COMPUTE,2048,0.001953,Streaming activation read for ReLU
+classifier,relu,activation_lane,COMPUTE,relu_engine,REGFILE,relu_lane_reg,COMPUTE,REGFILE,2048,0.001953,Per-lane compare/max state
+classifier,relu,output_activation,COMPUTE,relu_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,2048,0.001953,ReLU output written back to feature SRAM
+classifier,linear,input_activation,SRAM,feature_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,2048,0.001953,Feature activations consumed from persistent feature SRAM or prior refill
+classifier,linear,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,524288,0.500000,Linear weight staging for systolic/CIM engine
+classifier,linear,weights_staged,SRAM,weight_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,524288,0.500000,Weights streamed from local SRAM to compute engine
+classifier,linear,partial_sums,COMPUTE,linear_engine,REGFILE,linear_psum_reg,COMPUTE,REGFILE,1024,0.000977,Partial sums accumulated before output commit
+classifier,linear,output_activation,REGFILE,linear_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,1024,0.000977,Operator output committed back to persistent feature SRAM
+classifier,batchnorm1d,input_activation,SRAM,feature_sram_buffer,COMPUTE,bn_engine,SRAM,COMPUTE,1024,0.000977,Normalization input activations
+classifier,batchnorm1d,norm_parameters,DRAM,offchip_dram,SRAM,bn_param_sram,DRAM,SRAM,4096,0.003906,BN affine/stat parameter staging
+classifier,batchnorm1d,norm_parameters_staged,SRAM,bn_param_sram,COMPUTE,bn_engine,SRAM,COMPUTE,4096,0.003906,Normalization parameters streamed from local SRAM
+classifier,batchnorm1d,reduction_state,COMPUTE,bn_engine,REGFILE,bn_reduce_reg,COMPUTE,REGFILE,2048,0.001953,Mean/variance or affine reduction state
+classifier,batchnorm1d,output_activation,COMPUTE,bn_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,1024,0.000977,Normalized activations written back to persistent feature SRAM
+classifier,relu,input_activation,SRAM,feature_sram_buffer,COMPUTE,relu_engine,SRAM,COMPUTE,1024,0.000977,Streaming activation read for ReLU
+classifier,relu,activation_lane,COMPUTE,relu_engine,REGFILE,relu_lane_reg,COMPUTE,REGFILE,1024,0.000977,Per-lane compare/max state
+classifier,relu,output_activation,COMPUTE,relu_engine,SRAM,feature_sram_buffer,COMPUTE,SRAM,1024,0.000977,ReLU output written back to feature SRAM
+classifier,linear,input_activation,SRAM,feature_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,1024,0.000977,Feature activations consumed from persistent feature SRAM or prior refill
+classifier,linear,weights,DRAM,offchip_dram,SRAM,weight_sram_buffer,DRAM,SRAM,40960,0.039062,Linear weight staging for systolic/CIM engine
+classifier,linear,weights_staged,SRAM,weight_sram_buffer,COMPUTE,linear_engine,SRAM,COMPUTE,40960,0.039062,Weights streamed from local SRAM to compute engine
+classifier,linear,partial_sums,COMPUTE,linear_engine,REGFILE,linear_psum_reg,COMPUTE,REGFILE,160,0.000153,Partial sums accumulated before output commit
+classifier,linear,output_activation,REGFILE,linear_psum_reg,SRAM,feature_sram_buffer,REGFILE,SRAM,160,0.000153,Operator output committed back to persistent feature SRAM

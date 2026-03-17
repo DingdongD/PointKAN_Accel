@@ -4,18 +4,27 @@
 #   ./run_knn_coarse_fine_eval_waymo.sh
 #   DATA_DIR=/path/to/velodyne MAX_SAMPLES=200 ./run_knn_coarse_fine_eval_waymo.sh
 #   NUM_POINTS=40000 FPS_STEPS=512 OUT_JSON=./waymo_knn_iou.json ./run_knn_coarse_fine_eval_waymo.sh
+# CPU 测试（耗时用 time.perf_counter 测量）：
+#   DEVICE=cpu ./run_knn_coarse_fine_eval_waymo.sh
+#   DEVICE=cpu OUT_JSON=./waymo_knn_iou_cpu.json ./run_knn_coarse_fine_eval_waymo.sh
 
 set -e
 cd "$(dirname "$0")"
 
 DATA_DIR="${DATA_DIR:-/workspace/VoxelNet/Waymo_Mini/Waymo_mini/kitti_format/training/velodyne}"
 MAX_SAMPLES="${MAX_SAMPLES:-0}"
-NUM_POINTS="${NUM_POINTS:-50000}"
-FPS_STEPS="${FPS_STEPS:-2048}"
+NUM_POINTS="${NUM_POINTS:-5000000}"
+FPS_STEPS="${FPS_STEPS:-512}"
 K_NEIGHBORS="${K_NEIGHBORS:-32}"
 MIN_CANDIDATES_RATIO="${MIN_CANDIDATES_RATIO:-1.1}"
-OUT_JSON="${OUT_JSON:-./knn_coarse_fine_iou_results_waymo.json}"
-DEVICE="${DEVICE:-cuda}"
+DEVICE="${DEVICE:-cuda:3}"
+# 未显式设置 OUT_JSON 时按 device 区分保存，避免 CPU/GPU 结果互相覆盖
+DEFAULT_JSON_BASE="./knn_coarse_fine_iou_results_waymo"
+if [[ "$DEVICE" == "cpu" ]]; then
+  OUT_JSON="${OUT_JSON:-${DEFAULT_JSON_BASE}_cpu.json}"
+else
+  OUT_JSON="${OUT_JSON:-${DEFAULT_JSON_BASE}.json}"
+fi
 BATCH_SIZE="${BATCH_SIZE:-1}"
 NO_ROI="${NO_ROI:-0}"
 

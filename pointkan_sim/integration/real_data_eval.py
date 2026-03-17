@@ -526,6 +526,7 @@ def run_real_inference_and_sim_over_dataset(
     enable_layer_buffer: bool = True,
     activation_shapes: Optional[List[Any]] = None,
     max_batches: Optional[int] = None,
+    repo_root: Optional[str] = None,
 ) -> RealEvalResult:
     """
     在 ModelNet40 测试集上：真实前向按 batch 算准确率；仿真器按样本串行，每次只处理一个样本。
@@ -575,6 +576,7 @@ def run_real_inference_and_sim_over_dataset(
                 activation_shapes=activation_shapes,
                 enable_layer_buffer=enable_layer_buffer,
                 show_shapes=False,
+                repo_root=repo_root,
             )
             total_cycles += sim_result.get("total_cycles", 0) or 0
             total_energy_nj += sim_result.get("total_energy_nJ", 0.0) or 0.0

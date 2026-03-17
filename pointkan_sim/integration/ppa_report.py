@@ -81,12 +81,13 @@ def build_ppa_report(
         total_area = sum(v.get("area_um2", 0) for v in full_operator_breakdown.values())
         full_list: List[Dict[str, Any]] = []
         for op_name, v in sorted(full_operator_breakdown.items(), key=lambda x: -x[1].get("latency_ns", x[1].get("cycles", 0))):
+            display_name = "SRAM" if op_name == "LayerBuffer" else op_name
             cy = v.get("cycles", 0)
             en = v.get("energy_nj", 0)
             lat_ns = v.get("latency_ns", 0)
             area_u = v.get("area_um2", 0)
             full_list.append({
-                "operator": op_name,
+                "operator": display_name,
                 "cycles": round(cy, 2),
                 "energy_nj": round(en, 2),
                 "latency_ns": round(lat_ns, 2),
@@ -125,18 +126,18 @@ def plot_ppa_breakdown(report: Dict[str, Any], output_dir: Path) -> List[Path]:
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1) 全算子 Latency 饼图（cycles），所有算子单独显示，不合并
+    # 1) 全算子 Latency 饼图（latency_ns），所有算子单独显示，不合并
     if report.get("full_operator_breakdown"):
         full = report["full_operator_breakdown"]
-        main_cycles = [x["cycles"] for x in full if x["cycles"] > 0]
-        main_labels = [x["operator"] for x in full if x["cycles"] > 0]
-        total_cy = sum(main_cycles)
-        if total_cy > 0 and main_labels:
+        main_lat_ns = [x["latency_ns"] for x in full if x.get("latency_ns", 0) > 0]
+        main_labels = [x["operator"] for x in full if x.get("latency_ns", 0) > 0]
+        total_lat_ns = sum(main_lat_ns)
+        if total_lat_ns > 0 and main_labels:
             cmap = cm.get_cmap("tab20")
             colors = [cmap(i % 20) for i in range(len(main_labels))]
             fig, ax = plt.subplots(figsize=(9, 6))
-            ax.pie(main_cycles, labels=main_labels, autopct="%1.1f%%", startangle=90, colors=colors)
-            ax.set_title("Latency Breakdown by Operator (FPS, KNN, BN, LN, Conv, Linear, ...)")
+            ax.pie(main_lat_ns, labels=main_labels, autopct="%1.1f%%", startangle=90, colors=colors)
+            ax.set_title("Latency (ns) Breakdown by Operator (FPS, KNN, BN, LN, Conv, Linear, ...)")
             fig.tight_layout()
             p = output_dir / "latency_breakdown_by_operator.png"
             fig.savefig(p, dpi=150, bbox_inches="tight")

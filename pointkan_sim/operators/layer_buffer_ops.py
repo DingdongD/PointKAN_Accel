@@ -2,16 +2,20 @@
 层间 Buffer 读写事件
 ====================
 
-根据每层输入/输出字节数与 buffer 容量、带宽，生成「从 buffer 读入」「写回 buffer」事件；
-当数据量超过 buffer_size 时，超出部分按 spill 到 DRAM 建模（可选），以模拟实际内存行为。
+根据每层输入/输出字节数与 buffer 容量，生成「从 buffer 读入」「写回 buffer」事件；
+当数据量超过 buffer_size 时，超出部分按 spill 到 DRAM 建模（可选）。
+周期与能耗统一走 pointkan_sim.integration.memory_model_adapter（参考 memory_model demo_pointcloud_pipeline）：
+仅使用 CACTI/DRAMSim3 回填的访问级模型；未回填时周期仍按带宽，能耗为 0。
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Dict, Iterator, List, Optional, Tuple, TYPE_CHECKING
 
 from ..simulator.event import Event
-from ..utils.math_utils import safe_div_ceil
+from ..integration.memory_model_adapter import query_sram_cycles_energy, query_dram_cycles_energy
+from ..integration.memory_runtime import MemoryRuntimeContext
+from ..memory.feature_residency import get_effective_feature_buffer_bytes
 
 if TYPE_CHECKING:
     from ..configs.hw_config import HardwareConfig
@@ -25,12 +29,15 @@ def _event(
     sub_stage: str,
     circuit_module: str,
     operation: str,
-    power: float,
     duration: int,
+    energy_nj: float,
     clock_period_ns: float,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> Event:
-    """构造一条层间 buffer/DRAM 相关事件（operator 如 LayerBuffer）。"""
+    """构造一条层间 buffer/DRAM 相关事件。power 由 energy_nj 反推以使 Event.energy == energy_nj。"""
+    clk = float(clock_period_ns)
+    dur = max(1, int(duration))
+    power = (energy_nj * 1000.0 / (dur * clk)) if (dur > 0 and clk > 0) else 0.0
     return Event(
         event_id=event_id,
         cycle=cycle,
@@ -39,8 +46,8 @@ def _event(
         sub_stage=sub_stage,
         circuit_module=circuit_module,
         operation=operation,
-        power=float(power),
-        duration=max(1, int(duration)),
+        power=power,
+        duration=dur,
         clock_period_ns=clock_period_ns,
         metadata=metadata or {},
     )
@@ -51,21 +58,11 @@ def gen_layer_buffer_read_events(
     hw_config: "HardwareConfig",
     layer_name: str,
     clock_period_ns: Optional[float] = None,
+    dram_precomputed: Optional[Iterator[Tuple[int, float]]] = None,
+    memory_context: Optional[MemoryRuntimeContext] = None,
 ) -> List[Event]:
     """
     生成本层「从 buffer（及可选 DRAM spill）读入输入」的事件。
-
-    若 input_bytes <= buffer_size：仅从片上 buffer 读，周期 = ceil(input_bytes / bandwidth)。
-    若 input_bytes > buffer_size 且 spill_to_dram：先读 buffer_size 从 buffer，再读剩余从 DRAM。
-
-    Args:
-        input_bytes: 本层输入数据量（字节）
-        hw_config: 硬件配置（含 inter_layer_buffer）
-        layer_name: 层名，写入 metadata
-        clock_period_ns: 时钟周期，默认从 hw_config.clock_period 取
-
-    Returns:
-        按时间顺序的 Event 列表（相对周期从 0 开始），供调用方做 cycle 偏移。
     """
     if input_bytes <= 0:
         return []
@@ -75,40 +72,50 @@ def gen_layer_buffer_read_events(
     if buf is None:
         return []
 
-    size = max(1, buf.size_bytes)
-    bw = max(1, buf.bandwidth_bytes_per_cycle)
+    size = max(1, get_effective_feature_buffer_bytes(hw_config) or buf.size_bytes)
     events: List[Event] = []
     cycle = 0
     event_id = 0
     meta_base = {"layer_name": layer_name, "buffer_phase": "input_read"}
 
-    # 从 buffer 读入的部分（最多 size_bytes）
     read_from_buf = min(input_bytes, size)
     if read_from_buf > 0:
-        dur = safe_div_ceil(read_from_buf, bw)
+        if memory_context is not None:
+            stat = memory_context.sram_read(read_from_buf, cycle)
+            dur, energy_nj = stat.service_cycles, stat.dynamic_energy_nj
+        else:
+            dur, energy_nj = query_sram_cycles_energy(read_from_buf, is_read=True, hw_config=hw_config, clock_period_ns=clk)
         events.append(_event(
             event_id, cycle,
             "LayerBuffer", "buffer_io", "buffer_read",
             "inter_layer_buffer", "buffer_read",
-            buf.read_power_mw, dur, clk,
+            dur, energy_nj, clk,
             {**meta_base, "bytes": read_from_buf, "source": "buffer"},
         ))
         event_id += 1
         cycle += dur
 
-    # 超出部分从 DRAM 读（spill）
     spill_bytes = input_bytes - read_from_buf
     if spill_bytes > 0 and getattr(buf, "spill_to_dram", False):
-        dram_bw = max(1, getattr(buf, "dram_bandwidth_bytes_per_cycle", 32))
-        dur = safe_div_ceil(spill_bytes, dram_bw)
+        if dram_precomputed is not None:
+            dur, energy_nj = next(dram_precomputed)
+        elif memory_context is not None:
+            res = memory_context.dram_transfer(spill_bytes, is_read=True, cur_cycle=cycle)
+            dur, energy_nj = res["cycles"], res["energy_nj"]
+        else:
+            dur, energy_nj = query_dram_cycles_energy(
+                spill_bytes, is_read=True, hw_config=hw_config, clock_period_ns=clk,
+                bandwidth_bytes_per_cycle=getattr(buf, "dram_bandwidth_bytes_per_cycle", 32),
+                read_power_mw=getattr(buf, "dram_read_power_mw", 50.0),
+                write_power_mw=getattr(buf, "dram_write_power_mw", 50.0),
+            )
         events.append(_event(
             event_id, cycle,
-            "LayerBuffer", "buffer_io", "dram_read",
+            "DRAM", "buffer_io", "dram_read",
             "dram", "inter_layer_spill_read",
-            getattr(buf, "dram_read_power_mw", 50.0), dur, clk,
+            dur, energy_nj, clk,
             {**meta_base, "bytes": spill_bytes, "source": "dram_spill"},
         ))
-        event_id += 1
         cycle += dur
 
     return events
@@ -119,21 +126,11 @@ def gen_layer_buffer_write_events(
     hw_config: "HardwareConfig",
     layer_name: str,
     clock_period_ns: Optional[float] = None,
+    dram_precomputed: Optional[Iterator[Tuple[int, float]]] = None,
+    memory_context: Optional[MemoryRuntimeContext] = None,
 ) -> List[Event]:
     """
     生成本层「将输出写回 buffer（及可选 DRAM spill）」的事件。
-
-    若 output_bytes <= buffer_size：仅写入片上 buffer。
-    若 output_bytes > buffer_size 且 spill_to_dram：先写满 buffer，剩余写 DRAM。
-
-    Args:
-        output_bytes: 本层输出数据量（字节）
-        hw_config: 硬件配置
-        layer_name: 层名
-        clock_period_ns: 时钟周期
-
-    Returns:
-        按时间顺序的 Event 列表（相对周期从 0 开始）。
     """
     if output_bytes <= 0:
         return []
@@ -143,8 +140,7 @@ def gen_layer_buffer_write_events(
     if buf is None:
         return []
 
-    size = max(1, buf.size_bytes)
-    bw = max(1, buf.bandwidth_bytes_per_cycle)
+    size = max(1, get_effective_feature_buffer_bytes(hw_config) or buf.size_bytes)
     events: List[Event] = []
     cycle = 0
     event_id = 0
@@ -152,12 +148,16 @@ def gen_layer_buffer_write_events(
 
     write_to_buf = min(output_bytes, size)
     if write_to_buf > 0:
-        dur = safe_div_ceil(write_to_buf, bw)
+        if memory_context is not None:
+            stat = memory_context.sram_write(write_to_buf, cycle)
+            dur, energy_nj = stat.service_cycles, stat.dynamic_energy_nj
+        else:
+            dur, energy_nj = query_sram_cycles_energy(write_to_buf, is_read=False, hw_config=hw_config, clock_period_ns=clk)
         events.append(_event(
             event_id, cycle,
             "LayerBuffer", "buffer_io", "buffer_write",
             "inter_layer_buffer", "buffer_write",
-            buf.write_power_mw, dur, clk,
+            dur, energy_nj, clk,
             {**meta_base, "bytes": write_to_buf, "target": "buffer"},
         ))
         event_id += 1
@@ -165,13 +165,23 @@ def gen_layer_buffer_write_events(
 
     spill_bytes = output_bytes - write_to_buf
     if spill_bytes > 0 and getattr(buf, "spill_to_dram", False):
-        dram_bw = max(1, getattr(buf, "dram_bandwidth_bytes_per_cycle", 32))
-        dur = safe_div_ceil(spill_bytes, dram_bw)
+        if dram_precomputed is not None:
+            dur, energy_nj = next(dram_precomputed)
+        elif memory_context is not None:
+            res = memory_context.dram_transfer(spill_bytes, is_read=False, cur_cycle=cycle)
+            dur, energy_nj = res["cycles"], res["energy_nj"]
+        else:
+            dur, energy_nj = query_dram_cycles_energy(
+                spill_bytes, is_read=False, hw_config=hw_config, clock_period_ns=clk,
+                bandwidth_bytes_per_cycle=getattr(buf, "dram_bandwidth_bytes_per_cycle", 32),
+                read_power_mw=getattr(buf, "dram_read_power_mw", 50.0),
+                write_power_mw=getattr(buf, "dram_write_power_mw", 50.0),
+            )
         events.append(_event(
             event_id, cycle,
-            "LayerBuffer", "buffer_io", "dram_write",
+            "DRAM", "buffer_io", "dram_write",
             "dram", "inter_layer_spill_write",
-            getattr(buf, "dram_write_power_mw", 50.0), dur, clk,
+            dur, energy_nj, clk,
             {**meta_base, "bytes": spill_bytes, "target": "dram_spill"},
         ))
 
@@ -210,22 +220,23 @@ def gen_phase2_distance_events(
         active, bits, slice_bits, power = 128, 12, 2, 0.0
     per_query_cycles = (bits // slice_bits) * max(1, int(math.ceil(num_keys / active)))
     query_bytes = int(math.ceil(max(1, num_features) * max(1, bits_per_feature) / 8.0))
-    dram = getattr(hw_config, "dram", None)
-    dram_bw = max(1, getattr(dram, "bandwidth_bytes_per_cycle", 32)) if dram is not None else 32
-    dram_power = float(getattr(dram, "read_power_mw", 50.0)) if dram is not None else 50.0
-    dram_cycles = safe_div_ceil(query_bytes, dram_bw)
+    dram_cycles, dram_energy_nj = 0, 0.0
+    if include_query_dram_read and query_bytes > 0:
+        dram_cycles, dram_energy_nj = query_dram_cycles_energy(
+            query_bytes, is_read=True, hw_config=hw_config, clock_period_ns=clk,
+        )
 
     events: List[Event] = []
     for i in range(num_queries):
         base_cycle = i * (per_query_cycles + (dram_cycles if include_query_dram_read else 0))
         event_id = i * (2 if include_query_dram_read else 1)
-        if include_query_dram_read:
+        if include_query_dram_read and dram_cycles > 0:
             events.append(
                 _event(
                     event_id, base_cycle,
                     operator_name, "distance", "query_dram_read",
                     "dram", "phase2_query_point_read",
-                    dram_power, dram_cycles, clk,
+                    dram_cycles, dram_energy_nj, clk,
                     {
                         "query_index": i,
                         "bytes": query_bytes,
@@ -236,12 +247,13 @@ def gen_phase2_distance_events(
             )
             base_cycle += dram_cycles
             event_id += 1
+        dist_energy_nj = power * per_query_cycles * clk / 1000.0
         events.append(
             _event(
                 event_id, base_cycle,
                 operator_name, "distance", "sram_ii_128row_2bit",
                 "sram_ii", "phase2_distance_compute",
-                power, per_query_cycles, clk,
+                per_query_cycles, dist_energy_nj, clk,
                 {"query_index": i, "num_keys": num_keys, "phase": 2},
             )
         )
@@ -253,35 +265,45 @@ def gen_first_layer_input_load_events(
     hw_config: "HardwareConfig",
     layer_name: str,
     clock_period_ns: Optional[float] = None,
+    dram_precomputed: Optional[Iterator[Tuple[int, float]]] = None,
+    memory_context: Optional[MemoryRuntimeContext] = None,
 ) -> List[Event]:
     """
     首层/Phase1 点云输入加载的唯一入口：按 input_bytes 生成 DRAM→SRAM-II 加载事件。
-    调用方传入字节数（如 activation_shapes[0].input_bytes 或 num_points*num_features*bits/8）。
-    若 hw_config.dram 存在则用 DRAM 配置（operation=phase1_point_cloud_to_sram_ii）；否则用 inter_layer_buffer。
+    若提供 dram_precomputed（trace→DRAMSim3 预计算），则优先使用其 (cycles, energy_nj)。
     """
     if input_bytes <= 0:
         return []
 
     clk = float(clock_period_ns if clock_period_ns is not None else getattr(hw_config, "clock_period", 1.0))
     dram = getattr(hw_config, "dram", None)
-    if dram is not None:
-        dram_bw = max(1, getattr(dram, "bandwidth_bytes_per_cycle", 32))
-        power = getattr(dram, "read_power_mw", 50.0)
+    if dram_precomputed is not None:
+        dur, energy_nj = next(dram_precomputed)
+        op_name = "phase1_point_cloud_to_sram_ii" if dram is not None else "point_cloud_input_load"
+    elif memory_context is not None:
+        res = memory_context.dram_transfer(input_bytes, is_read=True, cur_cycle=0)
+        dur, energy_nj = res["cycles"], res["energy_nj"]
+        op_name = "phase1_point_cloud_to_sram_ii" if dram is not None else "point_cloud_input_load"
+    elif dram is not None:
         op_name = "phase1_point_cloud_to_sram_ii"
+        dur, energy_nj = query_dram_cycles_energy(input_bytes, is_read=True, hw_config=hw_config, clock_period_ns=clk)
     else:
         buf = getattr(hw_config, "inter_layer_buffer", None)
         if buf is None:
             return []
-        dram_bw = max(1, getattr(buf, "dram_bandwidth_bytes_per_cycle", 32))
-        power = getattr(buf, "dram_read_power_mw", 50.0)
         op_name = "point_cloud_input_load"
-    dur = safe_div_ceil(input_bytes, dram_bw)
+        dur, energy_nj = query_dram_cycles_energy(
+            input_bytes, is_read=True, hw_config=hw_config, clock_period_ns=clk,
+            bandwidth_bytes_per_cycle=getattr(buf, "dram_bandwidth_bytes_per_cycle", 32),
+            read_power_mw=getattr(buf, "dram_read_power_mw", 50.0),
+            write_power_mw=getattr(buf, "dram_write_power_mw", 50.0),
+        )
     return [
         _event(
             0, 0,
-            "LayerBuffer", "buffer_io", "dram_read",
+            "DRAM", "buffer_io", "dram_read",
             "dram", op_name,
-            power, dur, clk,
+            dur, energy_nj, clk,
             {"layer_name": layer_name, "bytes": input_bytes, "source": "point_cloud_Nx3"},
         )
     ]

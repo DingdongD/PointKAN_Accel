@@ -1,3 +1,0 @@
-operator_type,num_layers,total_latency_ns,total_energy_nj,adc_latency_ns,adc_energy_nj,buffer_latency_ns,buffer_energy_nj,accum_latency_ns,accum_energy_nj,other_latency_ns,other_energy_nj,ic_energy_nj
-conv,17,5304177.1,50925.94969,784264.3,36150.542,2253833.1,129.5057,12254.122,2189.9299,2253833.1,7874.554,4581.404
-fc,19,5092881.58,50356.124585,714360.115,36103.3716,2183683.66,126.3213,11161.87,2130.7048,2183683.66,7619.8809,4375.8599

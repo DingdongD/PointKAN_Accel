@@ -287,7 +287,8 @@ def analyze_simulation_events_breakdown(
 
         total_energy_nj += en
         min_cycle = min(min_cycle, e.cycle)
-        max_end_cycle = max(max_end_cycle, e.cycle + dur - 1)
+        if not getattr(e, "overlapped", False):
+            max_end_cycle = max(max_end_cycle, e.cycle + dur - 1)
 
     total_cycles = max(0, max_end_cycle - min_cycle + 1) if events else 0
 

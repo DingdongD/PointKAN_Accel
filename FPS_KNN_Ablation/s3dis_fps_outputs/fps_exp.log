@@ -1,0 +1,92 @@
+2026-03-16 02:24:17 [INFO] Collecting point counts and XYZ ranges (scanning 272 files)...
+2026-03-16 02:24:23 [INFO] Stats over 272 frames: count range=[85855, 9273742], mean=1005913
+2026-03-16 02:24:23 [INFO] Histogram saved: ./s3dis_fps_outputs/point_count_histogram.png
+2026-03-16 02:24:24 [INFO]   x: min across frames [-37.93, 22.75], max across frames [-32.16, 29.93]
+2026-03-16 02:24:24 [INFO]   y: min across frames [-26.08, 42.92], max across frames [-24.07, 46.06]
+2026-03-16 02:24:24 [INFO]   z: min across frames [-2.64, 0.79], max across frames [2.00, 6.58]
+2026-03-16 02:24:24 [INFO] XYZ range histograms saved: ./s3dis_fps_outputs/xyz_range_histograms.png
+2026-03-16 02:24:24 [INFO] [1/5] Processing: /workspace/VoxelNet/pc_data/s3dis_trainval/Area_1_WC_1.npy
+2026-03-16 02:24:55 [INFO] [2/5] Processing: /workspace/VoxelNet/pc_data/s3dis_trainval/Area_1_conferenceRoom_1.npy
+2026-03-16 02:25:45 [INFO] [3/5] Processing: /workspace/VoxelNet/pc_data/s3dis_trainval/Area_1_conferenceRoom_2.npy
+2026-03-16 02:26:25 [INFO] [4/5] Processing: /workspace/VoxelNet/pc_data/s3dis_trainval/Area_1_copyRoom_1.npy
+2026-03-16 02:26:48 [INFO] [5/5] Processing: /workspace/VoxelNet/pc_data/s3dis_trainval/Area_1_hallway_1.npy
+2026-03-16 02:26:57 [INFO] Summary over frames:
+2026-03-16 02:26:57 [INFO]   num_points_avg: 927927.200000
+2026-03-16 02:26:57 [INFO]   num_points_std: 438427.428952
+2026-03-16 02:26:57 [INFO]   num_points_min: 344097.000000
+2026-03-16 02:26:57 [INFO]   num_points_max: 1535040.000000
+2026-03-16 02:26:57 [INFO]   k_avg: 1024.000000
+2026-03-16 02:26:57 [INFO]   k_std: 0.000000
+2026-03-16 02:26:57 [INFO]   k_min: 1024.000000
+2026-03-16 02:26:57 [INFO]   k_max: 1024.000000
+2026-03-16 02:26:57 [INFO]   time_sec_avg: 20.881924
+2026-03-16 02:26:57 [INFO]   time_sec_std: 10.041008
+2026-03-16 02:26:57 [INFO]   time_sec_min: 7.192575
+2026-03-16 02:26:57 [INFO]   time_sec_max: 34.119385
+2026-03-16 02:26:57 [INFO]   cover_mean_avg: 0.115860
+2026-03-16 02:26:57 [INFO]   cover_mean_std: 0.029378
+2026-03-16 02:26:57 [INFO]   cover_mean_min: 0.073269
+2026-03-16 02:26:57 [INFO]   cover_mean_max: 0.151993
+2026-03-16 02:26:57 [INFO]   cover_max_avg: 0.236096
+2026-03-16 02:26:57 [INFO]   cover_max_std: 0.060405
+2026-03-16 02:26:57 [INFO]   cover_max_min: 0.150013
+2026-03-16 02:26:57 [INFO]   cover_max_max: 0.308645
+2026-03-16 02:26:57 [INFO]   cover_p95_avg: 0.186904
+2026-03-16 02:26:57 [INFO]   cover_p95_std: 0.047392
+2026-03-16 02:26:57 [INFO]   cover_p95_min: 0.118600
+2026-03-16 02:26:57 [INFO]   cover_p95_max: 0.245118
+2026-03-16 02:26:57 [INFO]   cover_p99_avg: 0.208192
+2026-03-16 02:26:57 [INFO]   cover_p99_std: 0.052878
+2026-03-16 02:26:57 [INFO]   cover_p99_min: 0.132291
+2026-03-16 02:26:57 [INFO]   cover_p99_max: 0.273072
+2026-03-16 02:26:57 [INFO]   sample_nn_mean_avg: 0.264716
+2026-03-16 02:26:57 [INFO]   sample_nn_mean_std: 0.066372
+2026-03-16 02:26:57 [INFO]   sample_nn_mean_min: 0.169603
+2026-03-16 02:26:57 [INFO]   sample_nn_mean_max: 0.345629
+2026-03-16 02:26:57 [INFO]   sample_nn_min_avg: 0.236130
+2026-03-16 02:26:57 [INFO]   sample_nn_min_std: 0.060413
+2026-03-16 02:26:57 [INFO]   sample_nn_min_min: 0.150029
+2026-03-16 02:26:57 [INFO]   sample_nn_min_max: 0.308652
+2026-03-16 02:26:57 [INFO]   sample_nn_std_avg: 0.023761
+2026-03-16 02:26:57 [INFO]   sample_nn_std_std: 0.005979
+2026-03-16 02:26:57 [INFO]   sample_nn_std_min: 0.015359
+2026-03-16 02:26:57 [INFO]   sample_nn_std_max: 0.032401
+2026-03-16 02:26:57 [INFO]   x_min_avg: -15.683400
+2026-03-16 02:26:57 [INFO]   x_min_std: 6.654719
+2026-03-16 02:26:57 [INFO]   x_min_min: -22.622999
+2026-03-16 02:26:57 [INFO]   x_min_max: -3.928000
+2026-03-16 02:26:57 [INFO]   x_max_avg: -10.502000
+2026-03-16 02:26:57 [INFO]   x_max_std: 6.628541
+2026-03-16 02:26:57 [INFO]   x_max_min: -15.808000
+2026-03-16 02:26:57 [INFO]   x_max_max: 2.028000
+2026-03-16 02:26:57 [INFO]   y_min_avg: 21.427800
+2026-03-16 02:26:57 [INFO]   y_min_std: 15.438013
+2026-03-16 02:26:57 [INFO]   y_min_min: 1.320000
+2026-03-16 02:26:57 [INFO]   y_min_max: 41.303001
+2026-03-16 02:26:57 [INFO]   y_max_avg: 25.411401
+2026-03-16 02:26:57 [INFO]   y_max_std: 16.106206
+2026-03-16 02:26:57 [INFO]   y_max_min: 3.785000
+2026-03-16 02:26:57 [INFO]   y_max_max: 45.372002
+2026-03-16 02:26:57 [INFO]   z_min_avg: -0.047400
+2026-03-16 02:26:57 [INFO]   z_min_std: 0.070219
+2026-03-16 02:26:57 [INFO]   z_min_min: -0.182000
+2026-03-16 02:26:57 [INFO]   z_min_max: 0.020000
+2026-03-16 02:26:57 [INFO]   z_max_avg: 2.919600
+2026-03-16 02:26:57 [INFO]   z_max_std: 0.276037
+2026-03-16 02:26:57 [INFO]   z_max_min: 2.579000
+2026-03-16 02:26:57 [INFO]   z_max_max: 3.277000
+2026-03-16 02:26:57 [INFO]   x_range_avg: 5.181400
+2026-03-16 02:26:57 [INFO]   x_range_std: 1.157253
+2026-03-16 02:26:57 [INFO]   x_range_min: 3.653000
+2026-03-16 02:26:57 [INFO]   x_range_max: 6.815000
+2026-03-16 02:26:57 [INFO]   y_range_avg: 3.983601
+2026-03-16 02:26:57 [INFO]   y_range_std: 1.327355
+2026-03-16 02:26:57 [INFO]   y_range_min: 2.465000
+2026-03-16 02:26:57 [INFO]   y_range_max: 6.156000
+2026-03-16 02:26:57 [INFO]   z_range_avg: 2.967000
+2026-03-16 02:26:57 [INFO]   z_range_std: 0.311528
+2026-03-16 02:26:57 [INFO]   z_range_min: 2.612000
+2026-03-16 02:26:57 [INFO]   z_range_max: 3.459000
+2026-03-16 02:26:57 [INFO] Summary saved: ./s3dis_fps_outputs/summary.txt
+2026-03-16 02:26:57 [INFO] Visualizations saved to: ./s3dis_fps_outputs
+2026-03-16 02:47:17 [INFO] Collecting point counts and XYZ ranges (scanning 272 files)...

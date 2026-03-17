@@ -11,7 +11,7 @@ Conv/Linear 与 MNSIM 的映射（W8A8、矩阵乘形式）：
   的矩阵乘，通过 TCG 做 Tile/NoC 级仿真。Inputbit/Weightbit/outputbit = 8，即 W8A8；MNSIM 侧为 INT 计算。
 - Linear：映射为 MNSIM fc，Infeature×Outfeature 矩阵乘，同样 8bit 输入/权/输出，Tile/NoC 仿真。
 若需在仿真中显式计入量化和反量化（FP32↔INT8）的 cycle/功耗，请启用 hw_config.enable_w8a8_quant_dequant，
-并在 logic_circuit.quant_dequant 中配置 power/cycles。
+并在 logic_circuit.quant_pipeline_8bit / dequant_pipeline 中配置 power、pipeline_latency、parallelism。
 
 real_indata_bytes / real_rdata_bytes（可选，按层传入）：
 - indata：该层输入激活数据量（字节）。Conv1d 对应输入 [B,C_in,L] 的 numel×inputbit/8；

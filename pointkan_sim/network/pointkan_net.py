@@ -156,6 +156,7 @@ def _build_gam_operators(
             params={
                 "num_features": in_channels,
                 "num_points": output_points,
+                "k_neighbors": k,
                 "normalize": "anchor",
                 "use_xyz": False,
             },
@@ -436,17 +437,26 @@ def create_pointkan_classification(
         current_channels = out_channels
 
     # ------------------------------------------------------------------
-    # 14. Global MaxPool
+    # 14. Global MaxPool：等价为 adaptive_max_pool（与 LFP 等 pool 同类），计入 latency/area/power
     # ------------------------------------------------------------------
-    # AdaptiveMaxPool1d is not in the allowed operator set; layer is defined
-    # but has an empty operator list.
+    # 源码 F.adaptive_max_pool1d(x, 1)，形状 [B, C, L] → [B, C]
     layers.append(LayerDef(
         name="global_maxpool",
         layer_type="global_maxpool",
-        operators=[],
+        operators=[
+            OperatorRef(
+                op_type="adaptive_max_pool1d",
+                params={
+                    "output_size": 1,
+                    "num_features": current_channels,
+                    "num_points": current_points,
+                },
+                description=f"Global AdaptiveMaxPool1d(1): [B,{current_channels},{current_points}]→[B,{current_channels}]",
+            )
+        ],
         description=(
             f"Global MaxPool: [B,{current_channels},{current_points}] → "
-            f"[B,{current_channels}] (no CIM-mappable operators)"
+            f"[B,{current_channels}]"
         ),
     ))
 

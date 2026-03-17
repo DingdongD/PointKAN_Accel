@@ -230,7 +230,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--enable_w8a8_quant_dequant",
         action="store_true",
-        help="在 Conv/Linear 前后插入量化和反量化节点（FP32↔INT8），参与 cycle/功耗仿真；需在 hw_config.logic_circuit.quant_dequant 配置 power/cycles",
+        help="在 Conv/Linear 前后插入量化和反量化节点（FP32↔INT8），参与 cycle/功耗仿真；使用 logic_circuit.quant_pipeline_8bit / dequant_pipeline 配置",
     )
     parser.add_argument(
         "--sim_log_dir",
@@ -243,6 +243,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--logic_par_spool", type=int, default=None, metavar="N", help="逻辑电路 SPool 并行度（≥1）")
     parser.add_argument("--logic_par_quant_dequant", type=int, default=None, metavar="N", help="逻辑电路量化/反量化并行度（≥1）")
     parser.add_argument("--logic_clk_freq", type=float, default=None, metavar="Hz", help="数字逻辑时钟频率(Hz)，默认 1e9=1GHz")
+    parser.add_argument("--use_scalesim_systolic", action="store_true", help="base_v1/base_v2 下用 SCALE-Sim 统计 Conv/Linear 周期与 MAC/访问；能耗仍用本工程内存建模")
+    parser.add_argument("--scalesim_root", type=str, default=None, help="SCALE-Sim 根目录，默认用环境变量 SCALE_SIM_ROOT 或 /workspace/SCALE-Sim")
+    parser.add_argument("--scalesim_config", type=str, default=None, help="SCALE-Sim 配置文件路径，默认 scalesim_root/configs/demo_64x64_32kb_ws.cfg")
 
     return parser.parse_args()
 
@@ -324,6 +327,7 @@ def simulate_network(
     activation_shapes: Optional[List[ActivationShapeInfo]] = None,
     enable_layer_buffer: bool = True,
     show_shapes: bool = False,
+    repo_root: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     对整网进行周期级仿真：按层顺序派发算子、生成事件并送入调度器执行。
@@ -341,6 +345,7 @@ def simulate_network(
         activation_shapes: 每层激活 shape 与字节数（用于 buffer 事件与报告）
         enable_layer_buffer: 是否启用层间 buffer 读写与 buffer 容量约束
         show_shapes: 是否打印每层激活 shape（input → output）
+        repo_root: 项目根目录（PointKAN-pytorch，含 hw_sim/cycle_simulator/memory_model）。用于 CACTI/DRAMSim3 的 configs/outputs，与 demo_pointcloud_pipeline 的 memory_model 目录约定一致；None 时 adapter 尝试从 memory_model 包位置自动解析。
 
     Returns:
         字典，含 total_cycles、total_energy_nJ、layer_results、sim_result、
@@ -351,11 +356,94 @@ def simulate_network(
     current_cycle = 0
     clock_ns = hw_config.clock_period
     use_buffer = enable_layer_buffer and activation_shapes is not None and len(activation_shapes) == len(layers)
+    memory_runtime_context = None
+    feature_residency_plan = []
+    if repo_root:
+        setattr(hw_config, "repo_root", repo_root)
+
+    # 层间 SRAM：通过 CACTI 仿真得到 cycle/energy（仅 CACTI 回填，无回退）；同时初始化持久 memory runtime context。
+    if use_buffer:
+        from pointkan_sim.integration.memory_model_adapter import fill_inter_layer_buffer_from_cacti
+        from pointkan_sim.integration.memory_runtime import create_memory_runtime_context
+        from pointkan_sim.memory.feature_residency import build_feature_residency_plan, plan_by_layer_name, get_effective_feature_buffer_bytes, get_feature_buffer_slots
+        feature_residency_plan = build_feature_residency_plan(layers, activation_shapes, hw_config)
+        setattr(hw_config, "feature_residency_plan", feature_residency_plan)
+        setattr(hw_config, "feature_residency_plan_by_layer", plan_by_layer_name(feature_residency_plan))
+        ok = fill_inter_layer_buffer_from_cacti(hw_config, repo_root)
+        if not ok:
+            raise RuntimeError(
+                "SRAM (inter-layer buffer) energy/cycle require CACTI simulation. "
+                "CACTI was not run or failed. Check repo_root, memory_model path (hw_sim/cycle_simulator/memory_model), "
+                "cacti binary and configs (configs/cacti, outputs/cacti)."
+            )
+        memory_runtime_context = create_memory_runtime_context(hw_config, repo_root)
+
+    # 与 main 中 DRAM 事件顺序一致：首层 load，再每层 spill write / 下一层 spill read；用于 trace→DRAMSim3 预计算；未触发或失败则 raise
+    dram_precomputed_iter = None
+    dram_transfers: List[tuple] = []
+    feature_residency_plan_by_layer = getattr(hw_config, "feature_residency_plan_by_layer", {}) if use_buffer else {}
+    feature_buffer_slots = get_feature_buffer_slots(hw_config) if use_buffer else 1
+
+    def _tag_feature_buffer_slot_events(events, slot_id: int, phase: str) -> None:
+        if not use_buffer:
+            return
+        sid = max(0, int(slot_id))
+        for ev in events:
+            if (ev.operator or "").strip() != "LayerBuffer":
+                continue
+            meta = getattr(ev, "metadata", None) or {}
+            meta["buffer_name"] = "feature_sram_buffer"
+            meta["buffer_slot"] = sid
+            meta["resource_id"] = f"feature_sram_slot_{sid}"
+            meta["exclusive"] = True
+            meta["reset_scope"] = "layer_boundary"
+            meta["buffer_phase"] = phase
+            ev.metadata = meta
+
+    if use_buffer and getattr(hw_config, "dram", None):
+        buf = getattr(hw_config, "inter_layer_buffer", None)
+        spill = getattr(buf, "spill_to_dram", False) if buf else False
+        size = max(1, get_effective_feature_buffer_bytes(hw_config) or getattr(buf, "size_bytes", 65536)) if buf else 65536
+        for i in range(len(layers)):
+            shape_info = activation_shapes[i] if i < len(activation_shapes) else None
+            if not shape_info:
+                continue
+            if i == 0 and shape_info.input_bytes > 0:
+                dram_transfers.append((shape_info.input_bytes, True))
+            if i < len(layers) - 1 and shape_info.output_bytes > size and spill:
+                dram_transfers.append((shape_info.output_bytes - size, False))
+            if i > 0 and shape_info.input_bytes > size and spill:
+                dram_transfers.append((shape_info.input_bytes - size, True))
+    if use_buffer and dram_transfers and memory_runtime_context is not None:
+        dram_results = memory_runtime_context.prime_batch_transfers(dram_transfers)
+        dram_precomputed_iter = iter((r["cycles"], r["energy_nj"]) for r in dram_results)
+    elif use_buffer and dram_transfers and memory_runtime_context is None:
+        if not getattr(hw_config.dram, "dramsim3_bin", None) or not getattr(hw_config.dram, "dramsim3_config_ini", None):
+            raise RuntimeError(
+                "DRAM energy/cycle require DRAMSim3 simulation. "
+                "hw_config.dram.dramsim3_bin and dramsim3_config_ini must be set when using layer buffer with DRAM."
+            )
+        from pointkan_sim.integration.memory_model_adapter import run_dram_trace_for_layer_buffer_dram
+        dram_results = run_dram_trace_for_layer_buffer_dram(dram_transfers, hw_config, repo_root)
+        if not dram_results or len(dram_results) != len(dram_transfers):
+            raise RuntimeError(
+                "DRAM energy/cycle require DRAMSim3 simulation. "
+                "DRAMSim3 was not run or returned invalid results. Check repo_root, dramsim3_bin, dramsim3_config_ini, "
+                "and memory_model path (hw_sim/cycle_simulator/memory_model)."
+            )
+        dram_precomputed_iter = iter(dram_results)
 
     # 硬件算子顺序来源：按「层」顺序遍历，每层内按「算子」顺序派发。
     # 顺序 = 层顺序（由 network 定义，如 pointkan_elite_net：embedding → GAM-stage0 → LFP-stage0 → stage-0 → …）
     #       + 每层内： [buffer读/首层DRAM加载] → dispatch_layer(layer.operators) → [buffer写]
     # 因此 GAM 的 FPS/KNN 会紧接在 embedding 之后出现，因为第 2 层是 GAM-stage0，且 GAM 的 operators 定义为 [FPS, KNN, AffineNorm, S-Pool]。
+    # acc 模式下 FPS 仅在第一层（含 FPS 的层）执行，后续层复用第一层 FPS 结果；KNN 每层仍重新计算。
+    first_layer_with_fps: Optional[int] = None
+    if getattr(hw_config, "is_acc", False):
+        for idx, layer in enumerate(layers):
+            if any(op.op_type == "fps" for op in layer.operators):
+                first_layer_with_fps = idx
+                break
     for i, layer in enumerate(layers):
         shape_info = activation_shapes[i] if (activation_shapes and i < len(activation_shapes)) else None
 
@@ -384,7 +472,9 @@ def simulate_network(
         # 1) 首层：点云输入 N×3 从 DRAM 加载
         if use_buffer and shape_info and i == 0 and shape_info.input_bytes > 0:
             load_events = gen_first_layer_input_load_events(
-                shape_info.input_bytes, hw_config, layer.name, clock_ns
+                shape_info.input_bytes, hw_config, layer.name, clock_ns,
+                dram_precomputed=dram_precomputed_iter,
+                memory_context=memory_runtime_context,
             )
             _add_events_to_scheduler(scheduler, load_events, current_cycle, layer.name, layer.layer_type)
             if load_events:
@@ -394,15 +484,22 @@ def simulate_network(
         # 2) 非首层：从 buffer（及可选 DRAM spill）读入本层输入
         if use_buffer and shape_info and i > 0 and shape_info.input_bytes > 0:
             read_events = gen_layer_buffer_read_events(
-                shape_info.input_bytes, hw_config, layer.name, clock_ns
+                shape_info.input_bytes, hw_config, layer.name, clock_ns,
+                dram_precomputed=dram_precomputed_iter,
+                memory_context=memory_runtime_context,
             )
+            _tag_feature_buffer_slot_events(read_events, (i - 1) % max(1, feature_buffer_slots), "input_read")
             _add_events_to_scheduler(scheduler, read_events, current_cycle, layer.name, layer.layer_type)
             if read_events:
                 current_cycle += sum(e.duration for e in read_events)
                 num_events_this_layer += len(read_events)
 
-        # 3) 本层计算事件
-        layer_events = dispatch_layer(layer.operators, hw_config, mnsim_context)
+        # 3) 本层计算事件（传入 layer_index / first_layer_with_fps，供 acc 下 FPS 仅首层执行、后续复用）
+        dispatch_context = dict(mnsim_context) if mnsim_context else {}
+        dispatch_context["layer_index"] = i
+        if getattr(hw_config, "is_acc", False) and first_layer_with_fps is not None:
+            dispatch_context["first_layer_with_fps"] = first_layer_with_fps
+        layer_events = dispatch_layer(layer.operators, hw_config, dispatch_context)
         _add_events_to_scheduler(scheduler, layer_events, current_cycle, layer.name, layer.layer_type)
         layer_span = max((e.cycle + e.duration for e in layer_events), default=0)
         current_cycle += layer_span
@@ -411,11 +508,33 @@ def simulate_network(
         # 4) 非末层：将本层输出写回 buffer（及可选 DRAM spill）
         if use_buffer and shape_info and i < len(layers) - 1 and shape_info.output_bytes > 0:
             write_events = gen_layer_buffer_write_events(
-                shape_info.output_bytes, hw_config, layer.name, clock_ns
+                shape_info.output_bytes, hw_config, layer.name, clock_ns,
+                dram_precomputed=dram_precomputed_iter,
+                memory_context=memory_runtime_context,
             )
+            _tag_feature_buffer_slot_events(write_events, i % max(1, feature_buffer_slots), "output_write")
             _add_events_to_scheduler(scheduler, write_events, current_cycle, layer.name, layer.layer_type)
             if write_events:
-                current_cycle += sum(e.duration for e in write_events)
+                buf_cfg = getattr(hw_config, "inter_layer_buffer", None)
+                pipeline_mode = str(getattr(buf_cfg, "pipeline_mode", "without_pipeline") or "without_pipeline").strip().lower() if buf_cfg else "without_pipeline"
+                double_buffering = bool(getattr(buf_cfg, "double_buffering", False)) if buf_cfg else False
+                next_layer = layers[i + 1] if i + 1 < len(layers) else None
+                next_layer_name = str(getattr(next_layer, "name", "") or "") if next_layer is not None else ""
+                next_plan = feature_residency_plan_by_layer.get(next_layer_name)
+                allow_spill_overlap = (
+                    pipeline_mode == "pipeline"
+                    and double_buffering
+                    and next_plan is not None
+                    and int(getattr(next_plan, "input_dram_bytes", 0) or 0) == 0
+                )
+                if allow_spill_overlap:
+                    for ev in write_events:
+                        if (ev.operator or "").strip() == "DRAM":
+                            ev.overlapped = True
+                            meta = getattr(ev, "metadata", None) or {}
+                            meta["pipeline_overlap"] = "feature_sram_double_buffer"
+                            ev.metadata = meta
+                current_cycle += sum(e.duration for e in write_events if not getattr(e, "overlapped", False))
                 num_events_this_layer += len(write_events)
 
         layer_results.append({
@@ -486,14 +605,79 @@ def simulate_network(
         layer_name = meta.get("layer_name", "")
         area_um2 = meta.get("area_um2")
         area_um2_val = float(area_um2) if area_um2 is not None and isinstance(area_um2, (int, float)) else 0.0
-        operator_cycle_detail.append({
+        row = {
             "operator": op_name,
             "layer_name": layer_name,
             "duration": e.duration,
             "latency_ns": e.duration * clk_ns,
             "energy_nj": e.energy,
             "area_um2": area_um2_val,
-        })
+        }
+        # KAN/KAT 等带激活 shape 的算子：写入便于查看
+        for k in ("num_points", "in_features", "out_features", "activation_input_shape", "activation_output_shape"):
+            if k in meta and meta[k] is not None:
+                row[k] = meta[k]
+        operator_cycle_detail.append(row)
+
+    # SCALE-Sim 逐层 Conv/Linear：周期、利用率、MACs、能耗（仅 baseline+scalesim 时有）
+    scalesim_layer_details: List[Dict[str, Any]] = []
+    for e in sim_result.events:
+        meta = getattr(e, "metadata", None) or {}
+        if meta.get("source") != "scalesim":
+            continue
+        op = (e.operator or "").strip()
+        if op not in ("Conv1d", "Linear"):
+            continue
+        row = {
+            "layer_name": meta.get("layer_name", ""),
+            "operator": op,
+            "total_cycles": meta.get("scalesim_total_cycles", e.duration),
+            "stall_cycles": meta.get("scalesim_stall_cycles"),
+            "overall_util_pct": meta.get("overall_util_pct"),
+            "mapping_eff_pct": meta.get("mapping_eff_pct"),
+            "compute_util_pct": meta.get("compute_util_pct"),
+            "macs": meta.get("macs"),
+            "energy_nj": e.energy,
+            "mac_energy_nj": meta.get("scalesim_mac_energy_nj", e.energy if op in ("Conv1d", "Linear") else 0.0),
+            "sram_energy_nj": meta.get("scalesim_sram_energy_nj", 0.0),
+            "dram_energy_nj": meta.get("scalesim_dram_energy_nj", 0.0),
+            "sram_cycles": meta.get("scalesim_sram_cycles", 0),
+            "dram_cycles": meta.get("scalesim_dram_cycles", 0),
+            "sram_clock_period_ns": meta.get("scalesim_sram_clock_period_ns"),
+            "dram_clock_period_ns": meta.get("scalesim_dram_clock_period_ns"),
+            "dram_trace_dir": meta.get("scalesim_dram_trace_dir", ""),
+            "feature_input_dram_bytes": meta.get("feature_input_dram_bytes", 0),
+            "feature_output_dram_bytes": meta.get("feature_output_dram_bytes", 0),
+            "weight_dram_bytes": meta.get("weight_dram_bytes", 0),
+            "weight_tensor_bytes": meta.get("weight_tensor_bytes", 0),
+            "weight_dram_trace_bytes": meta.get("weight_dram_trace_bytes", 0),
+            "feature_local_sram_trace_bytes": meta.get("feature_local_sram_trace_bytes", 0),
+            "weight_sram_trace_bytes": meta.get("weight_sram_trace_bytes", 0),
+            "feature_input_dram_trace_dir": meta.get("feature_input_dram_trace_dir", ""),
+            "weight_dram_trace_dir": meta.get("weight_dram_trace_dir", ""),
+            "feature_output_dram_trace_dir": meta.get("feature_output_dram_trace_dir", ""),
+            "weight_refill_tiles": meta.get("weight_refill_tiles", 1),
+            "weight_refill_tile_bytes": meta.get("weight_refill_tile_bytes", 0),
+            "weight_sram_energy_nj": meta.get("weight_sram_energy_nj", 0.0),
+            "weight_sram_cycles": meta.get("weight_sram_cycles", 0),
+            "feature_local_sram_energy_nj": meta.get("feature_local_sram_energy_nj", 0.0),
+            "feature_local_sram_cycles": meta.get("feature_local_sram_cycles", 0),
+        }
+        # 每层激活 shape，便于核对 SCALE-Sim 周期
+        row["activation_input_shape"] = meta.get("activation_input_shape", "")
+        row["activation_output_shape"] = meta.get("activation_output_shape", "")
+        row["systolic_array_rows"] = meta.get("systolic_array_rows")
+        row["systolic_array_cols"] = meta.get("systolic_array_cols")
+        if op == "Conv1d":
+            row["num_points"] = meta.get("num_points")
+            row["in_channels"] = meta.get("in_channels")
+            row["out_channels"] = meta.get("out_channels")
+            row["kernel_size"] = meta.get("kernel_size")
+        else:
+            row["tokens"] = meta.get("tokens")
+            row["in_features"] = meta.get("in_features")
+            row["out_features"] = meta.get("out_features")
+        scalesim_layer_details.append(row)
 
     # 按执行顺序生成完整硬件算子序列（与 constants 中键名一致，便于导出 operator_sequence.txt）
     events_sorted = sorted(sim_result.events, key=lambda e: (e.cycle, getattr(e, "event_id", 0)))
@@ -515,16 +699,26 @@ def simulate_network(
 
     # 逻辑模块面积（共享模块只计一次）：未从 MNSIM/NeuroSim 得到面积的算子用 hw_config 对应模块面积
     logic = getattr(hw_config, "logic_circuit", None)
+    # KAN/KAT(GRF)：acc 用 rram_lut_macro.rram_lut.area，baseline 用 logic_circuit.grf_base_engine.area
+    kan_area = 0.0
+    if getattr(hw_config, "rram_lut_macro", None) and getattr(hw_config.rram_lut_macro, "rram_lut", None):
+        kan_area = float(getattr(hw_config.rram_lut_macro.rram_lut, "area", 0) or 0)
+    if kan_area == 0.0 and logic and getattr(logic, "grf_base_engine", None):
+        kan_area = float(getattr(logic.grf_base_engine, "area", 0) or 0)
     if logic:
         logic_area_map = {
             "LayerNorm": float(getattr(getattr(logic, "layernorm", None), "area", 0) or 0),
             "ReLU": float(getattr(getattr(logic, "relu", None), "area", 0) or 0),
             "SPool": float(getattr(getattr(logic, "spool", None), "area", 0) or 0),
-            "AdaptiveMaxPool1d": float(getattr(getattr(logic, "spool", None), "area", 0) or 0),
+            "AdaptiveMaxPool1d": float(getattr(getattr(logic, "adaptive_max_pool", None), "area", 0) or 0),
             "BN": float(getattr(getattr(logic, "batchnorm1d", None), "area", 0) or 0),
             "AffineNorm": 0.0,
-            "Quant": float(getattr(getattr(logic, "quant_dequant", None), "area", 0) or 0),
-            "Dequant": float(getattr(getattr(logic, "quant_dequant", None), "area", 0) or 0),
+            "Quant": float(getattr(getattr(logic, "quant_pipeline_8bit", None), "area", 0) or 0),
+            "Dequant": float(getattr(getattr(logic, "dequant_pipeline", None), "area", 0) or 0),
+            "ADD": float(getattr(getattr(logic, "fp32_add", None), "area", 0) or 0),
+            "MUL": float(getattr(getattr(logic, "fp32_mul", None), "area", 0) or 0),
+            "DIV": float(getattr(getattr(logic, "fp32_div", None), "area", 0) or 0),
+            "KAN": kan_area,
         }
         for op_name, area in logic_area_map.items():
             if op_name in operator_breakdown and operator_breakdown[op_name].get("area_um2", 0) == 0:
@@ -552,7 +746,10 @@ def simulate_network(
         "sim_result": sim_result,
         "operator_breakdown": operator_breakdown,
         "operator_cycle_detail": operator_cycle_detail,
+        "scalesim_layer_details": scalesim_layer_details,
         "operator_sequence": operator_sequence,
+        "memory_runtime_summary": (memory_runtime_context.summary() if memory_runtime_context is not None else None),
+        "feature_residency_plan": [entry.to_dict() for entry in feature_residency_plan],
         "memory_transactions": [tx.to_dict() for tx in memory_txns],
         "memory_transactions_summary": [
             {"src": src, "dst": dst, "kind": kind, "count": cnt}
@@ -767,6 +964,12 @@ def run_network_simulation(args: argparse.Namespace) -> Dict[str, Any]:
         hw_config.cim_backend = args.cim_backend
     if getattr(args, "neurosim_root", None):
         hw_config.neurosim_root = args.neurosim_root
+    if getattr(args, "use_scalesim_systolic", False) and getattr(hw_config, "is_baseline", False):
+        hw_config.use_scalesim_for_systolic = True
+        if getattr(args, "scalesim_root", None):
+            hw_config.scalesim_root = args.scalesim_root
+        if getattr(args, "scalesim_config", None):
+            hw_config.scalesim_config_path = args.scalesim_config
     set_logic_parallelism(
         hw_config,
         layernorm=getattr(args, "logic_par_layernorm", None),
@@ -790,7 +993,9 @@ def run_network_simulation(args: argparse.Namespace) -> Dict[str, Any]:
     if buf is not None:
         log_info(
             f"层间 buffer: size={buf.size_bytes} B, bandwidth={buf.bandwidth_bytes_per_cycle} B/cycle, "
-            f"spill_to_dram={getattr(buf, 'spill_to_dram', False)}"
+            f"spill_to_dram={getattr(buf, 'spill_to_dram', False)}, "
+            f"pipeline_mode={getattr(buf, 'pipeline_mode', 'without_pipeline')}, "
+            f"double_buffering={getattr(buf, 'double_buffering', False)}"
         )
     else:
         log_info("层间 buffer: 未配置（inter_layer_buffer 为空）")

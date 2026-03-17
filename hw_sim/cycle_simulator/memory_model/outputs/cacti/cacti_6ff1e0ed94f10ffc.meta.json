@@ -1,0 +1,26 @@
+{
+  "cfg_key": "6ff1e0ed94f10ffc",
+  "cfg_path": "/workspace/PointKAN-pytorch/hw_sim/cycle_simulator/memory_model/configs/cacti/generated/cacti_6ff1e0ed94f10ffc.cfg",
+  "template_cfg": "/workspace/PointKAN-pytorch/hw_sim/cycle_simulator/cacti/cache.cfg",
+  "cacti_bin": "/workspace/PointKAN-pytorch/hw_sim/cycle_simulator/cacti/cacti",
+  "returncode": 0,
+  "input_cfg": {
+    "size_bytes": 2097152,
+    "block_size_bytes": 64,
+    "technology_u": 0.028,
+    "output_bus_width_bits": 128,
+    "cache_type": "ram",
+    "associativity": 1,
+    "read_write_port": 1,
+    "exclusive_read_port": 0,
+    "exclusive_write_port": 0,
+    "single_ended_read_ports": 0,
+    "uca_bank_count": 1
+  },
+  "saved_files": {
+    "stdout_txt": "/workspace/PointKAN-pytorch/hw_sim/cycle_simulator/memory_model/outputs/cacti/cacti_6ff1e0ed94f10ffc.stdout.txt",
+    "stderr_txt": "/workspace/PointKAN-pytorch/hw_sim/cycle_simulator/memory_model/outputs/cacti/cacti_6ff1e0ed94f10ffc.stderr.txt",
+    "result_json": "/workspace/PointKAN-pytorch/hw_sim/cycle_simulator/memory_model/outputs/cacti/cacti_6ff1e0ed94f10ffc.result.json",
+    "meta_json": "/workspace/PointKAN-pytorch/hw_sim/cycle_simulator/memory_model/outputs/cacti/cacti_6ff1e0ed94f10ffc.meta.json"
+  }
+}

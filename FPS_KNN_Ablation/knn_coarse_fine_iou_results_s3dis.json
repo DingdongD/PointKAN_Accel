@@ -1,0 +1,51 @@
+{
+  "dataset": "S3DIS",
+  "data_dir": "/workspace/VoxelNet/pc_data/s3dis_trainval",
+  "n_samples": 272,
+  "n_total_scenes": 272,
+  "num_points": 5000000,
+  "fps_steps": 512,
+  "k_neighbors": 32,
+  "min_candidates_ratio": 1.1,
+  "tol_adaptive": 0.05,
+  "iou_coarse_fine_vs_vanilla": {
+    "mean": 0.9999648928642273,
+    "std": 0.00022853995324112475,
+    "min": 0.9981770515441895,
+    "max": 1.0
+  },
+  "iou_adaptive_vs_vanilla": {
+    "mean": 1.0,
+    "std": 0.0,
+    "min": 1.0,
+    "max": 1.0
+  },
+  "radii_mse_coarse_fine_vs_vanilla": 0.0,
+  "radii_mse_adaptive_vs_vanilla": 0.0,
+  "inference_time_vanilla_sec": {
+    "total": 518.0593591355719,
+    "mean_per_batch": 1.9046299968219553,
+    "std_per_batch": 0.0739777121574168
+  },
+  "inference_time_adaptive_sec": {
+    "total": 534.1082433201373,
+    "mean_per_batch": 1.9636332475005047,
+    "std_per_batch": 0.06514394654288981
+  },
+  "inference_time_coarse_fine_sec": {
+    "total": 176.62319113174453,
+    "mean_per_batch": 0.6493499673961196,
+    "std_per_batch": 0.008874646385966932
+  },
+  "speedup_adaptive_vs_vanilla": 0.9699520005817511,
+  "speedup_coarse_fine_vs_vanilla": 2.9331332755116377,
+  "dataset_points_stats": {
+    "n_scenes": 272,
+    "total_points": 273608340,
+    "points_per_scene_min": 85855,
+    "points_per_scene_max": 9273742,
+    "points_per_scene_mean": 1005913.0147058824
+  },
+  "num_points_requested": 5000000,
+  "num_points_effective": 5000000
+}

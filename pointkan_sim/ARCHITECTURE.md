@@ -49,8 +49,8 @@ python -m pointkan_sim.main --network pointkan --no_layer_buffer
 
 | 计算类型 | 评估方式 | 说明 |
 |----------|----------|------|
-| **MLP / Conv / Linear 等特征计算** | 调用 **MNSIM-2.0** 接口 | 利用其 RRAM-CIM 建模、Latency/Energy 模型，对 Conv1d、Linear、BN、部分 KAN 等做 cycle 与 energy 评估 |
-| **点云专用与逻辑模块** | **自定义接口**（本工程） | FPS、KNN、S-Pool、排序电路、AffineNorm、Add、MaxPool 等用自定义算子 + `hw_config` 做 cycle 与 energy 分析 |
+| **特征计算（Conv/Linear）** | **按加速器区分** | **base_v1/base_v2**：im2col + N×N 脉动阵列（`systolic_array`、`im2col` 配置）；**acc**：MNSIM/NeuroSim（RRAM-CIM，全 NetStruct 或 PE 级）。 |
+| **BN / KAN / 点云与逻辑** | **自定义或 MNSIM** | BN 融合进 Conv/Linear 或单独逻辑电路；KAN 用 RRAM-LUT；FPS、KNN、S-Pool、排序、AffineNorm、Add、MaxPool 等用自定义算子 + `hw_config`。 |
 
 最终报告合并上述两部分的 latency、energy，并做统一 breakdown 与端到端汇总。
 
@@ -58,7 +58,8 @@ python -m pointkan_sim.main --network pointkan --no_layer_buffer
 
 - **标准 SRAM buffer**：层间激活缓存（`inter_layer_buffer`），容量/带宽/DRAM spill 见 `hw_config.inter_layer_buffer`。
 - **SRAM-II**：距离计算专用，存 key 点云；每次激活 128 行，2bit 距离。周期公式：`(bits_per_axis/bit_slice)*ceil(N/128)` 每查询。配置见 `hw_config.sram_ii`。
-- **RRAM-CIM**：Conv/Linear 由 MNSIM 接口仿真（Tile/NoC）；输入/权 8bit，可选量化/反量化（`enable_w8a8_quant_dequant`）。
+- **特征计算**：**base_v1/base_v2** 用 im2col + N×N 脉动阵列（`hw_config.systolic_array`、`im2col`）；**acc** 用 RRAM-CIM，由 MNSIM/NeuroSim 仿真（Tile/NoC），输入/权 8bit，可选量化/反量化（`enable_w8a8_quant_dequant`）。  
+  **脉动仅用 SCALE-Sim**：base_v1/base_v2 下 Conv/Linear 严格通过 SCALE-Sim 脉动阵列仿真（FXP16，无量化/反量化）；未启用或失败则 raise。acc 模式用 RRAM-CIM/MNSIM，可含量化/反量化；其他配置 raise not supported。
 - **RRAM-LUT**：KAN 等由 roofline/功耗模型手动定义（`rram_lut_macro`）。
 - **Phase1**：系统启动，从 DRAM 加载 1×N×3 点云（12bit/特征）到 SRAM-II，roofline + DRAM 功耗（`hw_config.dram`，可接 CACTI）。见 `gen_first_layer_input_load_events`（首层/Phase1 唯一入口，调用方传入 input_bytes）。
 - **Phase2**：距离计算（每查询 1×1×3 从 DRAM 取，与 key 在 SRAM-II 上算距离）；算完 N 个距离后：(a) 喂入 FPS 引擎做最远点选择，或 (b) 喂入 KNN 引擎做 top-k 并写回 DRAM。Baseline 下 (a)(b) 串行（共享 bitonic）。
@@ -66,7 +67,21 @@ python -m pointkan_sim.main --network pointkan --no_layer_buffer
 - **KNN 引擎**：同上，Phase2 距离 + bitonic top-k；fuse 模式（复用距离、粗筛+细筛）待扩展。
 - **BN 融合**：`bn_fuse_with_conv_linear=True` 且 BN 紧跟 Conv/Linear 时，BN 不计 cycle/能耗（`dispatch_layer` 中跳过）。
 
-### 1.4 状态更新（2026-03-05）
+### 1.4 Breakdown 覆盖范围（算子与内存）
+
+**算子级 breakdown**（`operator_breakdown` / `latency_breakdown_by_operator.png` / `energy_breakdown_by_operator.png`）由仿真事件按 `e.operator` 聚合，完整涵盖网络中会产事件的算子：
+
+| 类别 | 算子名（饼图中） | 说明 |
+|------|------------------|------|
+| 计算 | Conv1d, Linear, KAN, FPS, KNN, LayerNorm, ReLU, ADD, AdaptiveMaxPool1d, AffineNorm, SPool | 与网络定义一致；BN 在融合时无单独事件，不出现。 |
+| 内存 | **LayerBuffer**（层间 SRAM） | 每层输入从 buffer 读、输出写回 buffer（容量/带宽/能耗见 `inter_layer_buffer`）。 |
+| 内存 | **DRAM** | 首层点云从 DRAM 加载；若启用 `spill_to_dram`，超出 buffer 的读写也计为 DRAM 事件。 |
+
+- **Conv/Linear**：baseline 下 SCALE-Sim 单事件能耗已含 MAC + 该层 SRAM 访问（IFMAP/FILTER/OFMAP）+ 可选 DRAM（per_access 或 trace→DRAMSim3），不再单独列 SRAM/DRAM 行。
+- **内存汇总**：`memory_transactions_summary.txt` 与 `--export_memory_transactions` 导出按 src/dst/kind 的访存次数；能耗与周期已并入上述 **LayerBuffer** 与 **DRAM** 两档，饼图中可区分 DRAM 与 SRAM（LayerBuffer）。
+- **DRAM/SRAM 统一接口**（base_v1/base_v2）：层间 SRAM、首层 DRAM、spill DRAM 的周期与能耗均经 `pointkan_sim.integration.memory_model_adapter` 的 `query_sram_cycles_energy` / `query_dram_cycles_energy` 计算，仅使用 CACTI/DRAMSim3 回填的访问级模型（无带宽功率回退）；需先调用 `fill_inter_layer_buffer_from_cacti` 等回填。baseline 中 SCALE-Sim 的 trace 调度可参考 `SCALE-Sim/demo_with_accelergy.py`。
+
+### 1.5 状态更新（2026-03-05）
 
 以下能力已在当前代码中落地：
 
@@ -153,10 +168,10 @@ pointkan_sim/
 ### 2.3 硬件配置抽象（configs/hw_config.py）
 
 - **单芯片、扁平化**：无 Chip→Tile→PE 层级，由 5 类宏模块组成：
-  1. **SRAM-CIM Macro**：array、shift_add、min_distance_table、buffer（FPS/KNN 距离计算）
+  1. **SRAM-CIM Macro**：array、shift_add、input_buffer、output_buffer、dist2_merge_adder（距离计算：交叉项 + 自平方项累加）；FPS 最小距离表归属排序电路
   2. **RRAM-LUT Macro**：rram_lut（+ acc 的 rram_lut_speculative）
   3. **RRAM-CIM Macro**：占位，计划与 MNSIM 对接，用于 Conv/Linear 等
-  4. **Sorting Circuit**：baseline 为 comp_tree_1024_max + comp_bitonic_1024_min32；acc 为 two_stage_reconf_comparator
+  4. **Sorting Circuit**：min_distance_table（FPS 最小距离表更新）、baseline 为 BitonicSort（FPS MAX / KNN MIN），acc 为 coarse+fine filter
   5. **Logic Circuit**：batchnorm1d、layernorm、relu、spool、quant_dequant（acc 另有 interpolation）
 
 - **当前状态**：各子模块的 `power`、`cycles`、`area` 多为 `0` 或 `TODO`，需填表或由 MNSIM 接口回填。

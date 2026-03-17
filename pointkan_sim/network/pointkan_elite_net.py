@@ -23,6 +23,12 @@ Key differences from standard PointKAN:
      instead of KANLayer (B-spline KAN + DWConv)
   3. No DWConv inside KAN
 
+Efficient_KAN 与 KAT 统计约定（与 PointKAN-elite 一致）:
+  - 真实前向: x → act1(KAT_Group, mode="identity") → fc1 → act2(KAT_Group, mode=gelu) → fc2
+  - act1 为 Identity（init.json 中 numerator=[0,1,0,0,0,0]），不占 cycle/energy。
+  - 仿真仅对「有效」KAT 建一层算子: 每个 Efficient_KAN 只发一个 KAN 事件，对应 act2；
+    act1 不建算子、不参与 cycle/energy 汇总，故统计的 KAN 即为有效 KAT_GROUP 部分。
+
 """
 
 from dataclasses import dataclass, field
@@ -110,11 +116,17 @@ def _build_lfp_operators_elite(channels: int, num_points: int) -> List[OperatorR
         params={"normalized_shape": channels, "num_points": num_points},
         description=f"LFP local LayerNorm({channels}) [Pre-Norm]",
     ))
-    # Efficient_KAN 展开：operation1.fc1, operation1.fc2（与 pointkanElite LFP operation1 一致）
+    # Efficient_KAN 展开：operation1.fc1 → KAT(GRF) → operation1.fc2（与 pointkanElite LFP operation1 一致）
+    # 仅对有效 KAT(act2) 建一层 KAN；act1(Identity) 不建算子、不计 cycle/energy
     ops.append(OperatorRef(
         op_type="linear",
         params={"in_features": channels, "out_features": channels},
         description=f"LFP local operation1.fc1 Linear({channels}→{channels})",
+    ))
+    ops.append(OperatorRef(
+        op_type="kan",
+        params={"in_features": channels, "out_features": channels, "num_points": num_points, "variant": "elite"},
+        description=f"LFP local operation1 KAT/GRF ({channels}→{channels}, rational activation) [act2 only]",
     ))
     ops.append(OperatorRef(
         op_type="linear",
@@ -157,11 +169,17 @@ def _build_lfp_operators_elite(channels: int, num_points: int) -> List[OperatorR
         params={"normalized_shape": channels, "num_points": num_points},
         description=f"LFP center LayerNorm({channels}) [Pre-Norm]",
     ))
-    # Efficient_KAN 展开：operation2.fc1, operation2.fc2（与 pointkanElite LFP operation2 一致）
+    # Efficient_KAN 展开：operation2.fc1 → KAT(GRF) → operation2.fc2（与 pointkanElite LFP operation2 一致）
+    # 仅对有效 KAT(act2) 建一层 KAN；act1(Identity) 不建算子、不计 cycle/energy
     ops.append(OperatorRef(
         op_type="linear",
         params={"in_features": channels, "out_features": channels},
         description=f"LFP center operation2.fc1 Linear({channels}→{channels})",
+    ))
+    ops.append(OperatorRef(
+        op_type="kan",
+        params={"in_features": channels, "out_features": channels, "num_points": num_points, "variant": "elite"},
+        description=f"LFP center operation2 KAT/GRF ({channels}→{channels}, rational activation) [act2 only]",
     ))
     ops.append(OperatorRef(
         op_type="linear",

@@ -1,0 +1,52 @@
+{
+  "dataset": "Waymo",
+  "device": "cpu",
+  "data_dir": "/workspace/VoxelNet/Waymo_Mini/Waymo_mini/kitti_format/training/velodyne",
+  "n_samples": 595,
+  "n_total_frames": 595,
+  "num_points": 64778,
+  "fps_steps": 512,
+  "k_neighbors": 32,
+  "do_roi": true,
+  "min_candidates_ratio": 1.1,
+  "tol_adaptive": 0.05,
+  "iou_coarse_fine_vs_vanilla": {
+    "mean": 0.2835371792316437,
+    "std": 0.15892599523067474,
+    "min": 0.11709767580032349,
+    "max": 0.708137035369873
+  },
+  "iou_adaptive_vs_vanilla": {
+    "mean": 0.27731993794441223,
+    "std": 0.15252704918384552,
+    "min": 0.11595817655324936,
+    "max": 0.6812726855278015
+  },
+  "radii_mse_coarse_fine_vs_vanilla": 0.0,
+  "radii_mse_adaptive_vs_vanilla": 0.0,
+  "inference_time_vanilla_sec": {
+    "total": 862.2367415523622,
+    "mean_per_batch": 1.4491373807602725,
+    "std_per_batch": 0.13061006277891213
+  },
+  "inference_time_adaptive_sec": {
+    "total": 861.3347576139495,
+    "mean_per_batch": 1.4476214413679822,
+    "std_per_batch": 0.1353437607757982
+  },
+  "inference_time_coarse_fine_sec": {
+    "total": 748.414369424805,
+    "mean_per_batch": 1.25783927634421,
+    "std_per_batch": 0.11728499756099342
+  },
+  "speedup_adaptive_vs_vanilla": 1.0010471932433231,
+  "speedup_coarse_fine_vs_vanilla": 1.152084696362839,
+  "dataset_points_stats": {
+    "n_frames": 595,
+    "points_per_frame_min": 30886,
+    "points_per_frame_max": 64778,
+    "points_per_frame_mean": 50087.24705882353
+  },
+  "num_points_requested": 5000000,
+  "num_points_effective": 64778
+}

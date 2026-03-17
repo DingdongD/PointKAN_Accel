@@ -1,0 +1,16 @@
+layer_name,layer_type,input_bytes,input_sram_bytes,input_dram_bytes,output_bytes,output_sram_bytes,output_dram_bytes,usable_buffer_bytes,total_buffer_bytes,buffer_slots,pipeline_mode,double_buffering,note
+embedding,embedding,12288,12288,0,131072,131072,0,131072,262144,2,pipeline,True,first-layer input assumed prefetched before compute; double-buffered feature SRAM reserves one slot per in-flight tensor
+GAM-stage0,GAM,131072,131072,0,131072,131072,0,131072,262144,2,pipeline,True,input prefers persistent feature SRAM; spill bytes refill from DRAM; double-buffered feature SRAM reserves one slot per in-flight tensor
+LFP-stage0,LFP,131072,131072,0,256,256,0,131072,262144,2,pipeline,True,input prefers persistent feature SRAM; spill bytes refill from DRAM; double-buffered feature SRAM reserves one slot per in-flight tensor
+stage-0,stage,256,256,0,131072,131072,0,131072,262144,2,pipeline,True,input prefers persistent feature SRAM; spill bytes refill from DRAM; double-buffered feature SRAM reserves one slot per in-flight tensor
+GAM-stage1,GAM,131072,131072,0,131072,131072,0,131072,262144,2,pipeline,True,input prefers persistent feature SRAM; spill bytes refill from DRAM; double-buffered feature SRAM reserves one slot per in-flight tensor
+LFP-stage1,LFP,131072,131072,0,512,512,0,131072,262144,2,pipeline,True,input prefers persistent feature SRAM; spill bytes refill from DRAM; double-buffered feature SRAM reserves one slot per in-flight tensor
+stage-1,stage,512,512,0,131072,131072,0,131072,262144,2,pipeline,True,input prefers persistent feature SRAM; spill bytes refill from DRAM; double-buffered feature SRAM reserves one slot per in-flight tensor
+GAM-stage2,GAM,131072,131072,0,131072,131072,0,131072,262144,2,pipeline,True,input prefers persistent feature SRAM; spill bytes refill from DRAM; double-buffered feature SRAM reserves one slot per in-flight tensor
+LFP-stage2,LFP,131072,131072,0,1024,1024,0,131072,262144,2,pipeline,True,input prefers persistent feature SRAM; spill bytes refill from DRAM; double-buffered feature SRAM reserves one slot per in-flight tensor
+stage-2,stage,1024,1024,0,131072,131072,0,131072,262144,2,pipeline,True,input prefers persistent feature SRAM; spill bytes refill from DRAM; double-buffered feature SRAM reserves one slot per in-flight tensor
+GAM-stage3,GAM,131072,131072,0,131072,131072,0,131072,262144,2,pipeline,True,input prefers persistent feature SRAM; spill bytes refill from DRAM; double-buffered feature SRAM reserves one slot per in-flight tensor
+LFP-stage3,LFP,131072,131072,0,2048,2048,0,131072,262144,2,pipeline,True,input prefers persistent feature SRAM; spill bytes refill from DRAM; double-buffered feature SRAM reserves one slot per in-flight tensor
+stage-3,stage,2048,2048,0,131072,131072,0,131072,262144,2,pipeline,True,input prefers persistent feature SRAM; spill bytes refill from DRAM; double-buffered feature SRAM reserves one slot per in-flight tensor
+global_maxpool,global_maxpool,131072,131072,0,2048,2048,0,131072,262144,2,pipeline,True,input prefers persistent feature SRAM; spill bytes refill from DRAM; double-buffered feature SRAM reserves one slot per in-flight tensor
+classifier,classifier,2048,2048,0,160,160,0,131072,262144,2,pipeline,True,input prefers persistent feature SRAM; spill bytes refill from DRAM; double-buffered feature SRAM reserves one slot per in-flight tensor

@@ -1,0 +1,145 @@
+[2026-03-13 14:39:21] INFO     | Logger initialized: pointcloud_ppa_sim
+[2026-03-13 14:39:21] INFO     | Log level: INFO
+[2026-03-13 14:39:21] INFO     | Log file: sim_log/simulation_20260313_143921.log
+[2026-03-13 14:39:21] INFO     | ============================================================
+[2026-03-13 14:39:21] INFO     |  真实数据评估：ModelNet40 样本 + checkpoint 权重 + MNSIM 对应层 PPA
+[2026-03-13 14:39:21] INFO     | ============================================================
+[2026-03-13 14:39:21] INFO     | Checkpoint: /workspace/PointKAN-pytorch/PointKAN-elite/classification_ModelNet40/checkpoints/pointKANElite-pointkan_elite_exp-42
+[2026-03-13 14:39:21] INFO     | num_points=1024, num_classes=40, batch_size=1
+[2026-03-13 14:39:25] INFO     | 加速器: baseline (BASELINE)
+[2026-03-13 14:39:25] INFO     | CIM 并行度: 128
+[2026-03-13 14:39:25] INFO     | Bit-serial 周期: 6
+[2026-03-13 14:39:25] INFO     | 层间 buffer: size=65536 B, bandwidth=256 B/cycle, spill_to_dram=True
+[2026-03-13 14:39:25] INFO     | 层间量化/反量化: 未启用 (默认，假定 W8A8 已就绪)
+[2026-03-13 14:39:25] INFO     | BN 融合: 启用 (BN 不单独计入)
+[2026-03-13 14:39:25] INFO     | 数字逻辑时钟: 1.0000 ns (1000.00 MHz) (默认 1 GHz)
+[2026-03-13 14:39:25] INFO     | 
+[2026-03-13 14:39:26] INFO     | ========== LayerDef 中的 conv/linear（MNSIM 使用的层）==========
+[2026-03-13 14:39:26] INFO     |   共 36 层（仅 CIM 映射的 conv1d/linear，不含 KAN 内部等）
+[2026-03-13 14:39:26] INFO     |   [0] embedding op_idx=0 conv1d  in_ch=3, out_ch=32, L=1024, K=1  indata_bytes=3072  rdata_bytes=96
+[2026-03-13 14:39:26] INFO     |   [1] LFP-stage0 op_idx=0 conv1d  in_ch=64, out_ch=64, L=0, K=1  indata_bytes=786432  rdata_bytes=4096
+[2026-03-13 14:39:26] INFO     |   [2] LFP-stage0 op_idx=4 linear  in_f=64, out_f=64  indata_bytes=786432  rdata_bytes=4096
+[2026-03-13 14:39:26] INFO     |   [3] LFP-stage0 op_idx=5 linear  in_f=64, out_f=64  indata_bytes=786432  rdata_bytes=4096
+[2026-03-13 14:39:26] INFO     |   [4] LFP-stage0 op_idx=8 conv1d  in_ch=64, out_ch=64, L=0, K=1  indata_bytes=32768  rdata_bytes=4096
+[2026-03-13 14:39:26] INFO     |   [5] LFP-stage0 op_idx=12 linear  in_f=64, out_f=64  indata_bytes=32768  rdata_bytes=4096
+[2026-03-13 14:39:26] INFO     |   [6] LFP-stage0 op_idx=13 linear  in_f=64, out_f=64  indata_bytes=32768  rdata_bytes=4096
+[2026-03-13 14:39:26] INFO     |   [7] stage-0 op_idx=0 conv1d  in_ch=64, out_ch=64, L=0, K=1  indata_bytes=32768  rdata_bytes=4096
+[2026-03-13 14:39:26] INFO     |   [8] stage-0 op_idx=3 conv1d  in_ch=64, out_ch=64, L=0, K=1  indata_bytes=32768  rdata_bytes=4096
+[2026-03-13 14:39:26] INFO     |   [9] LFP-stage1 op_idx=0 conv1d  in_ch=128, out_ch=128, L=0, K=1  indata_bytes=786432  rdata_bytes=16384
+[2026-03-13 14:39:26] INFO     |   [10] LFP-stage1 op_idx=4 linear  in_f=128, out_f=128  indata_bytes=786432  rdata_bytes=16384
+[2026-03-13 14:39:26] INFO     |   [11] LFP-stage1 op_idx=5 linear  in_f=128, out_f=128  indata_bytes=786432  rdata_bytes=16384
+[2026-03-13 14:39:26] INFO     |   [12] LFP-stage1 op_idx=8 conv1d  in_ch=128, out_ch=128, L=0, K=1  indata_bytes=32768  rdata_bytes=16384
+[2026-03-13 14:39:26] INFO     |   [13] LFP-stage1 op_idx=12 linear  in_f=128, out_f=128  indata_bytes=32768  rdata_bytes=16384
+[2026-03-13 14:39:26] INFO     |   [14] LFP-stage1 op_idx=13 linear  in_f=128, out_f=128  indata_bytes=32768  rdata_bytes=16384
+[2026-03-13 14:39:26] INFO     |   [15] stage-1 op_idx=0 conv1d  in_ch=128, out_ch=128, L=0, K=1  indata_bytes=32768  rdata_bytes=16384
+[2026-03-13 14:39:26] INFO     |   [16] stage-1 op_idx=3 conv1d  in_ch=128, out_ch=128, L=0, K=1  indata_bytes=32768  rdata_bytes=16384
+[2026-03-13 14:39:26] INFO     |   [17] LFP-stage2 op_idx=0 conv1d  in_ch=256, out_ch=256, L=0, K=1  indata_bytes=786432  rdata_bytes=65536
+[2026-03-13 14:39:26] INFO     |   [18] LFP-stage2 op_idx=4 linear  in_f=256, out_f=256  indata_bytes=786432  rdata_bytes=65536
+[2026-03-13 14:39:26] INFO     |   [19] LFP-stage2 op_idx=5 linear  in_f=256, out_f=256  indata_bytes=786432  rdata_bytes=65536
+[2026-03-13 14:39:26] INFO     |   [20] LFP-stage2 op_idx=8 conv1d  in_ch=256, out_ch=256, L=0, K=1  indata_bytes=32768  rdata_bytes=65536
+[2026-03-13 14:39:26] INFO     |   [21] LFP-stage2 op_idx=12 linear  in_f=256, out_f=256  indata_bytes=32768  rdata_bytes=65536
+[2026-03-13 14:39:26] INFO     |   [22] LFP-stage2 op_idx=13 linear  in_f=256, out_f=256  indata_bytes=32768  rdata_bytes=65536
+[2026-03-13 14:39:26] INFO     |   [23] stage-2 op_idx=0 conv1d  in_ch=256, out_ch=256, L=0, K=1  indata_bytes=32768  rdata_bytes=65536
+[2026-03-13 14:39:26] INFO     |   [24] stage-2 op_idx=3 conv1d  in_ch=256, out_ch=256, L=0, K=1  indata_bytes=32768  rdata_bytes=65536
+[2026-03-13 14:39:26] INFO     |   [25] LFP-stage3 op_idx=0 conv1d  in_ch=512, out_ch=512, L=0, K=1  indata_bytes=786432  rdata_bytes=262144
+[2026-03-13 14:39:26] INFO     |   [26] LFP-stage3 op_idx=4 linear  in_f=512, out_f=512  indata_bytes=786432  rdata_bytes=262144
+[2026-03-13 14:39:26] INFO     |   [27] LFP-stage3 op_idx=5 linear  in_f=512, out_f=512  indata_bytes=786432  rdata_bytes=262144
+[2026-03-13 14:39:26] INFO     |   [28] LFP-stage3 op_idx=8 conv1d  in_ch=512, out_ch=512, L=0, K=1  indata_bytes=32768  rdata_bytes=262144
+[2026-03-13 14:39:26] INFO     |   [29] LFP-stage3 op_idx=12 linear  in_f=512, out_f=512  indata_bytes=32768  rdata_bytes=262144
+[2026-03-13 14:39:26] INFO     |   [30] LFP-stage3 op_idx=13 linear  in_f=512, out_f=512  indata_bytes=32768  rdata_bytes=262144
+[2026-03-13 14:39:26] INFO     |   [31] stage-3 op_idx=0 conv1d  in_ch=512, out_ch=512, L=0, K=1  indata_bytes=32768  rdata_bytes=262144
+[2026-03-13 14:39:26] INFO     |   [32] stage-3 op_idx=3 conv1d  in_ch=512, out_ch=512, L=0, K=1  indata_bytes=32768  rdata_bytes=262144
+[2026-03-13 14:39:26] INFO     |   [33] classifier op_idx=0 linear  in_f=512, out_f=512  indata_bytes=512  rdata_bytes=262144
+[2026-03-13 14:39:26] INFO     |   [34] classifier op_idx=3 linear  in_f=512, out_f=256  indata_bytes=512  rdata_bytes=131072
+[2026-03-13 14:39:26] INFO     |   [35] classifier op_idx=6 linear  in_f=256, out_f=40  indata_bytes=256  rdata_bytes=10240
+[2026-03-13 14:39:26] INFO     | ========== 真实前向收集的 conv/linear（模型中所有 nn.Conv1d/nn.Linear）==========
+[2026-03-13 14:39:26] INFO     |   共 36 层
+[2026-03-13 14:39:26] INFO     |   [0] embedding.net.0 conv  in_ch=3, out_ch=32, L=1024, K=1  indata_bytes=3072  rdata_bytes=96
+[2026-03-13 14:39:26] INFO     |   [1] LFP_blocks_list.0.transfer1.net.0 conv  in_ch=64, out_ch=64, L=24, K=1  indata_bytes=786432  rdata_bytes=4096
+[2026-03-13 14:39:26] INFO     |   [2] LFP_blocks_list.0.operation1.0.fc1 fc  in_f=64, out_f=64, tokens=24  indata_bytes=786432  rdata_bytes=4096
+[2026-03-13 14:39:26] INFO     |   [3] LFP_blocks_list.0.operation1.0.fc2 fc  in_f=64, out_f=64, tokens=24  indata_bytes=786432  rdata_bytes=4096
+[2026-03-13 14:39:26] INFO     |   [4] LFP_blocks_list.0.transfer2.net.0 conv  in_ch=64, out_ch=64, L=512, K=1  indata_bytes=32768  rdata_bytes=4096
+[2026-03-13 14:39:26] INFO     |   [5] LFP_blocks_list.0.operation2.0.fc1 fc  in_f=64, out_f=64, tokens=512  indata_bytes=32768  rdata_bytes=4096
+[2026-03-13 14:39:26] INFO     |   [6] LFP_blocks_list.0.operation2.0.fc2 fc  in_f=64, out_f=64, tokens=512  indata_bytes=32768  rdata_bytes=4096
+[2026-03-13 14:39:26] INFO     |   [7] GFP_blocks_list.0.operation.0.net1.0 conv  in_ch=64, out_ch=64, L=512, K=1  indata_bytes=32768  rdata_bytes=4096
+[2026-03-13 14:39:26] INFO     |   [8] GFP_blocks_list.0.operation.0.net2.0 conv  in_ch=64, out_ch=64, L=512, K=1  indata_bytes=32768  rdata_bytes=4096
+[2026-03-13 14:39:26] INFO     |   [9] LFP_blocks_list.1.transfer1.net.0 conv  in_ch=128, out_ch=128, L=24, K=1  indata_bytes=786432  rdata_bytes=16384
+[2026-03-13 14:39:26] INFO     |   [10] LFP_blocks_list.1.operation1.0.fc1 fc  in_f=128, out_f=128, tokens=24  indata_bytes=786432  rdata_bytes=16384
+[2026-03-13 14:39:26] INFO     |   [11] LFP_blocks_list.1.operation1.0.fc2 fc  in_f=128, out_f=128, tokens=24  indata_bytes=786432  rdata_bytes=16384
+[2026-03-13 14:39:26] INFO     |   [12] LFP_blocks_list.1.transfer2.net.0 conv  in_ch=128, out_ch=128, L=256, K=1  indata_bytes=32768  rdata_bytes=16384
+[2026-03-13 14:39:26] INFO     |   [13] LFP_blocks_list.1.operation2.0.fc1 fc  in_f=128, out_f=128, tokens=256  indata_bytes=32768  rdata_bytes=16384
+[2026-03-13 14:39:26] INFO     |   [14] LFP_blocks_list.1.operation2.0.fc2 fc  in_f=128, out_f=128, tokens=256  indata_bytes=32768  rdata_bytes=16384
+[2026-03-13 14:39:26] INFO     |   [15] GFP_blocks_list.1.operation.0.net1.0 conv  in_ch=128, out_ch=128, L=256, K=1  indata_bytes=32768  rdata_bytes=16384
+[2026-03-13 14:39:26] INFO     |   [16] GFP_blocks_list.1.operation.0.net2.0 conv  in_ch=128, out_ch=128, L=256, K=1  indata_bytes=32768  rdata_bytes=16384
+[2026-03-13 14:39:26] INFO     |   [17] LFP_blocks_list.2.transfer1.net.0 conv  in_ch=256, out_ch=256, L=24, K=1  indata_bytes=786432  rdata_bytes=65536
+[2026-03-13 14:39:26] INFO     |   [18] LFP_blocks_list.2.operation1.0.fc1 fc  in_f=256, out_f=256, tokens=24  indata_bytes=786432  rdata_bytes=65536
+[2026-03-13 14:39:26] INFO     |   [19] LFP_blocks_list.2.operation1.0.fc2 fc  in_f=256, out_f=256, tokens=24  indata_bytes=786432  rdata_bytes=65536
+[2026-03-13 14:39:26] INFO     |   [20] LFP_blocks_list.2.transfer2.net.0 conv  in_ch=256, out_ch=256, L=128, K=1  indata_bytes=32768  rdata_bytes=65536
+[2026-03-13 14:39:26] INFO     |   [21] LFP_blocks_list.2.operation2.0.fc1 fc  in_f=256, out_f=256, tokens=128  indata_bytes=32768  rdata_bytes=65536
+[2026-03-13 14:39:26] INFO     |   [22] LFP_blocks_list.2.operation2.0.fc2 fc  in_f=256, out_f=256, tokens=128  indata_bytes=32768  rdata_bytes=65536
+[2026-03-13 14:39:26] INFO     |   [23] GFP_blocks_list.2.operation.0.net1.0 conv  in_ch=256, out_ch=256, L=128, K=1  indata_bytes=32768  rdata_bytes=65536
+[2026-03-13 14:39:26] INFO     |   [24] GFP_blocks_list.2.operation.0.net2.0 conv  in_ch=256, out_ch=256, L=128, K=1  indata_bytes=32768  rdata_bytes=65536
+[2026-03-13 14:39:26] INFO     |   [25] LFP_blocks_list.3.transfer1.net.0 conv  in_ch=512, out_ch=512, L=24, K=1  indata_bytes=786432  rdata_bytes=262144
+[2026-03-13 14:39:26] INFO     |   [26] LFP_blocks_list.3.operation1.0.fc1 fc  in_f=512, out_f=512, tokens=24  indata_bytes=786432  rdata_bytes=262144
+[2026-03-13 14:39:26] INFO     |   [27] LFP_blocks_list.3.operation1.0.fc2 fc  in_f=512, out_f=512, tokens=24  indata_bytes=786432  rdata_bytes=262144
+[2026-03-13 14:39:26] INFO     |   [28] LFP_blocks_list.3.transfer2.net.0 conv  in_ch=512, out_ch=512, L=64, K=1  indata_bytes=32768  rdata_bytes=262144
+[2026-03-13 14:39:26] INFO     |   [29] LFP_blocks_list.3.operation2.0.fc1 fc  in_f=512, out_f=512, tokens=64  indata_bytes=32768  rdata_bytes=262144
+[2026-03-13 14:39:26] INFO     |   [30] LFP_blocks_list.3.operation2.0.fc2 fc  in_f=512, out_f=512, tokens=64  indata_bytes=32768  rdata_bytes=262144
+[2026-03-13 14:39:26] INFO     |   [31] GFP_blocks_list.3.operation.0.net1.0 conv  in_ch=512, out_ch=512, L=64, K=1  indata_bytes=32768  rdata_bytes=262144
+[2026-03-13 14:39:26] INFO     |   [32] GFP_blocks_list.3.operation.0.net2.0 conv  in_ch=512, out_ch=512, L=64, K=1  indata_bytes=32768  rdata_bytes=262144
+[2026-03-13 14:39:26] INFO     |   [33] classifier.0 fc  in_f=512, out_f=512, tokens=1  indata_bytes=512  rdata_bytes=262144
+[2026-03-13 14:39:26] INFO     |   [34] classifier.4 fc  in_f=512, out_f=256, tokens=1  indata_bytes=512  rdata_bytes=131072
+[2026-03-13 14:39:26] INFO     |   [35] classifier.8 fc  in_f=256, out_f=40, tokens=1  indata_bytes=256  rdata_bytes=10240
+[2026-03-13 14:39:26] INFO     | ========== 非线性算子激活（BatchNorm / LayerNorm / ReLU / 池化 等）==========
+[2026-03-13 14:39:26] INFO     |   共 50 个算子（按前向顺序）
+[2026-03-13 14:39:26] INFO     |   [0] embedding.net.1  batchnorm1d  in=1×32×1024 (32768 elem, 131072 B)  out=1×32×1024 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [1] embedding.act  relu  in=1×32×1024 (32768 elem, 131072 B)  out=1×32×1024 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [2] GAM_list.0  s-pool  in=1×512×24×64 (786432 elem, 3145728 B)  out=1×64×512 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [3] LFP_blocks_list.0.transfer1.net.1  batchnorm1d  in=512×64×24 (786432 elem, 3145728 B)  out=512×64×24 (786432 elem, 3145728 B)
+[2026-03-13 14:39:26] INFO     |   [4] LFP_blocks_list.0.transfer1.act  relu  in=512×64×24 (786432 elem, 3145728 B)  out=512×64×24 (786432 elem, 3145728 B)
+[2026-03-13 14:39:26] INFO     |   [5] LFP_blocks_list.0.norm1  layernorm  in=512×24×64 (786432 elem, 3145728 B)  out=512×24×64 (786432 elem, 3145728 B)
+[2026-03-13 14:39:26] INFO     |   [6] LFP_blocks_list.0.transfer2.net.1  batchnorm1d  in=1×64×512 (32768 elem, 131072 B)  out=1×64×512 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [7] LFP_blocks_list.0.transfer2.act  relu  in=1×64×512 (32768 elem, 131072 B)  out=1×64×512 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [8] LFP_blocks_list.0.norm2  layernorm  in=1×512×64 (32768 elem, 131072 B)  out=1×512×64 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [9] GFP_blocks_list.0.operation.0.net1.1  batchnorm1d  in=1×64×512 (32768 elem, 131072 B)  out=1×64×512 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [10] GFP_blocks_list.0.operation.0.act  relu  in=1×64×512 (32768 elem, 131072 B)  out=1×64×512 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [11] GFP_blocks_list.0.operation.0.net2.1  batchnorm1d  in=1×64×512 (32768 elem, 131072 B)  out=1×64×512 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [12] GFP_blocks_list.0.operation.0.act  relu  in=1×64×512 (32768 elem, 131072 B)  out=1×64×512 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [13] GAM_list.1  s-pool  in=1×256×24×128 (786432 elem, 3145728 B)  out=1×128×256 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [14] LFP_blocks_list.1.transfer1.net.1  batchnorm1d  in=256×128×24 (786432 elem, 3145728 B)  out=256×128×24 (786432 elem, 3145728 B)
+[2026-03-13 14:39:26] INFO     |   [15] LFP_blocks_list.1.transfer1.act  relu  in=256×128×24 (786432 elem, 3145728 B)  out=256×128×24 (786432 elem, 3145728 B)
+[2026-03-13 14:39:26] INFO     |   [16] LFP_blocks_list.1.norm1  layernorm  in=256×24×128 (786432 elem, 3145728 B)  out=256×24×128 (786432 elem, 3145728 B)
+[2026-03-13 14:39:26] INFO     |   [17] LFP_blocks_list.1.transfer2.net.1  batchnorm1d  in=1×128×256 (32768 elem, 131072 B)  out=1×128×256 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [18] LFP_blocks_list.1.transfer2.act  relu  in=1×128×256 (32768 elem, 131072 B)  out=1×128×256 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [19] LFP_blocks_list.1.norm2  layernorm  in=1×256×128 (32768 elem, 131072 B)  out=1×256×128 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [20] GFP_blocks_list.1.operation.0.net1.1  batchnorm1d  in=1×128×256 (32768 elem, 131072 B)  out=1×128×256 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [21] GFP_blocks_list.1.operation.0.act  relu  in=1×128×256 (32768 elem, 131072 B)  out=1×128×256 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [22] GFP_blocks_list.1.operation.0.net2.1  batchnorm1d  in=1×128×256 (32768 elem, 131072 B)  out=1×128×256 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [23] GFP_blocks_list.1.operation.0.act  relu  in=1×128×256 (32768 elem, 131072 B)  out=1×128×256 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [24] GAM_list.2  s-pool  in=1×128×24×256 (786432 elem, 3145728 B)  out=1×256×128 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [25] LFP_blocks_list.2.transfer1.net.1  batchnorm1d  in=128×256×24 (786432 elem, 3145728 B)  out=128×256×24 (786432 elem, 3145728 B)
+[2026-03-13 14:39:26] INFO     |   [26] LFP_blocks_list.2.transfer1.act  relu  in=128×256×24 (786432 elem, 3145728 B)  out=128×256×24 (786432 elem, 3145728 B)
+[2026-03-13 14:39:26] INFO     |   [27] LFP_blocks_list.2.norm1  layernorm  in=128×24×256 (786432 elem, 3145728 B)  out=128×24×256 (786432 elem, 3145728 B)
+[2026-03-13 14:39:26] INFO     |   [28] LFP_blocks_list.2.transfer2.net.1  batchnorm1d  in=1×256×128 (32768 elem, 131072 B)  out=1×256×128 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [29] LFP_blocks_list.2.transfer2.act  relu  in=1×256×128 (32768 elem, 131072 B)  out=1×256×128 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [30] LFP_blocks_list.2.norm2  layernorm  in=1×128×256 (32768 elem, 131072 B)  out=1×128×256 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [31] GFP_blocks_list.2.operation.0.net1.1  batchnorm1d  in=1×256×128 (32768 elem, 131072 B)  out=1×256×128 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [32] GFP_blocks_list.2.operation.0.act  relu  in=1×256×128 (32768 elem, 131072 B)  out=1×256×128 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [33] GFP_blocks_list.2.operation.0.net2.1  batchnorm1d  in=1×256×128 (32768 elem, 131072 B)  out=1×256×128 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [34] GFP_blocks_list.2.operation.0.act  relu  in=1×256×128 (32768 elem, 131072 B)  out=1×256×128 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [35] GAM_list.3  s-pool  in=1×64×24×512 (786432 elem, 3145728 B)  out=1×512×64 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [36] LFP_blocks_list.3.transfer1.net.1  batchnorm1d  in=64×512×24 (786432 elem, 3145728 B)  out=64×512×24 (786432 elem, 3145728 B)
+[2026-03-13 14:39:26] INFO     |   [37] LFP_blocks_list.3.transfer1.act  relu  in=64×512×24 (786432 elem, 3145728 B)  out=64×512×24 (786432 elem, 3145728 B)
+[2026-03-13 14:39:26] INFO     |   [38] LFP_blocks_list.3.norm1  layernorm  in=64×24×512 (786432 elem, 3145728 B)  out=64×24×512 (786432 elem, 3145728 B)
+[2026-03-13 14:39:26] INFO     |   [39] LFP_blocks_list.3.transfer2.net.1  batchnorm1d  in=1×512×64 (32768 elem, 131072 B)  out=1×512×64 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [40] LFP_blocks_list.3.transfer2.act  relu  in=1×512×64 (32768 elem, 131072 B)  out=1×512×64 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [41] LFP_blocks_list.3.norm2  layernorm  in=1×64×512 (32768 elem, 131072 B)  out=1×64×512 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [42] GFP_blocks_list.3.operation.0.net1.1  batchnorm1d  in=1×512×64 (32768 elem, 131072 B)  out=1×512×64 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [43] GFP_blocks_list.3.operation.0.act  relu  in=1×512×64 (32768 elem, 131072 B)  out=1×512×64 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [44] GFP_blocks_list.3.operation.0.net2.1  batchnorm1d  in=1×512×64 (32768 elem, 131072 B)  out=1×512×64 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [45] GFP_blocks_list.3.operation.0.act  relu  in=1×512×64 (32768 elem, 131072 B)  out=1×512×64 (32768 elem, 131072 B)
+[2026-03-13 14:39:26] INFO     |   [46] classifier.1  batchnorm1d  in=1×512 (512 elem, 2048 B)  out=1×512 (512 elem, 2048 B)
+[2026-03-13 14:39:26] INFO     |   [47] act  relu  in=1×512 (512 elem, 2048 B)  out=1×512 (512 elem, 2048 B)
+[2026-03-13 14:39:26] INFO     |   [48] classifier.5  batchnorm1d  in=1×256 (256 elem, 1024 B)  out=1×256 (256 elem, 1024 B)
+[2026-03-13 14:39:26] INFO     |   [49] act  relu  in=1×256 (256 elem, 1024 B)  out=1×256 (256 elem, 1024 B)
+[2026-03-13 14:39:26] INFO     |   in/out = 输入/输出 shape；括号内为输入/输出元素数与 FP32 字节数（SPool 等可见输入激活大小）。

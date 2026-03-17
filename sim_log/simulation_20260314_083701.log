@@ -1,0 +1,58 @@
+[2026-03-14 08:37:01] INFO     | Logger initialized: pointcloud_ppa_sim
+[2026-03-14 08:37:01] INFO     | Log level: INFO
+[2026-03-14 08:37:01] INFO     | Log file: sim_log/simulation_20260314_083701.log
+[2026-03-14 08:37:01] INFO     | ============================================================
+[2026-03-14 08:37:01] INFO     |  真实数据评估：ModelNet40 样本 + checkpoint 权重 + MNSIM 对应层 PPA
+[2026-03-14 08:37:01] INFO     | ============================================================
+[2026-03-14 08:37:01] INFO     | Checkpoint: /workspace/PointKAN-pytorch/PointKAN-elite/classification_ModelNet40/checkpoints/pointKANElite-pointkan_elite_exp-42
+[2026-03-14 08:37:01] INFO     | num_points=1024, num_classes=40, batch_size=1
+[2026-03-14 08:37:05] INFO     | 加速器: baseline (BASELINE)
+[2026-03-14 08:37:05] INFO     | CIM 并行度: 128
+[2026-03-14 08:37:05] INFO     | Bit-serial 周期: 6
+[2026-03-14 08:37:05] INFO     | 层间 buffer: size=65536 B, bandwidth=256 B/cycle, spill_to_dram=True
+[2026-03-14 08:37:05] INFO     | 层间量化/反量化: 未启用 (默认，假定 W8A8 已就绪)
+[2026-03-14 08:37:05] INFO     | BN 融合: 启用 (BN 不单独计入)
+[2026-03-14 08:37:05] INFO     | 数字逻辑时钟: 1.0000 ns (1000.00 MHz) (默认 1 GHz)
+[2026-03-14 08:37:05] INFO     | 
+[2026-03-14 08:37:07] INFO     | 已用与 checkpoint 一致的层结构 + 真实按层 indata/rdata 驱动 MNSIM 全 NetStruct（Tile/NoC）
+[2026-03-14 08:37:07] INFO     |   MNSIM [embedding] activation=[B, 3, 1024], weight=[32, 3, 1]  latency=438279.7 ns, cycles=438280, energy=68491.99 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [LFP-stage0] activation=[B, 64, 24], weight=[64, 64, 1]  latency=42759.5 ns, cycles=42760, energy=13406.53 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [LFP-stage0] activation=[B, 24, 64], weight=[64, 64]  latency=42759.5 ns, cycles=42760, energy=13406.53 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [LFP-stage0] activation=[B, 24, 64], weight=[64, 64]  latency=42759.5 ns, cycles=42760, energy=13406.53 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [LFP-stage0] activation=[B, 64, 512], weight=[64, 64, 1]  latency=2333.3 ns, cycles=2334, energy=624.41 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [LFP-stage0] activation=[B, 512, 64], weight=[64, 64]  latency=2333.3 ns, cycles=2334, energy=624.41 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [LFP-stage0] activation=[B, 512, 64], weight=[64, 64]  latency=2333.3 ns, cycles=2334, energy=624.41 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [stage-0] activation=[B, 64, 512], weight=[64, 64, 1]  latency=2333.3 ns, cycles=2334, energy=624.41 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [stage-0] activation=[B, 64, 512], weight=[64, 64, 1]  latency=2333.3 ns, cycles=2334, energy=624.41 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [LFP-stage1] activation=[B, 128, 24], weight=[128, 128, 1]  latency=43614.2 ns, cycles=43615, energy=13557.20 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [LFP-stage1] activation=[B, 24, 128], weight=[128, 128]  latency=43614.2 ns, cycles=43615, energy=13557.20 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [LFP-stage1] activation=[B, 24, 128], weight=[128, 128]  latency=43614.2 ns, cycles=43615, energy=13557.20 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [LFP-stage1] activation=[B, 128, 256], weight=[128, 128, 1]  latency=3188.0 ns, cycles=3188, energy=775.08 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [LFP-stage1] activation=[B, 256, 128], weight=[128, 128]  latency=3188.0 ns, cycles=3188, energy=775.08 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [LFP-stage1] activation=[B, 256, 128], weight=[128, 128]  latency=3188.0 ns, cycles=3188, energy=775.08 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [stage-1] activation=[B, 128, 256], weight=[128, 128, 1]  latency=3188.0 ns, cycles=3188, energy=775.08 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [stage-1] activation=[B, 128, 256], weight=[128, 128, 1]  latency=3188.0 ns, cycles=3188, energy=775.08 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [LFP-stage2] activation=[B, 256, 24], weight=[256, 256, 1]  latency=47100.8 ns, cycles=47101, energy=14354.08 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [LFP-stage2] activation=[B, 24, 256], weight=[256, 256]  latency=47100.8 ns, cycles=47101, energy=14354.08 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [LFP-stage2] activation=[B, 24, 256], weight=[256, 256]  latency=47100.8 ns, cycles=47101, energy=14354.08 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [LFP-stage2] activation=[B, 256, 128], weight=[256, 256, 1]  latency=6674.5 ns, cycles=6675, energy=1571.96 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [LFP-stage2] activation=[B, 128, 256], weight=[256, 256]  latency=6674.5 ns, cycles=6675, energy=1571.96 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [LFP-stage2] activation=[B, 128, 256], weight=[256, 256]  latency=6674.5 ns, cycles=6675, energy=1571.96 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [stage-2] activation=[B, 256, 128], weight=[256, 256, 1]  latency=6674.5 ns, cycles=6675, energy=1571.96 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [stage-2] activation=[B, 256, 128], weight=[256, 256, 1]  latency=7186.5 ns, cycles=7187, energy=1571.96 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [LFP-stage3] activation=[B, 512, 24], weight=[512, 512, 1]  latency=60313.1 ns, cycles=60314, energy=57121.75 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [LFP-stage3] activation=[B, 24, 512], weight=[512, 512]  latency=59084.3 ns, cycles=59085, energy=57121.75 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [LFP-stage3] activation=[B, 24, 512], weight=[512, 512]  latency=60313.1 ns, cycles=60314, energy=57121.75 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [LFP-stage3] activation=[B, 512, 64], weight=[512, 512, 1]  latency=19892.9 ns, cycles=19893, energy=12384.33 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [LFP-stage3] activation=[B, 64, 512], weight=[512, 512]  latency=19270.5 ns, cycles=19271, energy=12384.33 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [LFP-stage3] activation=[B, 64, 512], weight=[512, 512]  latency=19886.9 ns, cycles=19887, energy=12384.33 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [stage-3] activation=[B, 512, 64], weight=[512, 512, 1]  latency=19069.7 ns, cycles=19070, energy=12384.33 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [stage-3] activation=[B, 512, 64], weight=[512, 512, 1]  latency=19886.9 ns, cycles=19887, energy=12384.33 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [classifier] activation=[B, 512], weight=[512, 512]  latency=18162.7 ns, cycles=18163, energy=10469.62 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [classifier] activation=[B, 512], weight=[256, 512]  latency=9282.8 ns, cycles=9283, energy=3360.75 nJ
+[2026-03-14 08:37:07] INFO     |   MNSIM [classifier] activation=[B, 256], weight=[40, 256]  latency=965.8 ns, cycles=966, energy=137.29 nJ
+[2026-03-14 08:37:07] INFO     | MNSIM Tile/PE 统计:
+[2026-03-14 08:37:07] INFO     |   总 Tile 数: 119,  总 PE 数: 448
+[2026-03-14 08:37:07] INFO     |   Crossbar size: 256 x 256  (pe_per_tile=4)
+[2026-03-14 08:37:07] INFO     |   MNSIM Conv/Linear 总面积: 513817975.87 um^2
+[2026-03-14 08:37:07] INFO     | 真实前向共 36 个 conv/linear；全网络 PPA 使用 36 层

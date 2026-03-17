@@ -464,8 +464,8 @@ class Scheduler:
             # 与 run_simulation 保持一致：先做互斥资源时序修正
             self._apply_exclusive_resource_constraints(events)
 
-            # Calculate totals directly from events
-            last_cycle = max(e.end_cycle for e in events)
+            # Calculate totals directly from events（overlapped 不延伸关键路径）
+            last_cycle = max(e.end_cycle for e in events if not getattr(e, "overlapped", False))
             if max_cycles is not None:
                 last_cycle = min(last_cycle, max_cycles)
 

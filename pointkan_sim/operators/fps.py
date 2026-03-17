@@ -43,8 +43,9 @@ from .base_operator import (
     BaseOperator, Stage, SubStage,
     OperatorParams,
 )
-from ..configs.hw_config import CircuitModule
+from ..configs.hw_config import CircuitModule, MinDistanceTableConfig
 from ..simulator.event import Event
+from .distance_ops import gen_distance_events_one_batch
 
 if TYPE_CHECKING:
     from ..configs.hw_config import HardwareConfig
@@ -60,7 +61,7 @@ class FPSParams(OperatorParams):
     cim_parallelism: int = 128
     bit_slice: int = 2
     points_per_axis_quant_width: int = 28
-    bitonic_sort_cycles: int = 2
+    bitonic_sort_cycles: int = 10   # MAX 模式（FPS 1024→1）：10 周期
 
 
 class FPSOperator(BaseOperator):
@@ -68,37 +69,26 @@ class FPSOperator(BaseOperator):
     Farthest Point Sampling (FPS) Operator.
 
     SRAM-CIM based FPS with fixed parallelism and bitonic sort.
+    Stage 1–3（距离计算）与 KNN 共用 distance_ops.gen_sram_cim_distance_events_one_batch；
+    本算子仅负责 Stage 4（最小距离表更新）与 Stage 5（Bitonic 排序）。
 
     Processing flow (per iteration, one per sampled point):
 
     [Stages 1-4: sequential, repeated for each batch]
 
-    1. k^2 computation
-       SRAM-CIM array read + shift-and-add, bit-serial.
-       Duration = points_per_axis_quant_width / bit_slice cycles.
+    1–3. 距离计算（共用）
+       k^2、-2qk、shift_add 累加，由 distance_ops 生成。
        Circuit modules: SRAM_CIM_ARRAY, SHIFT_ADD
 
-    2. -2qk cross-term
-       SRAM-CIM array MAC + shift-and-add, bit-serial.
-       Duration = points_per_axis_quant_width / bit_slice cycles.
-       Circuit modules: SRAM_CIM_ARRAY, SHIFT_ADD
-
-    3. Distance accumulation
-       Shift-and-add: distance = k^2 + (-2qk).
-       Duration = 1 cycle.
-       Circuit module: SHIFT_ADD
-
-    4. Min-distance table update
+    4. Min-distance table update（FPS 专属）
        Compare and update per-point minimum distance.
-       Duration = 1 cycle.
-       Circuit modules: COMPARATOR, BUFFER
+       Duration = 1 cycle. Circuit: min_distance_table
 
     [Stage 5: runs once after all batches complete]
 
-    5. Bitonic sort (1024->1)
+    5. Bitonic sort (1024->1), MAX 模式
        Find the farthest point (max distance).
-       Duration = bitonic_sort_cycles (fixed constant).
-       Circuit modules: COMPARATOR, BUFFER
+       Duration = bitonic_sort_cycles (default 10). Circuit: comp_tree_1024_max
     """
 
     def __init__(
@@ -202,7 +192,7 @@ class FPSOperator(BaseOperator):
         )
         stage5.add_sub_stage(SubStage(
             name="bitonic_sort_1024_to_1",
-            circuit_modules=[CircuitModule.COMP_TREE_1024_MAX],
+            circuit_modules=[CircuitModule.BITONIC_SORT],
             is_pipeline=False,
             description="Bitonic sort 1024->1: find global maximum distance"
         ))
@@ -246,13 +236,132 @@ class FPSOperator(BaseOperator):
 
     # --- Event generation ---
 
-    def generate_single_bitonic_event(self, params: Optional[FPSParams] = None) -> Event:
-        """返回单次 FPS 迭代排序事件（cycle=0）。"""
+    def _generate_single_merge_sort_event(self, params: Optional[FPSParams] = None) -> Event:
+        """base_v2：单次 FPS 迭代 MergeSort 局部 max 事件（22 cycle）。仅用于无 reg_file 或兼容。"""
         if params is not None:
             self.fps_params = params
         p = self.fps_params
         hw = self.hw_config
-        sort_power = hw.sorting_circuit.comp_tree_1024_max.power
+        ms = hw.sorting_circuit.merge_sort
+        return Event(
+            event_id=0,
+            cycle=0,
+            operator="FPS",
+            stage="merge_sort",
+            sub_stage="merge_sort_local_max",
+            circuit_module="merge_sort",
+            operation="merge_sort_max",
+            power=ms.power_max_mw,
+            duration=ms.cycles_max,
+            clock_period_ns=hw.clock_period,
+            metadata={"phase": "fps_engine_merge_sort_only"},
+        )
+
+    def _generate_single_merge_sort_iteration_events(self, params: Optional[FPSParams] = None) -> List[Event]:
+        """base_v2 Phase2：单次 FPS 迭代的 merge_sort + reg_read + reg_write(overlapped) 事件列表（cycle 相对 0）。"""
+        if params is not None:
+            self.fps_params = params
+        p = self.fps_params
+        hw = self.hw_config
+        ms = getattr(hw.sorting_circuit, "merge_sort", None)
+        reg = getattr(ms, "reg_file", None) if ms is not None else None
+        batches = math.ceil(p.input_points / p.cim_parallelism)
+        events: List[Event] = []
+        event_id = 0
+        cycle = 0
+        for b in range(batches):
+            if ms is not None:
+                events.append(Event(
+                    event_id=event_id,
+                    cycle=cycle,
+                    operator="FPS",
+                    stage="merge_sort",
+                    sub_stage="merge_sort_local_max",
+                    circuit_module="merge_sort",
+                    operation="merge_sort_max",
+                    power=ms.power_max_mw,
+                    duration=ms.cycles_max,
+                    clock_period_ns=hw.clock_period,
+                    metadata={"batch": b, "buffer_name": "sort_cache_sram", "buffer_phase": "sort_read", "bytes": int(p.cim_parallelism) * 4, "resource_id": "merge_sort_shared", "exclusive": True, "reset_scope": "batch_boundary"},
+                ))
+                event_id += 1
+                cycle += ms.cycles_max
+            if reg is not None:
+                read_ev = self._generate_merge_sort_reg_file_read_event(cycle, event_id, num_reads=1)
+                if read_ev is not None:
+                    events.append(read_ev)
+                    event_id += 1
+                    cycle += read_ev.duration
+                write_ev = self._generate_merge_sort_reg_file_event(cycle, event_id, num_writes=1, overlapped=True)
+                if write_ev is not None:
+                    events.append(write_ev)
+                    event_id += 1
+                    # 写与下一批重叠，不推进 cycle
+        return events
+
+    def _generate_merge_sort_reg_file_read_event(
+        self, cycle: int, event_id: int, num_reads: int = 1, params: Optional[FPSParams] = None
+    ) -> Optional[Event]:
+        """base_v2：MergeSort 寄存器组读事件。FPS 每批读 1 个历史 max，占关键路径。"""
+        if params is not None:
+            self.fps_params = params
+        hw = self.hw_config
+        ms = getattr(hw.sorting_circuit, "merge_sort", None)
+        reg = getattr(ms, "reg_file", None) if ms is not None else None
+        if reg is None:
+            return None
+        duration = num_reads * getattr(reg, "cycles_per_read", 1)
+        return Event(
+            event_id=event_id,
+            cycle=cycle,
+            operator="FPS",
+            stage="merge_sort_reg_file",
+            sub_stage="reg_file_read_max",
+            circuit_module="merge_sort_reg_file",
+            operation="reg_file_read",
+            power=reg.power_mw,
+            duration=duration,
+            clock_period_ns=hw.clock_period,
+            metadata={"num_reads": num_reads, "buffer_name": "sort_cache_sram", "buffer_phase": "read", "bytes": int(num_reads) * 4, "resource_id": "sort_cache_shared", "exclusive": True, "reset_scope": "batch_boundary"},
+        )
+
+    def _generate_merge_sort_reg_file_event(
+        self, cycle: int, event_id: int, num_writes: int = 1, overlapped: bool = False,
+        params: Optional[FPSParams] = None,
+    ) -> Optional[Event]:
+        """base_v2：MergeSort 寄存器组写事件。FPS 写 1 个历史 max；overlapped 时与下一批 64选1 重叠。"""
+        if params is not None:
+            self.fps_params = params
+        hw = self.hw_config
+        ms = getattr(hw.sorting_circuit, "merge_sort", None)
+        reg = getattr(ms, "reg_file", None) if ms is not None else None
+        if reg is None:
+            return None
+        duration = num_writes * reg.cycles_per_write
+        ev = Event(
+            event_id=event_id,
+            cycle=cycle,
+            operator="FPS",
+            stage="merge_sort_reg_file",
+            sub_stage="reg_file_write_max",
+            circuit_module="merge_sort_reg_file",
+            operation="reg_file_write",
+            power=reg.power_mw,
+            duration=duration,
+            clock_period_ns=hw.clock_period,
+            metadata={"num_writes": num_writes, "buffer_name": "sort_cache_sram", "buffer_phase": "write", "bytes": int(num_writes) * 4, "resource_id": "sort_cache_shared", "exclusive": True, "reset_scope": "batch_boundary"},
+        )
+        ev.overlapped = overlapped
+        return ev
+
+    def generate_single_bitonic_event(self, params: Optional[FPSParams] = None) -> Event:
+        """返回单次 FPS 迭代排序事件（cycle=0）。base_v1 用 Bitonic。"""
+        if params is not None:
+            self.fps_params = params
+        p = self.fps_params
+        hw = self.hw_config
+        bitonic = hw.sorting_circuit.bitonic_sort
+        sort_power = bitonic.power_max_mw
         return Event(
             event_id=0,
             cycle=0,
@@ -266,11 +375,66 @@ class FPSOperator(BaseOperator):
             clock_period_ns=hw.clock_period,
             metadata={
                 "phase": "fps_engine_bitonic_only",
-                # baseline 下与 KNN 共用 bitonic，比对器互斥由 Scheduler 统一处理
                 "resource_id": "bitonic_shared",
                 "exclusive": True,
             },
         )
+
+    def generate_single_fuse_events(self, params: Optional[FPSParams] = None) -> List[Event]:
+        """
+        返回单次 FPS 迭代的 fuse 模式事件（coarse+fine MAX）。
+
+        acc 模式下使用 coarse_filter + fine_filter 做最远点选取（MAX），
+        与 KNN 共用同一套 coarse/fine 硬件，仅比较方向不同（MAX vs MIN）。
+        """
+        if params is not None:
+            self.fps_params = params
+        hw = self.hw_config
+        coarse_cfg = getattr(hw.sorting_circuit, "coarse_filter", None)
+        fine_cfg = getattr(hw.sorting_circuit, "fine_filter", None)
+        coarse_power = float(getattr(coarse_cfg, "power", 38.0) if coarse_cfg is not None else 38.0)
+        fine_power = float(getattr(fine_cfg, "power", 30.0) if fine_cfg is not None else 30.0)
+        coarse_rounds = max(1, int(getattr(hw, "fps_coarse_rounds_mean", 1)))
+        coarse_cycles = 4 * coarse_rounds + 1
+        fine_cycles = int(getattr(fine_cfg, "cycles", 2) if fine_cfg is not None else 2)
+
+        return [
+            Event(
+                event_id=0,
+                cycle=0,
+                operator="FPS",
+                stage="fuse_filter",
+                sub_stage="coarse_filter",
+                circuit_module="coarse_filter",
+                operation="fps_coarse_filter_max",
+                power=coarse_power,
+                duration=coarse_cycles,
+                clock_period_ns=hw.clock_period,
+                metadata={
+                    "phase": "fps_engine_fuse",
+                    "resource_id": "comparator_shared",
+                    "exclusive": True,
+                    "coarse_rounds_mean": coarse_rounds,
+                },
+            ),
+            Event(
+                event_id=1,
+                cycle=coarse_cycles,
+                operator="FPS",
+                stage="fuse_filter",
+                sub_stage="fine_filter",
+                circuit_module="fine_filter",
+                operation="fps_fine_filter_max",
+                power=fine_power,
+                duration=fine_cycles,
+                clock_period_ns=hw.clock_period,
+                metadata={
+                    "phase": "fps_engine_fuse",
+                    "resource_id": "comparator_shared",
+                    "exclusive": True,
+                },
+            ),
+        ]
 
     def generate_events(self, params: Optional[FPSParams] = None) -> List[Event]:
         """
@@ -286,15 +450,25 @@ class FPSOperator(BaseOperator):
         p = self.fps_params
         hw = self.hw_config
         if getattr(hw, "distance_in_phase2", False):
+            if getattr(hw, "is_baseline_v2", False):
+                return [self._generate_single_merge_sort_event() for _ in range(p.sampled_points_num)]
             return [self.generate_single_bitonic_event() for _ in range(p.sampled_points_num)]
 
-        # 完整 5 阶段
-        cim_power = hw.sram_cim_macro.array.cim_power
-        shift_add_power = hw.sram_cim_macro.shift_add.power
-        mdt_power = hw.sram_cim_macro.min_distance_table.power
-        sort_power = hw.sorting_circuit.comp_tree_1024_max.power
+        # 完整 5 阶段：Stage 1–3 复用共用距离计算，Stage 4/5 为 FPS 专属
+        mdt_power = (hw.sorting_circuit.min_distance_table or MinDistanceTableConfig()).power
+        if getattr(hw, "is_baseline_v2", False) and getattr(hw.sorting_circuit, "merge_sort", None) is not None:
+            ms = hw.sorting_circuit.merge_sort
+            sort_power = ms.power_max_mw
+            sort_cycles = ms.cycles_max  # 22，每迭代局部 max
+            sort_stage = "merge_sort"
+            sort_circuit = "merge_sort"
+        else:
+            bitonic = hw.sorting_circuit.bitonic_sort
+            sort_power = bitonic.power_max_mw
+            sort_cycles = p.bitonic_sort_cycles
+            sort_stage = "bitonic_sort"
+            sort_circuit = "comp_tree_1024_max"
         clock_period = hw.clock_period
-
         dist_cycles = self._get_dist_compute_cycles()
 
         events: List[Event] = []
@@ -306,58 +480,14 @@ class FPSOperator(BaseOperator):
             batches = math.ceil(candidate_points / p.cim_parallelism)
 
             for b in range(batches):
-                # Stage 1: k^2
-                events.append(Event(
-                    event_id=event_id,
-                    cycle=cycle,
-                    operator="FPS",
-                    stage="k_square",
-                    sub_stage="k_square_compute",
-                    circuit_module="sram_cim_array",
-                    operation="k2_bit_serial",
-                    power=cim_power,
-                    duration=dist_cycles,
-                    clock_period_ns=clock_period,
-                    metadata={"iteration": i, "batch": b},
-                ))
-                event_id += 1
-                cycle += dist_cycles
-
-                # Stage 2: -2qk
-                events.append(Event(
-                    event_id=event_id,
-                    cycle=cycle,
-                    operator="FPS",
-                    stage="cross_term",
-                    sub_stage="cross_term_compute",
-                    circuit_module="sram_cim_array",
-                    operation="two_qk_bit_serial",
-                    power=cim_power,
-                    duration=dist_cycles,
-                    clock_period_ns=clock_period,
-                    metadata={"iteration": i, "batch": b},
-                ))
-                event_id += 1
-                cycle += dist_cycles
-
-                # Stage 3: accumulate
-                events.append(Event(
-                    event_id=event_id,
-                    cycle=cycle,
-                    operator="FPS",
-                    stage="accumulate",
-                    sub_stage="shift_add_accumulate",
-                    circuit_module="shift_add",
-                    operation="distance_accumulate",
-                    power=shift_add_power,
-                    duration=1,
-                    clock_period_ns=clock_period,
-                    metadata={"iteration": i, "batch": b},
-                ))
-                event_id += 1
-                cycle += 1
-
-                # Stage 4: min-distance table update
+                # Stage 1–3：共用距离计算（baseline=dist2_engine 脉动，acc=SRAM-CIM k²/-2qk/shift_add）
+                batch_m = min(p.cim_parallelism, candidate_points - b * p.cim_parallelism)
+                dist_events, event_id, cycle = gen_distance_events_one_batch(
+                    "FPS", hw, event_id, cycle, {"iteration": i, "batch": b},
+                    dist_cycles=dist_cycles, batch_size_m=batch_m,
+                )
+                events.extend(dist_events)
+                # Stage 4：FPS 专属 — 最小距离表更新
                 events.append(Event(
                     event_id=event_id,
                     cycle=cycle,
@@ -369,27 +499,59 @@ class FPSOperator(BaseOperator):
                     power=mdt_power,
                     duration=1,
                     clock_period_ns=clock_period,
-                    metadata={"iteration": i, "batch": b},
+                    metadata={"iteration": i, "batch": b, "buffer_name": "fps_min_distance_table_sram", "buffer_phase": "update", "bytes": int(batch_m) * 8, "resource_id": "fps_min_table_shared", "exclusive": True, "reset_scope": "fps_iteration"},
                 ))
                 event_id += 1
                 cycle += 1
 
-            # Stage 5: bitonic sort (once per iteration, after all batches)
-            events.append(Event(
-                event_id=event_id,
-                cycle=cycle,
-                operator="FPS",
-                stage="bitonic_sort",
-                sub_stage="bitonic_sort_1024_to_1",
-                circuit_module="comp_tree_1024_max",
-                operation="bitonic_sort_max",
-                power=sort_power,
-                duration=p.bitonic_sort_cycles,
-                clock_period_ns=clock_period,
-                metadata={"iteration": i},
-            ))
-            event_id += 1
-            cycle += p.bitonic_sort_cycles
+                # base_v2：每批 64选1(merge_sort 22cy) + reg 读 1 + reg 写 1（写与下一批重叠）
+                if getattr(hw, "is_baseline_v2", False) and getattr(hw.sorting_circuit, "merge_sort", None) is not None:
+                    ms = hw.sorting_circuit.merge_sort
+                    events.append(Event(
+                        event_id=event_id,
+                        cycle=cycle,
+                        operator="FPS",
+                        stage="merge_sort",
+                        sub_stage="merge_sort_local_max",
+                        circuit_module="merge_sort",
+                        operation="merge_sort_max",
+                        power=ms.power_max_mw,
+                        duration=ms.cycles_max,
+                        clock_period_ns=clock_period,
+                        metadata={"iteration": i, "batch": b, "buffer_name": "sort_cache_sram", "buffer_phase": "sort", "bytes": int(batch_m) * 4, "resource_id": "merge_sort_shared", "exclusive": True},
+                    ))
+                    event_id += 1
+                    cycle += ms.cycles_max
+                    reg_read_ev = self._generate_merge_sort_reg_file_read_event(cycle, event_id, num_reads=1)
+                    if reg_read_ev is not None:
+                        events.append(reg_read_ev)
+                        event_id += 1
+                        cycle += reg_read_ev.duration
+                    reg_write_ev = self._generate_merge_sort_reg_file_event(
+                        cycle, event_id, num_writes=1, overlapped=True,
+                    )
+                    if reg_write_ev is not None:
+                        events.append(reg_write_ev)
+                        event_id += 1
+                        # 写与下一批 64选1 重叠，不推进 cycle
+
+            # Stage 5：排序（仅 base_v1 每迭代一次 Bitonic；base_v2 已在每批内 merge_sort+reg）
+            if not (getattr(hw, "is_baseline_v2", False) and getattr(hw.sorting_circuit, "merge_sort", None) is not None):
+                events.append(Event(
+                    event_id=event_id,
+                    cycle=cycle,
+                    operator="FPS",
+                    stage=sort_stage,
+                    sub_stage="bitonic_sort_1024_to_1",
+                    circuit_module=sort_circuit,
+                    operation="bitonic_sort_max",
+                    power=sort_power,
+                    duration=sort_cycles,
+                    clock_period_ns=clock_period,
+                    metadata={"iteration": i},
+                ))
+                event_id += 1
+                cycle += sort_cycles
 
         return events
 

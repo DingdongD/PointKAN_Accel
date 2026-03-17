@@ -1,0 +1,51 @@
+{
+  "dataset": "KITTI",
+  "data_dir": "/workspace/VoxelNet/KITTI_Mini/training/velodyne",
+  "n_samples": 7481,
+  "n_total_frames": 7481,
+  "num_points": 50000,
+  "fps_steps": 512,
+  "k_neighbors": 32,
+  "do_roi": true,
+  "min_candidates_ratio": 1.2,
+  "tol_adaptive": 0.05,
+  "iou_coarse_fine_vs_vanilla": {
+    "mean": 0.1589374542236328,
+    "std": 0.0587770976126194,
+    "min": 0.05672577768564224,
+    "max": 0.39887750148773193
+  },
+  "iou_adaptive_vs_vanilla": {
+    "mean": 0.9272650480270386,
+    "std": 0.017239410430192947,
+    "min": 0.8517017364501953,
+    "max": 0.9805536270141602
+  },
+  "radii_mse_coarse_fine_vs_vanilla": 0.0,
+  "radii_mse_adaptive_vs_vanilla": 0.0,
+  "inference_time_vanilla_sec": {
+    "total": 8956.56638982636,
+    "mean_per_batch": 1.1972418647007566,
+    "std_per_batch": 0.247780526644575
+  },
+  "inference_time_adaptive_sec": {
+    "total": 7894.188743929379,
+    "mean_per_batch": 1.0552317529647612,
+    "std_per_batch": 0.23074016702049602
+  },
+  "inference_time_coarse_fine_sec": {
+    "total": 6712.689928455511,
+    "mean_per_batch": 0.8972984799432577,
+    "std_per_batch": 0.2252043340009882
+  },
+  "speedup_adaptive_vs_vanilla": 1.1345771782710348,
+  "speedup_coarse_fine_vs_vanilla": 1.3342738135213004,
+  "dataset_points_stats": {
+    "n_frames": 7481,
+    "points_per_frame_min": 39552,
+    "points_per_frame_max": 65199,
+    "points_per_frame_mean": 59324.50167089961
+  },
+  "num_points_requested": 50000,
+  "num_points_effective": 50000
+}

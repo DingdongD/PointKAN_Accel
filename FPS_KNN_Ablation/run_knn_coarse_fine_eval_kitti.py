@@ -38,7 +38,7 @@ from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 
 # KITTI .bin 加载与 ROI（与 kitti_fps_exp 一致）
-from kitti_fps_exp import load_kitti_bin, roi_filter
+from kitti_fps_exp import load_kitti_bin, roi_filter, find_bin_files, collect_point_counts_and_xyz_ranges
 
 # FPS + KNN 与 IoU（来自 ModelNet40 目录）
 from spec_kan_fps import (
@@ -105,11 +105,11 @@ def parse_args():
     p.add_argument("--num_points", type=int, default=50000,
                    help="每帧点数 N，模拟 KITTI 原始尺度（ROI 后约 4 万–6.5 万）；超出则随机裁到 N，不足则重复填充。显存不足可改小")
     p.add_argument("--fps_steps", type=int, default=512, help="FPS 采样数 K")
-    p.add_argument("--k_neighbors", type=int, default=24, help="KNN 邻居数 k")
+    p.add_argument("--k_neighbors", type=int, default=32, help="KNN 邻居数 k")
     p.add_argument("--batch_size", type=int, default=1,
                    help="批大小；num_points 较大时建议 1 以免 OOM")
     p.add_argument("--max_samples", type=int, default=0, help="最多评估帧数，0 表示全部")
-    p.add_argument("--min_candidates_ratio", type=float, default=1.2,
+    p.add_argument("--min_candidates_ratio", type=float, default=1.1,
                    help="粗筛+细筛：候选数 >= min_candidates_ratio * k_neighbors")
     p.add_argument("--tol", type=float, default=0.05, help="adaptive 的 tol")
     p.add_argument("--no_roi", action="store_true", help="不做 ROI 过滤")
@@ -179,7 +179,7 @@ def run_iou_analysis(args):
         _sync()
         t0 = time.perf_counter()
         _, _, knn_adaptive, dist_adaptive, radii_adaptive, _, _ = fps_with_knn_adaptive(
-            pts, K, k_neighbors=k, init_threshold=0.1, max_iter=10, tol=args.tol, seed="first"
+            pts, K, k_neighbors=k, init_threshold=2.4, max_iter=10, tol=args.tol, seed="first"
         )
         _sync()
         time_adaptive_list.append(time.perf_counter() - t0)
@@ -216,6 +216,7 @@ def run_iou_analysis(args):
 
     results = {
         "dataset": "KITTI",
+        "device": args.device,
         "data_dir": args.data_dir,
         "n_samples": int(iou_cf_v_per_sample.size),
         "n_total_frames": n_total,
@@ -264,23 +265,54 @@ def main():
     args = parse_args()
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(args.seed)
+    # 仅对当前使用的设备设种子，避免 manual_seed_all 触发多卡占用
+    dev = torch.device(args.device)
+    if dev.type == "cuda":
+        torch.cuda.set_device(dev.index)
+        torch.cuda.manual_seed(args.seed)
 
     bin_files = find_bin_files(args.data_dir)
     if len(bin_files) == 0:
         raise FileNotFoundError(f"未找到 .bin 文件: {args.data_dir}")
+
+    counts, _, _ = collect_point_counts_and_xyz_ranges(
+        args.data_dir, do_roi=not args.no_roi, max_frames=-1,
+        load_fn=load_kitti_bin, find_fn=find_bin_files,
+    )
+    counts = np.array(counts, dtype=np.int64)
+    pts_min, pts_max = int(counts.min()), int(counts.max())
+    num_points_requested = args.num_points
+    num_points_eff = min(args.num_points, pts_max)
+    args.num_points = num_points_eff
+    dataset_stats = {
+        "n_frames": len(counts),
+        "points_per_frame_min": pts_min,
+        "points_per_frame_max": pts_max,
+        "points_per_frame_mean": float(counts.mean()),
+    }
 
     print("=" * 60)
     print("KNN 粗筛+细筛 与 Vanilla KNN IoU / radii 分析（KITTI）")
     print("=" * 60)
     t0 = time.perf_counter()
     iou_results = run_iou_analysis(args)
+    iou_results["dataset_points_stats"] = dataset_stats
+    iou_results["num_points_requested"] = num_points_requested
+    iou_results["num_points_effective"] = num_points_eff
     t1 = time.perf_counter()
 
     print(f"  数据目录: {iou_results['data_dir']}")
     print(f"  分析帧数: {iou_results['n_samples']} (目录总帧数: {iou_results['n_total_frames']})")
-    print(f"  每帧点数 N: {iou_results['num_points']}, FPS 步数 K: {iou_results['fps_steps']}, 邻居数 k: {iou_results['k_neighbors']}")
+    ds_stats = iou_results.get("dataset_points_stats", {})
+    pts_min = ds_stats.get("points_per_frame_min", 0)
+    pts_max = ds_stats.get("points_per_frame_max", 0)
+    n_req = iou_results.get("num_points_requested", iou_results["num_points"])
+    n_eff = iou_results.get("num_points_effective", iou_results["num_points"])
+    if n_req > pts_max:
+        print(f"  每帧点数 N: {n_eff:,} (设定 {n_req:,}，已按数据集最大点数截断)；数据集每帧点数范围: [{pts_min:,}, {pts_max:,}]")
+    else:
+        print(f"  每帧点数 N: {n_eff:,}；数据集每帧点数范围: [{pts_min:,}, {pts_max:,}]")
+    print(f"  FPS 步数 K: {iou_results['fps_steps']}, 邻居数 k: {iou_results['k_neighbors']}")
     print(f"  ROI 过滤: {iou_results['do_roi']}")
     print(f"  粗筛+细筛 min_candidates_ratio: {iou_results['min_candidates_ratio']}")
     print("  --- IoU (相对 Vanilla) ---")

@@ -1,0 +1,57 @@
+[2026-03-17 04:20:31] INFO     | Logger initialized: pointcloud_ppa_sim
+[2026-03-17 04:20:31] INFO     | Log level: INFO
+[2026-03-17 04:20:31] INFO     | Log file: sim_log/simulation_20260317_042031.log
+[2026-03-17 04:20:32] INFO     | ============================================================
+[2026-03-17 04:20:32] INFO     |  真实数据评估：ModelNet40 样本 + checkpoint 权重 + MNSIM 对应层 PPA
+[2026-03-17 04:20:32] INFO     | ============================================================
+[2026-03-17 04:20:32] INFO     | Checkpoint: /workspace/PointKAN-pytorch/PointKAN-elite/classification_ModelNet40/checkpoints/pointKANElite-pointkan_elite_exp-42
+[2026-03-17 04:20:32] INFO     | num_points=1024, num_classes=40, batch_size=1
+[2026-03-17 04:20:37] INFO     | 脉动阵列/局部SRAM已按参数设置: rows=64 cols=64 sram_size_bytes=32768 sram_block_bytes=64 sram_num_banks=1 sram_bus_width_bits=128 sram_freq_hz=None
+[2026-03-17 04:20:37] INFO     | 加速器: baseline (BASELINE)
+[2026-03-17 04:20:37] INFO     | CIM 并行度: 128
+[2026-03-17 04:20:37] INFO     | Bit-serial 周期: 6
+[2026-03-17 04:20:37] INFO     | 层间 buffer: size=65536 B, bandwidth=256 B/cycle, spill_to_dram=True, pipeline_mode=without_pipeline, double_buffering=False, buffer_slots=0
+[2026-03-17 04:20:37] INFO     | DRAM: bandwidth=32 B/cycle, channels_override=None
+[2026-03-17 04:20:37] INFO     | 层间量化/反量化: 未启用 (默认，假定 W8A8 已就绪)
+[2026-03-17 04:20:37] INFO     | BN 融合: 启用 (BN 不单独计入)
+[2026-03-17 04:20:37] INFO     | SCALE-Sim 脉动 Conv/Linear: 启用（周期与 MAC/访问由 SCALE-Sim 统计，能耗仍用本工程内存建模）
+[2026-03-17 04:20:37] INFO     | 脉动阵列尺寸: 64×64 (ArrayHeight×ArrayWidth)
+[2026-03-17 04:20:37] INFO     | 数字逻辑时钟: 1.0000 ns (1000.00 MHz) (由 --logic_clk_freq 设置)
+[2026-03-17 04:20:37] INFO     | 
+[2026-03-17 04:20:38] INFO     | 真实前向共 36 个 conv/linear（baseline 脉动由 SCALE-Sim 逐层统计）
+[2026-03-17 04:20:39] INFO     | SCALE-Sim 阵列尺寸: 64×64（conv1d 首层 conv1d，后续层同）
+[2026-03-17 04:20:40] INFO     | SCALE-Sim memory-model config:
+[2026-03-17 04:20:40] INFO     |   cacti_bin = /workspace/PointKAN-pytorch/hw_sim/cycle_simulator/cacti/cacti
+[2026-03-17 04:20:40] INFO     |   template_cfg = /workspace/PointKAN-pytorch/hw_sim/cycle_simulator/cacti/cache.cfg
+[2026-03-17 04:20:40] INFO     |   generated_cfg_dir = /workspace/PointKAN-pytorch/hw_sim/cycle_simulator/memory_model/configs/cacti/generated
+[2026-03-17 04:20:40] INFO     |   output_dir = /workspace/PointKAN-pytorch/hw_sim/cycle_simulator/memory_model/outputs/cacti
+[2026-03-17 04:20:40] INFO     |   systolic_sram_size_bytes = 32768
+[2026-03-17 04:20:40] INFO     |   systolic_sram_block_bytes = 64
+[2026-03-17 04:20:40] INFO     |   systolic_sram_banks = 1
+[2026-03-17 04:20:40] INFO     |   systolic_sram_bus_bits = 128
+[2026-03-17 04:20:40] INFO     |   systolic_sram_freq_hz = 1000000000
+[2026-03-17 04:20:40] INFO     |   systolic_sram_clock_period_ns = 1.0
+[2026-03-17 04:20:40] INFO     |   buffer_tag = feature_local_sram
+[2026-03-17 04:20:40] INFO     |   native_trace_files = /tmp/pointkan_scalesim__vut2x6n/out/demo_64x64_32kb_ws/layer0/IFMAP_SRAM_TRACE.csv;/tmp/pointkan_scalesim__vut2x6n/out/demo_64x64_32kb_ws/layer0/OFMAP_SRAM_TRACE.csv
+[2026-03-17 04:20:40] INFO     | SCALE-Sim memory-model config:
+[2026-03-17 04:20:40] INFO     |   dramsim3_bin = /workspace/PointKAN-pytorch/hw_sim/cycle_simulator/DRAMsim3/build/dramsim3main
+[2026-03-17 04:20:40] INFO     |   dramsim3_config = /workspace/PointKAN-pytorch/hw_sim/cycle_simulator/DRAMsim3/configs/LPDDR4_8Gb_x16_2400.ini
+[2026-03-17 04:20:40] INFO     |   dramsim3_tck_ns = 0.83
+[2026-03-17 04:20:40] INFO     |   scalesim_trace_dir = /workspace/PointKAN-pytorch/hw_sim/cycle_simulator/memory_model/outputs/dramsim3/scalesim_access/conv1d_weight_read_gtmkk3dj
+[2026-03-17 04:20:40] INFO     |   access_tag = weight_read
+[2026-03-17 04:20:40] INFO     |   native_trace_files = /tmp/pointkan_scalesim__vut2x6n/out/demo_64x64_32kb_ws/layer0/FILTER_DRAM_TRACE.csv
+[2026-03-17 04:20:40] INFO     |   burst_bytes = 128
+[2026-03-17 04:20:40] INFO     |   bytes_per_access = 2
+[2026-03-17 04:20:40] INFO     | SCALE-Sim memory-model config:
+[2026-03-17 04:20:40] INFO     |   cacti_bin = /workspace/PointKAN-pytorch/hw_sim/cycle_simulator/cacti/cacti
+[2026-03-17 04:20:40] INFO     |   template_cfg = /workspace/PointKAN-pytorch/hw_sim/cycle_simulator/cacti/cache.cfg
+[2026-03-17 04:20:40] INFO     |   generated_cfg_dir = /workspace/PointKAN-pytorch/hw_sim/cycle_simulator/memory_model/configs/cacti/generated
+[2026-03-17 04:20:40] INFO     |   output_dir = /workspace/PointKAN-pytorch/hw_sim/cycle_simulator/memory_model/outputs/cacti
+[2026-03-17 04:20:40] INFO     |   systolic_sram_size_bytes = 32768
+[2026-03-17 04:20:40] INFO     |   systolic_sram_block_bytes = 64
+[2026-03-17 04:20:40] INFO     |   systolic_sram_banks = 1
+[2026-03-17 04:20:40] INFO     |   systolic_sram_bus_bits = 128
+[2026-03-17 04:20:40] INFO     |   systolic_sram_freq_hz = 1000000000
+[2026-03-17 04:20:40] INFO     |   systolic_sram_clock_period_ns = 1.0
+[2026-03-17 04:20:40] INFO     |   buffer_tag = weight_sram
+[2026-03-17 04:20:40] INFO     |   native_trace_files = /tmp/pointkan_scalesim__vut2x6n/out/demo_64x64_32kb_ws/layer0/FILTER_DRAM_TRACE.csv;/tmp/pointkan_scalesim__vut2x6n/out/demo_64x64_32kb_ws/layer0/FILTER_SRAM_TRACE.csv

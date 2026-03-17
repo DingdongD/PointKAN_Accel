@@ -1,0 +1,172 @@
+layer_name,op_name,tensor_name,src_tier,src_name,dst_tier,dst_name,src,dst,bytes,mib,note
+embedding,layer_input,point_cloud_input,DRAM,offchip_dram,SRAM,xyz_sram_buffer,DRAM,SRAM,12288,0.011719,Phase1 initial point-cloud load
+embedding,layer_output,inter_layer_activation,COMPUTE,compute_fabric,SRAM,inter_layer_sram,COMPUTE,SRAM,65536,0.062500,Layer output write to inter-layer SRAM
+embedding,layer_output,inter_layer_spill,COMPUTE,compute_fabric,DRAM,offchip_dram,COMPUTE,DRAM,65536,0.062500,Spill write when layer output exceeds inter-layer SRAM capacity
+GAM-stage0,layer_input,inter_layer_activation,SRAM,inter_layer_sram,COMPUTE,compute_fabric,SRAM,COMPUTE,65536,0.062500,Layer input read from inter-layer SRAM
+GAM-stage0,layer_input,inter_layer_spill,DRAM,offchip_dram,COMPUTE,compute_fabric,DRAM,COMPUTE,65536,0.062500,Spill read when layer input exceeds inter-layer SRAM capacity
+GAM-stage0,layer_output,inter_layer_activation,COMPUTE,compute_fabric,SRAM,inter_layer_sram,COMPUTE,SRAM,65536,0.062500,Layer output write to inter-layer SRAM
+GAM-stage0,layer_output,inter_layer_spill,COMPUTE,compute_fabric,DRAM,offchip_dram,COMPUTE,DRAM,65536,0.062500,Spill write when layer output exceeds inter-layer SRAM capacity
+GAM-stage0,fps,query_points,DRAM,offchip_dram,COMPUTE,fps_engine,DRAM,COMPUTE,6144,0.005859,Phase2 query-point reads
+GAM-stage0,fps,cim_array_preload,SRAM,xyz_sram_buffer,SRAM,sram_cim_array,SRAM,SRAM,12288,0.011719,Load key point cloud into SRAM-CIM array
+GAM-stage0,fps,dist_accum_reg_write,COMPUTE,dist2_mac,REGFILE,dist_accum_reg_128x32b,COMPUTE,REGFILE,2097152,2.000000,CIM distance batches accumulated to regfile (supports overlap)
+GAM-stage0,fps,dist_accum_reg_to_sram,REGFILE,dist_accum_reg_128x32b,SRAM,fps_dist_sram,REGFILE,SRAM,2097152,2.000000,Write accumulated distances to FPS distance SRAM (multi-bank advised)
+GAM-stage0,fps,distance_table_read,SRAM,fps_dist_sram,COMPUTE,fps_sorter,SRAM,COMPUTE,2097152,2.000000,Per-iteration sorter reads
+GAM-stage0,fps,fps_index,COMPUTE,fps_sorter,REGFILE,fps_index_regfile,COMPUTE,REGFILE,2048,0.001953,Sampled center indices
+GAM-stage0,knn,query_points,DRAM,offchip_dram,COMPUTE,knn_engine,DRAM,COMPUTE,6144,0.005859,Phase2 query-point reads
+GAM-stage0,knn,cim_array_preload,SRAM,xyz_sram_buffer,SRAM,sram_cim_array,SRAM,SRAM,12288,0.011719,Load key point cloud into SRAM-CIM array
+GAM-stage0,knn,dist_accum_reg_write,COMPUTE,dist2_mac,REGFILE,dist_accum_reg_128x32b,COMPUTE,REGFILE,2097152,2.000000,CIM distance batches accumulated to regfile (supports overlap)
+GAM-stage0,knn,dist_accum_reg_to_sram,REGFILE,dist_accum_reg_128x32b,SRAM,knn_dist_sram,REGFILE,SRAM,2097152,2.000000,Write accumulated distances to KNN distance SRAM (multi-bank advised)
+GAM-stage0,knn,distance_table_read,SRAM,knn_dist_sram,COMPUTE,knn_sorter,SRAM,COMPUTE,2097152,2.000000,Per-query sorter reads
+GAM-stage0,knn,knn_topk_index,COMPUTE,knn_sorter,REGFILE,knn_topk_regfile,COMPUTE,REGFILE,49152,0.046875,Top-k neighbor indices
+GAM-stage0,knn,neighbor_features_spill,SRAM,inter_layer_sram,DRAM,offchip_dram,SRAM,DRAM,1572864,1.500000,"Gather workspace exceeds SRAM, spill to DRAM"
+LFP-stage0,layer_input,inter_layer_activation,SRAM,inter_layer_sram,COMPUTE,compute_fabric,SRAM,COMPUTE,65536,0.062500,Layer input read from inter-layer SRAM
+LFP-stage0,layer_input,inter_layer_spill,DRAM,offchip_dram,COMPUTE,compute_fabric,DRAM,COMPUTE,65536,0.062500,Spill read when layer input exceeds inter-layer SRAM capacity
+LFP-stage0,layer_output,inter_layer_activation,COMPUTE,compute_fabric,SRAM,inter_layer_sram,COMPUTE,SRAM,256,0.000244,Layer output write to inter-layer SRAM
+LFP-stage0,lfp_path,local_path_tensor,COMPUTE,compute_fabric,REGFILE,lfp_local_path_reg,COMPUTE,REGFILE,131072,0.125000,lfp local-path intermediate (stream_through)
+LFP-stage0,lfp_path,center_path_tensor,COMPUTE,compute_fabric,REGFILE,lfp_center_path_reg,COMPUTE,REGFILE,131072,0.125000,lfp center-path intermediate (stream_through)
+LFP-stage0,lfp_path,pooled_local_tensor,COMPUTE,compute_fabric,REGFILE,lfp_pool_path_reg,COMPUTE,REGFILE,256,0.000244,lfp pooled tensor (stream_through)
+LFP-stage0,add,main_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+LFP-stage0,add,residual_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=True, stream_through)"
+LFP-stage0,add,add_output_write,COMPUTE,add_unit,REGFILE,lfp_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+LFP-stage0,add,main_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+LFP-stage0,add,residual_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=True, stream_through)"
+LFP-stage0,add,add_output_write,COMPUTE,add_unit,REGFILE,lfp_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+LFP-stage0,add,main_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+LFP-stage0,add,residual_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=False, stream_through)"
+LFP-stage0,add,add_output_write,COMPUTE,add_unit,REGFILE,lfp_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+stage-0,layer_input,inter_layer_activation,SRAM,inter_layer_sram,COMPUTE,compute_fabric,SRAM,COMPUTE,256,0.000244,Layer input read from inter-layer SRAM
+stage-0,layer_output,inter_layer_activation,COMPUTE,compute_fabric,SRAM,inter_layer_sram,COMPUTE,SRAM,65536,0.062500,Layer output write to inter-layer SRAM
+stage-0,layer_output,inter_layer_spill,COMPUTE,compute_fabric,DRAM,offchip_dram,COMPUTE,DRAM,65536,0.062500,Spill write when layer output exceeds inter-layer SRAM capacity
+stage-0,stage_path,local_path_tensor,COMPUTE,compute_fabric,REGFILE,stage_local_path_reg,COMPUTE,REGFILE,256,0.000244,stage local-path intermediate (stream_through)
+stage-0,stage_path,center_path_tensor,COMPUTE,compute_fabric,REGFILE,stage_center_path_reg,COMPUTE,REGFILE,256,0.000244,stage center-path intermediate (stream_through)
+stage-0,stage_path,pooled_local_tensor,COMPUTE,compute_fabric,REGFILE,stage_pool_path_reg,COMPUTE,REGFILE,256,0.000244,stage pooled tensor (stream_through)
+stage-0,add,main_tensor_read,REGFILE,stage_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+stage-0,add,residual_tensor_read,REGFILE,stage_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=True, stream_through)"
+stage-0,add,add_output_write,COMPUTE,add_unit,REGFILE,stage_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+GAM-stage1,layer_input,inter_layer_activation,SRAM,inter_layer_sram,COMPUTE,compute_fabric,SRAM,COMPUTE,65536,0.062500,Layer input read from inter-layer SRAM
+GAM-stage1,layer_input,inter_layer_spill,DRAM,offchip_dram,COMPUTE,compute_fabric,DRAM,COMPUTE,65536,0.062500,Spill read when layer input exceeds inter-layer SRAM capacity
+GAM-stage1,layer_output,inter_layer_activation,COMPUTE,compute_fabric,SRAM,inter_layer_sram,COMPUTE,SRAM,65536,0.062500,Layer output write to inter-layer SRAM
+GAM-stage1,layer_output,inter_layer_spill,COMPUTE,compute_fabric,DRAM,offchip_dram,COMPUTE,DRAM,65536,0.062500,Spill write when layer output exceeds inter-layer SRAM capacity
+GAM-stage1,fps,query_points,DRAM,offchip_dram,COMPUTE,fps_engine,DRAM,COMPUTE,3072,0.002930,Phase2 query-point reads
+GAM-stage1,fps,cim_array_preload,SRAM,xyz_sram_buffer,SRAM,sram_cim_array,SRAM,SRAM,6144,0.005859,Load key point cloud into SRAM-CIM array
+GAM-stage1,fps,dist_accum_reg_write,COMPUTE,dist2_mac,REGFILE,dist_accum_reg_128x32b,COMPUTE,REGFILE,524288,0.500000,CIM distance batches accumulated to regfile (supports overlap)
+GAM-stage1,fps,dist_accum_reg_to_sram,REGFILE,dist_accum_reg_128x32b,SRAM,fps_dist_sram,REGFILE,SRAM,524288,0.500000,Write accumulated distances to FPS distance SRAM (multi-bank advised)
+GAM-stage1,fps,distance_table_read,SRAM,fps_dist_sram,COMPUTE,fps_sorter,SRAM,COMPUTE,524288,0.500000,Per-iteration sorter reads
+GAM-stage1,fps,fps_index,COMPUTE,fps_sorter,REGFILE,fps_index_regfile,COMPUTE,REGFILE,1024,0.000977,Sampled center indices
+GAM-stage1,knn,query_points,DRAM,offchip_dram,COMPUTE,knn_engine,DRAM,COMPUTE,3072,0.002930,Phase2 query-point reads
+GAM-stage1,knn,cim_array_preload,SRAM,xyz_sram_buffer,SRAM,sram_cim_array,SRAM,SRAM,6144,0.005859,Load key point cloud into SRAM-CIM array
+GAM-stage1,knn,dist_accum_reg_write,COMPUTE,dist2_mac,REGFILE,dist_accum_reg_128x32b,COMPUTE,REGFILE,524288,0.500000,CIM distance batches accumulated to regfile (supports overlap)
+GAM-stage1,knn,dist_accum_reg_to_sram,REGFILE,dist_accum_reg_128x32b,SRAM,knn_dist_sram,REGFILE,SRAM,524288,0.500000,Write accumulated distances to KNN distance SRAM (multi-bank advised)
+GAM-stage1,knn,distance_table_read,SRAM,knn_dist_sram,COMPUTE,knn_sorter,SRAM,COMPUTE,524288,0.500000,Per-query sorter reads
+GAM-stage1,knn,knn_topk_index,COMPUTE,knn_sorter,REGFILE,knn_topk_regfile,COMPUTE,REGFILE,24576,0.023438,Top-k neighbor indices
+GAM-stage1,knn,neighbor_features_spill,SRAM,inter_layer_sram,DRAM,offchip_dram,SRAM,DRAM,1572864,1.500000,"Gather workspace exceeds SRAM, spill to DRAM"
+LFP-stage1,layer_input,inter_layer_activation,SRAM,inter_layer_sram,COMPUTE,compute_fabric,SRAM,COMPUTE,65536,0.062500,Layer input read from inter-layer SRAM
+LFP-stage1,layer_input,inter_layer_spill,DRAM,offchip_dram,COMPUTE,compute_fabric,DRAM,COMPUTE,65536,0.062500,Spill read when layer input exceeds inter-layer SRAM capacity
+LFP-stage1,layer_output,inter_layer_activation,COMPUTE,compute_fabric,SRAM,inter_layer_sram,COMPUTE,SRAM,512,0.000488,Layer output write to inter-layer SRAM
+LFP-stage1,lfp_path,local_path_tensor,COMPUTE,compute_fabric,REGFILE,lfp_local_path_reg,COMPUTE,REGFILE,131072,0.125000,lfp local-path intermediate (stream_through)
+LFP-stage1,lfp_path,center_path_tensor,COMPUTE,compute_fabric,REGFILE,lfp_center_path_reg,COMPUTE,REGFILE,131072,0.125000,lfp center-path intermediate (stream_through)
+LFP-stage1,lfp_path,pooled_local_tensor,COMPUTE,compute_fabric,REGFILE,lfp_pool_path_reg,COMPUTE,REGFILE,512,0.000488,lfp pooled tensor (stream_through)
+LFP-stage1,add,main_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+LFP-stage1,add,residual_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=True, stream_through)"
+LFP-stage1,add,add_output_write,COMPUTE,add_unit,REGFILE,lfp_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+LFP-stage1,add,main_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+LFP-stage1,add,residual_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=True, stream_through)"
+LFP-stage1,add,add_output_write,COMPUTE,add_unit,REGFILE,lfp_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+LFP-stage1,add,main_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+LFP-stage1,add,residual_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=False, stream_through)"
+LFP-stage1,add,add_output_write,COMPUTE,add_unit,REGFILE,lfp_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+stage-1,layer_input,inter_layer_activation,SRAM,inter_layer_sram,COMPUTE,compute_fabric,SRAM,COMPUTE,512,0.000488,Layer input read from inter-layer SRAM
+stage-1,layer_output,inter_layer_activation,COMPUTE,compute_fabric,SRAM,inter_layer_sram,COMPUTE,SRAM,65536,0.062500,Layer output write to inter-layer SRAM
+stage-1,layer_output,inter_layer_spill,COMPUTE,compute_fabric,DRAM,offchip_dram,COMPUTE,DRAM,65536,0.062500,Spill write when layer output exceeds inter-layer SRAM capacity
+stage-1,stage_path,local_path_tensor,COMPUTE,compute_fabric,REGFILE,stage_local_path_reg,COMPUTE,REGFILE,512,0.000488,stage local-path intermediate (stream_through)
+stage-1,stage_path,center_path_tensor,COMPUTE,compute_fabric,REGFILE,stage_center_path_reg,COMPUTE,REGFILE,512,0.000488,stage center-path intermediate (stream_through)
+stage-1,stage_path,pooled_local_tensor,COMPUTE,compute_fabric,REGFILE,stage_pool_path_reg,COMPUTE,REGFILE,512,0.000488,stage pooled tensor (stream_through)
+stage-1,add,main_tensor_read,REGFILE,stage_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+stage-1,add,residual_tensor_read,REGFILE,stage_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=True, stream_through)"
+stage-1,add,add_output_write,COMPUTE,add_unit,REGFILE,stage_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+GAM-stage2,layer_input,inter_layer_activation,SRAM,inter_layer_sram,COMPUTE,compute_fabric,SRAM,COMPUTE,65536,0.062500,Layer input read from inter-layer SRAM
+GAM-stage2,layer_input,inter_layer_spill,DRAM,offchip_dram,COMPUTE,compute_fabric,DRAM,COMPUTE,65536,0.062500,Spill read when layer input exceeds inter-layer SRAM capacity
+GAM-stage2,layer_output,inter_layer_activation,COMPUTE,compute_fabric,SRAM,inter_layer_sram,COMPUTE,SRAM,65536,0.062500,Layer output write to inter-layer SRAM
+GAM-stage2,layer_output,inter_layer_spill,COMPUTE,compute_fabric,DRAM,offchip_dram,COMPUTE,DRAM,65536,0.062500,Spill write when layer output exceeds inter-layer SRAM capacity
+GAM-stage2,fps,query_points,DRAM,offchip_dram,COMPUTE,fps_engine,DRAM,COMPUTE,1536,0.001465,Phase2 query-point reads
+GAM-stage2,fps,cim_array_preload,SRAM,xyz_sram_buffer,SRAM,sram_cim_array,SRAM,SRAM,3072,0.002930,Load key point cloud into SRAM-CIM array
+GAM-stage2,fps,dist_accum_reg_write,COMPUTE,dist2_mac,REGFILE,dist_accum_reg_128x32b,COMPUTE,REGFILE,131072,0.125000,CIM distance batches accumulated to regfile (supports overlap)
+GAM-stage2,fps,dist_accum_reg_to_sram,REGFILE,dist_accum_reg_128x32b,SRAM,fps_dist_sram,REGFILE,SRAM,131072,0.125000,Write accumulated distances to FPS distance SRAM (multi-bank advised)
+GAM-stage2,fps,distance_table_read,SRAM,fps_dist_sram,COMPUTE,fps_sorter,SRAM,COMPUTE,131072,0.125000,Per-iteration sorter reads
+GAM-stage2,fps,fps_index,COMPUTE,fps_sorter,REGFILE,fps_index_regfile,COMPUTE,REGFILE,512,0.000488,Sampled center indices
+GAM-stage2,knn,query_points,DRAM,offchip_dram,COMPUTE,knn_engine,DRAM,COMPUTE,1536,0.001465,Phase2 query-point reads
+GAM-stage2,knn,cim_array_preload,SRAM,xyz_sram_buffer,SRAM,sram_cim_array,SRAM,SRAM,3072,0.002930,Load key point cloud into SRAM-CIM array
+GAM-stage2,knn,dist_accum_reg_write,COMPUTE,dist2_mac,REGFILE,dist_accum_reg_128x32b,COMPUTE,REGFILE,131072,0.125000,CIM distance batches accumulated to regfile (supports overlap)
+GAM-stage2,knn,dist_accum_reg_to_sram,REGFILE,dist_accum_reg_128x32b,SRAM,knn_dist_sram,REGFILE,SRAM,131072,0.125000,Write accumulated distances to KNN distance SRAM (multi-bank advised)
+GAM-stage2,knn,distance_table_read,SRAM,knn_dist_sram,COMPUTE,knn_sorter,SRAM,COMPUTE,131072,0.125000,Per-query sorter reads
+GAM-stage2,knn,knn_topk_index,COMPUTE,knn_sorter,REGFILE,knn_topk_regfile,COMPUTE,REGFILE,12288,0.011719,Top-k neighbor indices
+GAM-stage2,knn,neighbor_features_spill,SRAM,inter_layer_sram,DRAM,offchip_dram,SRAM,DRAM,1572864,1.500000,"Gather workspace exceeds SRAM, spill to DRAM"
+LFP-stage2,layer_input,inter_layer_activation,SRAM,inter_layer_sram,COMPUTE,compute_fabric,SRAM,COMPUTE,65536,0.062500,Layer input read from inter-layer SRAM
+LFP-stage2,layer_input,inter_layer_spill,DRAM,offchip_dram,COMPUTE,compute_fabric,DRAM,COMPUTE,65536,0.062500,Spill read when layer input exceeds inter-layer SRAM capacity
+LFP-stage2,layer_output,inter_layer_activation,COMPUTE,compute_fabric,SRAM,inter_layer_sram,COMPUTE,SRAM,1024,0.000977,Layer output write to inter-layer SRAM
+LFP-stage2,lfp_path,local_path_tensor,COMPUTE,compute_fabric,REGFILE,lfp_local_path_reg,COMPUTE,REGFILE,131072,0.125000,lfp local-path intermediate (stream_through)
+LFP-stage2,lfp_path,center_path_tensor,COMPUTE,compute_fabric,REGFILE,lfp_center_path_reg,COMPUTE,REGFILE,131072,0.125000,lfp center-path intermediate (stream_through)
+LFP-stage2,lfp_path,pooled_local_tensor,COMPUTE,compute_fabric,REGFILE,lfp_pool_path_reg,COMPUTE,REGFILE,1024,0.000977,lfp pooled tensor (stream_through)
+LFP-stage2,add,main_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+LFP-stage2,add,residual_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=True, stream_through)"
+LFP-stage2,add,add_output_write,COMPUTE,add_unit,REGFILE,lfp_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+LFP-stage2,add,main_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+LFP-stage2,add,residual_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=True, stream_through)"
+LFP-stage2,add,add_output_write,COMPUTE,add_unit,REGFILE,lfp_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+LFP-stage2,add,main_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+LFP-stage2,add,residual_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=False, stream_through)"
+LFP-stage2,add,add_output_write,COMPUTE,add_unit,REGFILE,lfp_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+stage-2,layer_input,inter_layer_activation,SRAM,inter_layer_sram,COMPUTE,compute_fabric,SRAM,COMPUTE,1024,0.000977,Layer input read from inter-layer SRAM
+stage-2,layer_output,inter_layer_activation,COMPUTE,compute_fabric,SRAM,inter_layer_sram,COMPUTE,SRAM,65536,0.062500,Layer output write to inter-layer SRAM
+stage-2,layer_output,inter_layer_spill,COMPUTE,compute_fabric,DRAM,offchip_dram,COMPUTE,DRAM,65536,0.062500,Spill write when layer output exceeds inter-layer SRAM capacity
+stage-2,stage_path,local_path_tensor,COMPUTE,compute_fabric,REGFILE,stage_local_path_reg,COMPUTE,REGFILE,1024,0.000977,stage local-path intermediate (stream_through)
+stage-2,stage_path,center_path_tensor,COMPUTE,compute_fabric,REGFILE,stage_center_path_reg,COMPUTE,REGFILE,1024,0.000977,stage center-path intermediate (stream_through)
+stage-2,stage_path,pooled_local_tensor,COMPUTE,compute_fabric,REGFILE,stage_pool_path_reg,COMPUTE,REGFILE,1024,0.000977,stage pooled tensor (stream_through)
+stage-2,add,main_tensor_read,REGFILE,stage_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+stage-2,add,residual_tensor_read,REGFILE,stage_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=True, stream_through)"
+stage-2,add,add_output_write,COMPUTE,add_unit,REGFILE,stage_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+GAM-stage3,layer_input,inter_layer_activation,SRAM,inter_layer_sram,COMPUTE,compute_fabric,SRAM,COMPUTE,65536,0.062500,Layer input read from inter-layer SRAM
+GAM-stage3,layer_input,inter_layer_spill,DRAM,offchip_dram,COMPUTE,compute_fabric,DRAM,COMPUTE,65536,0.062500,Spill read when layer input exceeds inter-layer SRAM capacity
+GAM-stage3,layer_output,inter_layer_activation,COMPUTE,compute_fabric,SRAM,inter_layer_sram,COMPUTE,SRAM,65536,0.062500,Layer output write to inter-layer SRAM
+GAM-stage3,layer_output,inter_layer_spill,COMPUTE,compute_fabric,DRAM,offchip_dram,COMPUTE,DRAM,65536,0.062500,Spill write when layer output exceeds inter-layer SRAM capacity
+GAM-stage3,fps,query_points,DRAM,offchip_dram,COMPUTE,fps_engine,DRAM,COMPUTE,768,0.000732,Phase2 query-point reads
+GAM-stage3,fps,cim_array_preload,SRAM,xyz_sram_buffer,SRAM,sram_cim_array,SRAM,SRAM,1536,0.001465,Load key point cloud into SRAM-CIM array
+GAM-stage3,fps,dist_accum_reg_write,COMPUTE,dist2_mac,REGFILE,dist_accum_reg_128x32b,COMPUTE,REGFILE,32768,0.031250,CIM distance batches accumulated to regfile (supports overlap)
+GAM-stage3,fps,dist_accum_reg_to_sram,REGFILE,dist_accum_reg_128x32b,SRAM,fps_dist_sram,REGFILE,SRAM,32768,0.031250,Write accumulated distances to FPS distance SRAM (multi-bank advised)
+GAM-stage3,fps,distance_table_read,SRAM,fps_dist_sram,COMPUTE,fps_sorter,SRAM,COMPUTE,32768,0.031250,Per-iteration sorter reads
+GAM-stage3,fps,fps_index,COMPUTE,fps_sorter,REGFILE,fps_index_regfile,COMPUTE,REGFILE,256,0.000244,Sampled center indices
+GAM-stage3,knn,query_points,DRAM,offchip_dram,COMPUTE,knn_engine,DRAM,COMPUTE,768,0.000732,Phase2 query-point reads
+GAM-stage3,knn,cim_array_preload,SRAM,xyz_sram_buffer,SRAM,sram_cim_array,SRAM,SRAM,1536,0.001465,Load key point cloud into SRAM-CIM array
+GAM-stage3,knn,dist_accum_reg_write,COMPUTE,dist2_mac,REGFILE,dist_accum_reg_128x32b,COMPUTE,REGFILE,32768,0.031250,CIM distance batches accumulated to regfile (supports overlap)
+GAM-stage3,knn,dist_accum_reg_to_sram,REGFILE,dist_accum_reg_128x32b,SRAM,knn_dist_sram,REGFILE,SRAM,32768,0.031250,Write accumulated distances to KNN distance SRAM (multi-bank advised)
+GAM-stage3,knn,distance_table_read,SRAM,knn_dist_sram,COMPUTE,knn_sorter,SRAM,COMPUTE,32768,0.031250,Per-query sorter reads
+GAM-stage3,knn,knn_topk_index,COMPUTE,knn_sorter,REGFILE,knn_topk_regfile,COMPUTE,REGFILE,6144,0.005859,Top-k neighbor indices
+GAM-stage3,knn,neighbor_features_spill,SRAM,inter_layer_sram,DRAM,offchip_dram,SRAM,DRAM,1572864,1.500000,"Gather workspace exceeds SRAM, spill to DRAM"
+LFP-stage3,layer_input,inter_layer_activation,SRAM,inter_layer_sram,COMPUTE,compute_fabric,SRAM,COMPUTE,65536,0.062500,Layer input read from inter-layer SRAM
+LFP-stage3,layer_input,inter_layer_spill,DRAM,offchip_dram,COMPUTE,compute_fabric,DRAM,COMPUTE,65536,0.062500,Spill read when layer input exceeds inter-layer SRAM capacity
+LFP-stage3,layer_output,inter_layer_activation,COMPUTE,compute_fabric,SRAM,inter_layer_sram,COMPUTE,SRAM,2048,0.001953,Layer output write to inter-layer SRAM
+LFP-stage3,lfp_path,local_path_tensor,COMPUTE,compute_fabric,REGFILE,lfp_local_path_reg,COMPUTE,REGFILE,131072,0.125000,lfp local-path intermediate (stream_through)
+LFP-stage3,lfp_path,center_path_tensor,COMPUTE,compute_fabric,REGFILE,lfp_center_path_reg,COMPUTE,REGFILE,131072,0.125000,lfp center-path intermediate (stream_through)
+LFP-stage3,lfp_path,pooled_local_tensor,COMPUTE,compute_fabric,REGFILE,lfp_pool_path_reg,COMPUTE,REGFILE,2048,0.001953,lfp pooled tensor (stream_through)
+LFP-stage3,add,main_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+LFP-stage3,add,residual_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=True, stream_through)"
+LFP-stage3,add,add_output_write,COMPUTE,add_unit,REGFILE,lfp_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+LFP-stage3,add,main_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+LFP-stage3,add,residual_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=True, stream_through)"
+LFP-stage3,add,add_output_write,COMPUTE,add_unit,REGFILE,lfp_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+LFP-stage3,add,main_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+LFP-stage3,add,residual_tensor_read,REGFILE,lfp_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=False, stream_through)"
+LFP-stage3,add,add_output_write,COMPUTE,add_unit,REGFILE,lfp_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+stage-3,layer_input,inter_layer_activation,SRAM,inter_layer_sram,COMPUTE,compute_fabric,SRAM,COMPUTE,2048,0.001953,Layer input read from inter-layer SRAM
+stage-3,layer_output,inter_layer_activation,COMPUTE,compute_fabric,SRAM,inter_layer_sram,COMPUTE,SRAM,65536,0.062500,Layer output write to inter-layer SRAM
+stage-3,layer_output,inter_layer_spill,COMPUTE,compute_fabric,DRAM,offchip_dram,COMPUTE,DRAM,65536,0.062500,Spill write when layer output exceeds inter-layer SRAM capacity
+stage-3,stage_path,local_path_tensor,COMPUTE,compute_fabric,REGFILE,stage_local_path_reg,COMPUTE,REGFILE,2048,0.001953,stage local-path intermediate (stream_through)
+stage-3,stage_path,center_path_tensor,COMPUTE,compute_fabric,REGFILE,stage_center_path_reg,COMPUTE,REGFILE,2048,0.001953,stage center-path intermediate (stream_through)
+stage-3,stage_path,pooled_local_tensor,COMPUTE,compute_fabric,REGFILE,stage_pool_path_reg,COMPUTE,REGFILE,2048,0.001953,stage pooled tensor (stream_through)
+stage-3,add,main_tensor_read,REGFILE,stage_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,add main input read (stream_through)
+stage-3,add,residual_tensor_read,REGFILE,stage_add_input_reg,COMPUTE,add_unit,REGFILE,COMPUTE,131072,0.125000,"add residual input read (residual=True, stream_through)"
+stage-3,add,add_output_write,COMPUTE,add_unit,REGFILE,stage_add_output_reg,COMPUTE,REGFILE,131072,0.125000,add output write (stream_through)
+global_maxpool,layer_input,inter_layer_activation,SRAM,inter_layer_sram,COMPUTE,compute_fabric,SRAM,COMPUTE,65536,0.062500,Layer input read from inter-layer SRAM
+global_maxpool,layer_input,inter_layer_spill,DRAM,offchip_dram,COMPUTE,compute_fabric,DRAM,COMPUTE,65536,0.062500,Spill read when layer input exceeds inter-layer SRAM capacity
+global_maxpool,layer_output,inter_layer_activation,COMPUTE,compute_fabric,SRAM,inter_layer_sram,COMPUTE,SRAM,2048,0.001953,Layer output write to inter-layer SRAM
+classifier,layer_input,inter_layer_activation,SRAM,inter_layer_sram,COMPUTE,compute_fabric,SRAM,COMPUTE,2048,0.001953,Layer input read from inter-layer SRAM

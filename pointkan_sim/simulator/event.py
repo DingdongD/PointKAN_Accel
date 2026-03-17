@@ -52,6 +52,7 @@ class Event:
     data_size: int = 0
     clock_period_ns: float = 1.0  # Clock period in ns (default 1ns = 1GHz)
     status: EventStatus = EventStatus.PENDING
+    overlapped: bool = False  # 若 True：与下一阶段重叠，不占关键路径延迟，仍计能耗
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -217,10 +218,10 @@ class EventQueue:
         return self._events.copy()
     
     def get_last_cycle(self) -> int:
-        """Get the last cycle with any event."""
+        """Get the last cycle with any event（overlapped 事件不延伸关键路径）。"""
         if not self._events:
             return 0
-        return max(e.end_cycle for e in self._events)
+        return max(e.end_cycle for e in self._events if not getattr(e, "overlapped", False))
     
     def advance_cycle(self, cycles: int = 1) -> None:
         """

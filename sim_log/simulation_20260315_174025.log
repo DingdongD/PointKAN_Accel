@@ -1,0 +1,4 @@
+[2026-03-15 17:40:25] INFO     | Logger initialized: pointcloud_ppa_sim
+[2026-03-15 17:40:25] INFO     | Log level: INFO
+[2026-03-15 17:40:25] INFO     | Log file: sim_log/simulation_20260315_174025.log
+[2026-03-15 17:40:25] INFO     | SCALE-Sim 阵列尺寸: 64×64（conv1d 首层 embedding，后续层同）

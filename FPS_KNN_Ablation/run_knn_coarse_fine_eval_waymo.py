@@ -36,7 +36,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 
-from kitti_fps_exp import roi_filter
+from kitti_fps_exp import roi_filter, find_bin_files, collect_point_counts_and_xyz_ranges
 from spec_kan_fps import (
     fps_with_knn_adaptive,
     fps_with_knn_coarse_fine,
@@ -218,6 +218,7 @@ def run_iou_analysis(args):
 
     results = {
         "dataset": "Waymo",
+        "device": args.device,
         "data_dir": args.data_dir,
         "n_samples": int(iou_cf_v_per_sample.size),
         "n_total_frames": n_total,
@@ -273,16 +274,44 @@ def main():
     if len(files) == 0:
         raise FileNotFoundError(f"未找到 .bin 文件: {args.data_dir}")
 
+    counts, _, _ = collect_point_counts_and_xyz_ranges(
+        args.data_dir, do_roi=not args.no_roi, max_frames=-1,
+        load_fn=load_waymo_bin, find_fn=find_bin_files,
+    )
+    counts = np.array(counts, dtype=np.int64)
+    pts_min, pts_max = int(counts.min()), int(counts.max())
+    num_points_requested = args.num_points
+    num_points_eff = min(args.num_points, pts_max)
+    args.num_points = num_points_eff
+    dataset_stats = {
+        "n_frames": len(counts),
+        "points_per_frame_min": pts_min,
+        "points_per_frame_max": pts_max,
+        "points_per_frame_mean": float(counts.mean()),
+    }
+
     print("=" * 60)
     print("KNN 粗筛+细筛 与 Vanilla KNN IoU / radii 分析（Waymo）")
     print("=" * 60)
     t0 = time.perf_counter()
     iou_results = run_iou_analysis(args)
+    iou_results["dataset_points_stats"] = dataset_stats
+    iou_results["num_points_requested"] = num_points_requested
+    iou_results["num_points_effective"] = num_points_eff
     t1 = time.perf_counter()
 
     print(f"  数据目录: {iou_results['data_dir']}")
     print(f"  分析帧数: {iou_results['n_samples']} (目录总帧数: {iou_results['n_total_frames']})")
-    print(f"  每帧点数 N: {iou_results['num_points']}, FPS 步数 K: {iou_results['fps_steps']}, 邻居数 k: {iou_results['k_neighbors']}")
+    ds_stats = iou_results.get("dataset_points_stats", {})
+    pts_min = ds_stats.get("points_per_frame_min", 0)
+    pts_max = ds_stats.get("points_per_frame_max", 0)
+    n_req = iou_results.get("num_points_requested", iou_results["num_points"])
+    n_eff = iou_results.get("num_points_effective", iou_results["num_points"])
+    if n_req > pts_max:
+        print(f"  每帧点数 N: {n_eff:,} (设定 {n_req:,}，已按数据集最大点数截断)；数据集每帧点数范围: [{pts_min:,}, {pts_max:,}]")
+    else:
+        print(f"  每帧点数 N: {n_eff:,}；数据集每帧点数范围: [{pts_min:,}, {pts_max:,}]")
+    print(f"  FPS 步数 K: {iou_results['fps_steps']}, 邻居数 k: {iou_results['k_neighbors']}")
     print(f"  ROI 过滤: {iou_results['do_roi']}")
     print(f"  粗筛+细筛 min_candidates_ratio: {iou_results['min_candidates_ratio']}")
     print("  --- IoU (相对 Vanilla) ---")
