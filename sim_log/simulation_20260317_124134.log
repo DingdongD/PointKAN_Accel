@@ -1,0 +1,21 @@
+[2026-03-17 12:41:34] INFO     | Logger initialized: pointcloud_ppa_sim
+[2026-03-17 12:41:34] INFO     | Log level: INFO
+[2026-03-17 12:41:34] INFO     | Log file: sim_log/simulation_20260317_124134.log
+[2026-03-17 12:41:34] INFO     | ============================================================
+[2026-03-17 12:41:34] INFO     |  PointKAN CIM PPA 仿真器
+[2026-03-17 12:41:34] INFO     | ============================================================
+[2026-03-17 12:41:34] INFO     | 支持的算子类型: ['adaptive_max_pool1d', 'add', 'affine_norm', 'batchnorm1d', 'bn', 'conv1d', 'div', 'division', 'element_divide', 'element_multiply', 'fps', 'kan', 'knn', 'layernorm', 'linear', 'mul', 'multiplication', 'relu', 's-pool']
+[2026-03-17 12:41:34] INFO     | 
+[2026-03-17 12:41:34] INFO     | ============================================================
+[2026-03-17 12:41:34] INFO     |  网络仿真: pointnet2-cls-ssg
+[2026-03-17 12:41:34] INFO     | ============================================================
+[2026-03-17 12:41:34] INFO     | 网络: pointnet2-cls-ssg（4 层）
+[2026-03-17 12:41:34] INFO     | 点云输入: N×3，N=1024（每样本 12288 B）
+[2026-03-17 12:41:34] INFO     | 加速器: baseline (BASELINE)
+[2026-03-17 12:41:34] INFO     | CIM 并行度: 128
+[2026-03-17 12:41:34] INFO     | Bit-serial 周期: 6
+[2026-03-17 12:41:34] INFO     | 层间 buffer: size=65536 B, bandwidth=256 B/cycle, spill_to_dram=True, pipeline_mode=without_pipeline, double_buffering=False
+[2026-03-17 12:41:34] INFO     | 层间量化/反量化: 未启用 (默认，假定 W8A8 已就绪)
+[2026-03-17 12:41:34] INFO     | 
+[2026-03-17 12:41:34] INFO     | 
+[2026-03-17 12:41:34] INFO     | 错误: 仿真失败 - SRAM (inter-layer buffer) energy/cycle require CACTI simulation. CACTI was not run or failed. Check repo_root, memory_model path (hw_sim/cycle_simulator/memory_model), cacti binary and configs (configs/cacti, outputs/cacti).

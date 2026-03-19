@@ -114,6 +114,9 @@ def gen_sram_cim_distance_events_one_batch(
     """
     cim_power = hw_config.sram_cim_macro.array.cim_power
     shift_add_power = hw_config.sram_cim_macro.shift_add.power
+    merge_cfg = getattr(hw_config.sram_cim_macro, "dist2_merge_adder", None)
+    merge_power = float(getattr(merge_cfg, "power", shift_add_power) if merge_cfg is not None else shift_add_power)
+    merge_cycles = int(getattr(merge_cfg, "cycles", 1) if merge_cfg is not None else 1)
     clock_period = hw_config.clock_period
     meta = dict(metadata)
 
@@ -130,7 +133,7 @@ def gen_sram_cim_distance_events_one_batch(
         sub_stage="k_square_compute",
         circuit_module="sram_cim_array",
         operation="k2_bit_serial",
-        power=cim_power,
+        power=cim_power + shift_add_power,
         duration=dist_cycles,
         clock_period_ns=clock_period,
         metadata=meta,
@@ -147,7 +150,7 @@ def gen_sram_cim_distance_events_one_batch(
         sub_stage="cross_term_compute",
         circuit_module="sram_cim_array",
         operation="two_qk_bit_serial",
-        power=cim_power,
+        power=cim_power + shift_add_power,
         duration=dist_cycles,
         clock_period_ns=clock_period,
         metadata=meta,
@@ -161,15 +164,15 @@ def gen_sram_cim_distance_events_one_batch(
         cycle=cycle,
         operator=operator_name,
         stage="accumulate",
-        sub_stage="shift_add_accumulate",
-        circuit_module="shift_add",
-        operation="distance_accumulate",
-        power=shift_add_power,
-        duration=1,
+        sub_stage="dist2_merge_accumulate",
+        circuit_module="dist2_merge_adder",
+        operation="distance_merge_accumulate",
+        power=merge_power,
+        duration=max(1, merge_cycles),
         clock_period_ns=clock_period,
         metadata=meta,
     ))
     event_id += 1
-    cycle += 1
+    cycle += max(1, merge_cycles)
 
     return events, event_id, cycle

@@ -50,6 +50,11 @@ from pointkan_sim.network.pointkan_net import (
     create_pointkan_classification,
 )
 from pointkan_sim.network.pointkan_elite_net import create_pointkan_elite_classification
+from pointkan_sim.network.pointnet2_net import (
+    create_pointnet2_cls_ssg,
+    create_pointnet2_partseg_ssg,
+    create_pointnet2_sem_ssg,
+)
 from pointkan_sim.network.activation_shape import (
     compute_activation_shapes,
     ActivationShapeInfo,
@@ -133,8 +138,21 @@ def parse_args() -> argparse.Namespace:
         "--network",
         type=str,
         default=None,
-        choices=["pointkan", "pointkan-elite"],
+        choices=[
+            "pointkan",
+            "pointkan-elite",
+            "pointnet2-cls-ssg",
+            "pointnet2-partseg-ssg",
+            "pointnet2-sem-ssg",
+        ],
         help="要仿真的网络",
+    )
+    parser.add_argument(
+        "--input_channels",
+        type=int,
+        default=None,
+        metavar="C",
+        help="每点输入特征维度；仅 pointnet2-sem-ssg 需要指定（默认 12）",
     )
     parser.add_argument(
         "--accelerator",
@@ -258,14 +276,21 @@ def load_network(
     name: str,
     input_points: int = 1024,
     num_classes: int = 40,
+    **kwargs,
 ) -> List[LayerDef]:
     """
     根据名称加载网络层定义（LayerDef 有序列表）。
 
     Args:
-        name: 网络名称，"pointkan" 或 "pointkan-elite"
+        name: 网络名称，支持:
+            "pointkan"               — PointKAN 分类 (ModelNet40)
+            "pointkan-elite"         — PointKAN-Elite 分类 (ModelNet40)
+            "pointnet2-cls-ssg"      — PointNet2ClsSSG 分类 (ModelNet40)
+            "pointnet2-partseg-ssg"  — PointNet2PartSegSSG 分割 (ShapeNetPart)
+            "pointnet2-sem-ssg"      — PointNet2SemSSG 语义分割 (S3DIS)
         input_points: 输入点云点数
-        num_classes: 分类数
+        num_classes:  分类/分割类别数
+        **kwargs:     网络专属参数 (如 input_channels=12 for sem-ssg)
 
     Returns:
         按前向顺序排列的 LayerDef 列表。
@@ -283,7 +308,27 @@ def load_network(
             input_points=input_points,
             num_classes=num_classes,
         )
-    raise ValueError(f"未知网络: {name}")
+    if name == "pointnet2-cls-ssg":
+        return create_pointnet2_cls_ssg(
+            input_points=input_points,
+            num_classes=num_classes,
+        )
+    if name == "pointnet2-partseg-ssg":
+        return create_pointnet2_partseg_ssg(
+            input_points=input_points,
+            num_classes=num_classes,
+        )
+    if name == "pointnet2-sem-ssg":
+        input_channels = kwargs.get("input_channels", 12)
+        return create_pointnet2_sem_ssg(
+            input_points=input_points,
+            num_classes=num_classes,
+            input_channels=input_channels,
+        )
+    raise ValueError(
+        f"未知网络: {name}。支持: pointkan, pointkan-elite, "
+        "pointnet2-cls-ssg, pointnet2-partseg-ssg, pointnet2-sem-ssg"
+    )
 
 
 # =============================================================================
@@ -328,6 +373,7 @@ def simulate_network(
     enable_layer_buffer: bool = True,
     show_shapes: bool = False,
     repo_root: Optional[str] = None,
+    real_conv_linear_list: Optional[List[Any]] = None,
 ) -> Dict[str, Any]:
     """
     对整网进行周期级仿真：按层顺序派发算子、生成事件并送入调度器执行。
@@ -400,6 +446,25 @@ def simulate_network(
             meta["buffer_phase"] = phase
             ev.metadata = meta
 
+    def _apply_feature_chunk_pipeline_overlap(events: List[Any], overlap_tag: str) -> None:
+        chunked_layerbuffer = []
+        for ev in events:
+            if (ev.operator or "").strip() != "LayerBuffer":
+                continue
+            meta = getattr(ev, "metadata", None) or {}
+            chunk_count = int(meta.get("chunk_count", 1) or 1)
+            chunk_idx = int(meta.get("chunk_idx", 0) or 0)
+            if chunk_count > 1:
+                chunked_layerbuffer.append((chunk_idx, ev, meta))
+        if not chunked_layerbuffer:
+            return
+        for chunk_idx, ev, meta in chunked_layerbuffer:
+            if chunk_idx <= 0:
+                continue
+            ev.overlapped = True
+            meta["pipeline_overlap"] = overlap_tag
+            ev.metadata = meta
+
     if use_buffer and getattr(hw_config, "dram", None):
         buf = getattr(hw_config, "inter_layer_buffer", None)
         spill = getattr(buf, "spill_to_dram", False) if buf else False
@@ -444,6 +509,7 @@ def simulate_network(
             if any(op.op_type == "fps" for op in layer.operators):
                 first_layer_with_fps = idx
                 break
+    real_conv_linear_index = 0
     for i, layer in enumerate(layers):
         shape_info = activation_shapes[i] if (activation_shapes and i < len(activation_shapes)) else None
 
@@ -489,17 +555,35 @@ def simulate_network(
                 memory_context=memory_runtime_context,
             )
             _tag_feature_buffer_slot_events(read_events, (i - 1) % max(1, feature_buffer_slots), "input_read")
+            current_plan = feature_residency_plan_by_layer.get(layer.name)
+            buf_cfg = getattr(hw_config, "inter_layer_buffer", None)
+            pipeline_mode = str(getattr(buf_cfg, "pipeline_mode", "without_pipeline") or "without_pipeline").strip().lower() if buf_cfg else "without_pipeline"
+            double_buffering = bool(getattr(buf_cfg, "double_buffering", False)) if buf_cfg else False
+            allow_feature_read_stream = (
+                pipeline_mode == "pipeline"
+                and double_buffering
+                and current_plan is not None
+                and int(getattr(current_plan, "input_dram_bytes", 0) or 0) == 0
+            )
+            if allow_feature_read_stream:
+                _apply_feature_chunk_pipeline_overlap(read_events, "feature_sram_double_buffer_read")
             _add_events_to_scheduler(scheduler, read_events, current_cycle, layer.name, layer.layer_type)
             if read_events:
-                current_cycle += sum(e.duration for e in read_events)
+                current_cycle += sum(e.duration for e in read_events if not getattr(e, "overlapped", False))
                 num_events_this_layer += len(read_events)
 
         # 3) 本层计算事件（传入 layer_index / first_layer_with_fps，供 acc 下 FPS 仅首层执行、后续复用）
         dispatch_context = dict(mnsim_context) if mnsim_context else {}
+        if real_conv_linear_list:
+            dispatch_context["real_conv_linear_list"] = real_conv_linear_list
+            dispatch_context["real_conv_linear_index"] = real_conv_linear_index
         dispatch_context["layer_index"] = i
+        dispatch_context["memory_runtime_context"] = memory_runtime_context
         if getattr(hw_config, "is_acc", False) and first_layer_with_fps is not None:
             dispatch_context["first_layer_with_fps"] = first_layer_with_fps
         layer_events = dispatch_layer(layer.operators, hw_config, dispatch_context)
+        if real_conv_linear_list:
+            real_conv_linear_index = int(dispatch_context.get("real_conv_linear_index", real_conv_linear_index) or real_conv_linear_index)
         _add_events_to_scheduler(scheduler, layer_events, current_cycle, layer.name, layer.layer_type)
         layer_span = max((e.cycle + e.duration for e in layer_events), default=0)
         current_cycle += layer_span
@@ -528,11 +612,12 @@ def simulate_network(
                     and int(getattr(next_plan, "input_dram_bytes", 0) or 0) == 0
                 )
                 if allow_spill_overlap:
+                    _apply_feature_chunk_pipeline_overlap(write_events, "feature_sram_double_buffer_write")
                     for ev in write_events:
                         if (ev.operator or "").strip() == "DRAM":
                             ev.overlapped = True
                             meta = getattr(ev, "metadata", None) or {}
-                            meta["pipeline_overlap"] = "feature_sram_double_buffer"
+                            meta["pipeline_overlap"] = "feature_sram_double_buffer_dram"
                             ev.metadata = meta
                 current_cycle += sum(e.duration for e in write_events if not getattr(e, "overlapped", False))
                 num_events_this_layer += len(write_events)
@@ -924,6 +1009,7 @@ def run_demo(args: argparse.Namespace) -> Dict[str, Any]:
     )
     layers = load_network("pointkan", args.input_points, args.num_classes)
     activation_shapes = compute_activation_shapes(layers, args.input_points, input_channels=3)
+    real_conv_linear_list = getattr(args, "real_conv_linear_list", None)
 
     log_info(f"网络: PointKAN（{len(layers)} 层）")
     log_info(f"点云输入: N×3，N={args.input_points}（每样本 {args.input_points * 3 * 4} B）")
@@ -977,11 +1063,23 @@ def run_network_simulation(args: argparse.Namespace) -> Dict[str, Any]:
         spool=getattr(args, "logic_par_spool", None),
         quant_dequant=getattr(args, "logic_par_quant_dequant", None),
     )
-    layers = load_network(network_name, args.input_points, args.num_classes)
-    activation_shapes = compute_activation_shapes(layers, args.input_points, input_channels=3)
+    _net_input_channels = getattr(args, "input_channels", None) or (
+        12 if network_name == "pointnet2-sem-ssg" else 3
+    )
+    _net_kwargs: Dict[str, Any] = {}
+    if network_name == "pointnet2-sem-ssg":
+        _net_kwargs["input_channels"] = int(_net_input_channels)
+    layers = load_network(network_name, args.input_points, args.num_classes, **_net_kwargs)
+    activation_shapes = compute_activation_shapes(
+        layers, args.input_points, input_channels=int(_net_input_channels)
+    )
+    real_conv_linear_list = getattr(args, "real_conv_linear_list", None)
 
     log_info(f"网络: {network_name}（{len(layers)} 层）")
-    log_info(f"点云输入: N×3，N={args.input_points}（每样本 {args.input_points * 3 * 4} B）")
+    log_info(
+        f"点云输入: N×{_net_input_channels}，N={args.input_points}"
+        f"（每样本 {args.input_points * int(_net_input_channels) * 4} B）"
+    )
     log_info(
         f"加速器: {hw_config.accelerator_name} "
         f"({hw_config.accelerator_type.name})"

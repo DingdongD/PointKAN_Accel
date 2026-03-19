@@ -587,17 +587,28 @@ def gen_kan_rram_lut_events(params: Dict[str, Any], hw_config: "HardwareConfig")
         else:
             buffer_power = float(getattr(ob, "power", buffer_power) or buffer_power)
 
-    meta = {"variant": variant, "kat_impl": "rram_lut"}
+    kat_mode = str(params.get("kat_mode", "lut")).lower()
+    lut_cfg = getattr(getattr(hw_config, "rram_lut_macro", None), "rram_lut", None)
+    post_mac_power = float(getattr(lut_cfg, "post_mac_power", 0.0) or 0.0)
+    post_mac_cycles = int(getattr(lut_cfg, "post_mac_cycles", 0) or 0)
+    meta = {"variant": variant, "kat_impl": "rram_lut", "kat_mode": kat_mode}
     meta["num_points"] = num_points
     meta["in_features"] = in_features
     meta["out_features"] = out_features
     meta["activation_input_shape"] = f"{num_points}×{in_features}"
     meta["activation_output_shape"] = f"{num_points}×{out_features}"
-    return [
+    events = [
         _event(0, 0, "KAN", "buffer_io", "sram_read", "buffer", "kan_input_read", buffer_power, buffer_cycles, clk, meta),
         _event(1, buffer_cycles, "KAN", "rram_lut", "lut_eval", "rram_lut", "kan_basis_eval", lut_power, lut_cycles, clk, meta),
-        _event(2, buffer_cycles + lut_cycles, "KAN", "buffer_io", "sram_write", "buffer", "kan_output_write", buffer_power, buffer_cycles, clk, meta),
     ]
+    cursor = buffer_cycles + lut_cycles
+    if kat_mode == "lut_mac":
+        mac_cycles = max(1, post_mac_cycles or safe_div_ceil(max(1, num_points * out_features), lut_parallel))
+        mac_power = post_mac_power if post_mac_power > 0 else lut_power
+        events.append(_event(2, cursor, "KAN", "rram_lut", "lut_post_mac", "rram_lut", "kan_post_lut_mac", mac_power, mac_cycles, clk, meta))
+        cursor += mac_cycles
+    events.append(_event(3, cursor, "KAN", "buffer_io", "sram_write", "buffer", "kan_output_write", buffer_power, buffer_cycles, clk, meta))
+    return events
 
 
 def _try_scalesim_conv1d(params: Dict[str, Any], hw_config: "HardwareConfig"):
@@ -680,8 +691,8 @@ def gen_conv1d_systolic_events(params: Dict[str, Any], hw_config: "HardwareConfi
     systolic_meta_base = {
         "M": M, "K": K, "N": N, "layer_name": layer_name, "source": "scalesim",
         "num_points": L, "in_channels": in_ch, "out_channels": out_ch, "kernel_size": kernel,
-        "activation_input_shape": f"1×{L} ch={in_ch}",
-        "activation_output_shape": f"1×{L} ch={out_ch}",
+        "activation_input_shape": str(params.get("activation_input_shape") or f"1×{L} ch={in_ch}"),
+        "activation_output_shape": str(params.get("activation_output_shape") or f"1×{L} ch={out_ch}"),
     }
     systolic_meta_base.update(scalesim_meta)
     mac_energy_nj = scalesim_meta.get("scalesim_mac_energy_nj")
@@ -737,8 +748,8 @@ def gen_linear_systolic_events(params: Dict[str, Any], hw_config: "HardwareConfi
     meta = {
         "M": M, "K": K, "N": N, "layer_name": layer_name, "source": "scalesim",
         "tokens": N, "in_features": in_f, "out_features": out_f,
-        "activation_input_shape": f"{N}×1 ch={in_f}",
-        "activation_output_shape": f"{N}×1 ch={out_f}",
+        "activation_input_shape": str(params.get("activation_input_shape") or f"{N}×1 ch={in_f}"),
+        "activation_output_shape": str(params.get("activation_output_shape") or f"{N}×1 ch={out_f}"),
     }
     meta.update(scalesim_meta)
     mac_energy_nj = meta.get("scalesim_mac_energy_nj")

@@ -18,5 +18,14 @@
     "max": 0.9805364608764648
   },
   "radii_mse_coarse_fine_vs_vanilla": 0.0,
-  "radii_mse_adaptive_vs_vanilla": 0.0
+  "radii_mse_adaptive_vs_vanilla": 0.0,
+  "timing_sec": {
+    "vanilla": 840.0020318231545,
+    "adaptive": 831.2669185278937,
+    "coarse_fine": 841.8434638858307
+  },
+  "speedup_vs_vanilla": {
+    "adaptive": 1.0105081930972666,
+    "coarse_fine": 0.997812619398176
+  }
 }

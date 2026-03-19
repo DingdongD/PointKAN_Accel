@@ -193,7 +193,7 @@ def _build_lfp_operators_pointkan(
     # transfer1: Conv1d + BN + ReLU
     ops.append(OperatorRef(
         op_type="conv1d",
-        params={"in_channels": channels, "out_channels": channels, "kernel_size": 1},
+        params={"in_channels": channels, "out_channels": channels, "kernel_size": 1, "num_points": num_points},
         description=f"LFP transfer1: Conv1d({channels}→{channels}, k=1)",
     ))
     ops.append(OperatorRef(
@@ -229,7 +229,7 @@ def _build_lfp_operators_pointkan(
     # transfer2: Conv1d + BN + ReLU
     ops.append(OperatorRef(
         op_type="conv1d",
-        params={"in_channels": channels, "out_channels": channels, "kernel_size": 1},
+        params={"in_channels": channels, "out_channels": channels, "kernel_size": 1, "num_points": num_points},
         description=f"LFP transfer2: Conv1d({channels}→{channels}, k=1)",
     ))
     ops.append(OperatorRef(
@@ -274,7 +274,7 @@ def _build_gfp_operators(channels: int, num_points: int) -> List[OperatorRef]:
     return [
         OperatorRef(
             op_type="conv1d",
-            params={"in_channels": channels, "out_channels": channels, "kernel_size": 1},
+            params={"in_channels": channels, "out_channels": channels, "kernel_size": 1, "num_points": num_points},
             description=f"GFP Conv1d({channels}→{channels}, k=1) [layer 1]",
         ),
         OperatorRef(
@@ -289,7 +289,7 @@ def _build_gfp_operators(channels: int, num_points: int) -> List[OperatorRef]:
         ),
         OperatorRef(
             op_type="conv1d",
-            params={"in_channels": channels, "out_channels": channels, "kernel_size": 1},
+            params={"in_channels": channels, "out_channels": channels, "kernel_size": 1, "num_points": num_points},
             description=f"GFP Conv1d({channels}→{channels}, k=1) [layer 2]",
         ),
         OperatorRef(
@@ -468,7 +468,7 @@ def create_pointkan_classification(
     classifier_ops = [
         OperatorRef(
             op_type="linear",
-            params={"in_features": fc_dim, "out_features": fc_dim},
+            params={"in_features": fc_dim, "out_features": fc_dim, "tokens": 1},
             description=f"Classifier FC1: Linear({fc_dim}→{fc_dim})",
         ),
         OperatorRef(
@@ -484,7 +484,7 @@ def create_pointkan_classification(
         # Dropout(0.5) — ignored (inference no-op)
         OperatorRef(
             op_type="linear",
-            params={"in_features": fc_dim, "out_features": mid_dim},
+            params={"in_features": fc_dim, "out_features": mid_dim, "tokens": 1},
             description=f"Classifier FC2: Linear({fc_dim}→{mid_dim})",
         ),
         OperatorRef(
@@ -500,7 +500,7 @@ def create_pointkan_classification(
         # Dropout(0.5) — ignored (inference no-op)
         OperatorRef(
             op_type="linear",
-            params={"in_features": mid_dim, "out_features": num_classes},
+            params={"in_features": mid_dim, "out_features": num_classes, "tokens": 1},
             description=f"Classifier FC3: Linear({mid_dim}→{num_classes})",
         ),
     ]

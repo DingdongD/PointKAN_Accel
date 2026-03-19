@@ -1,0 +1,71 @@
+{
+  "n_samples": 4,
+  "n_total_test": 2468,
+  "fps_steps": 512,
+  "k_neighbors": 24,
+  "min_candidates_ratio": 1.2,
+  "blockwise_params": {
+    "block_size": 128,
+    "buffer_cap": 512,
+    "init_threshold": 0.1,
+    "max_iter": 10,
+    "use_sqrt": false
+  },
+  "tol_adaptive": 0.05,
+  "iou_coarse_fine_vs_vanilla": {
+    "mean": 0.9977353811264038,
+    "std": 0.0027335959021002054,
+    "min": 0.9933055639266968,
+    "max": 1.0
+  },
+  "iou_adaptive_vs_vanilla": {
+    "mean": 0.9535632133483887,
+    "std": 0.0074121239595115185,
+    "min": 0.9473243951797485,
+    "max": 0.9661350846290588
+  },
+  "iou_blockwise_vs_vanilla": {
+    "mean": 0.9992788434028625,
+    "std": 0.0012490798253566027,
+    "min": 0.9971153736114502,
+    "max": 1.0
+  },
+  "radii_mse_coarse_fine_vs_vanilla": 0.0,
+  "radii_mse_adaptive_vs_vanilla": 0.0,
+  "timing_sec": {
+    "vanilla": 1.2371547808870673,
+    "adaptive": 1.1970498890150338,
+    "coarse_fine": 0.8419291421305388,
+    "blockwise": 3.384494910016656
+  },
+  "speedup_vs_vanilla": {
+    "adaptive": 1.0335031081328054,
+    "coarse_fine": 1.4694286240720835,
+    "blockwise": 0.36553601461347124
+  },
+  "blockwise_block_stats": {
+    "n_blocks": 8,
+    "per_block_raw_candidates_mean": [
+      20.20263671875,
+      21.37890625,
+      21.662109375,
+      21.740234375,
+      22.0869140625,
+      22.20654296875,
+      21.76708984375,
+      21.24853515625
+    ],
+    "per_block_appended_to_buffer_mean": [
+      20.20263671875,
+      21.37890625,
+      21.662109375,
+      21.740234375,
+      22.0869140625,
+      22.20654296875,
+      21.74755859375,
+      21.00927734375
+    ],
+    "final_buffer_count_mean": 172.0341796875,
+    "note": "per_block_* 为每个 query(每个 FPS anchor) 的统计在所有样本上的均值；raw 为阈值通过数，appended 为实际写入 buffer 数。"
+  }
+}

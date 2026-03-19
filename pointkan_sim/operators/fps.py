@@ -395,7 +395,8 @@ class FPSOperator(BaseOperator):
         coarse_power = float(getattr(coarse_cfg, "power", 38.0) if coarse_cfg is not None else 38.0)
         fine_power = float(getattr(fine_cfg, "power", 30.0) if fine_cfg is not None else 30.0)
         coarse_rounds = max(1, int(getattr(hw, "fps_coarse_rounds_mean", 1)))
-        coarse_cycles = 4 * coarse_rounds + 1
+        explicit_coarse_cycles = int(getattr(coarse_cfg, "cycles", 0) if coarse_cfg is not None else 0)
+        coarse_cycles = explicit_coarse_cycles if explicit_coarse_cycles > 0 else (4 * coarse_rounds + 1)
         fine_cycles = int(getattr(fine_cfg, "cycles", 2) if fine_cfg is not None else 2)
 
         return [

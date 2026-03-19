@@ -1,0 +1,24 @@
+[2026-03-19 08:06:06] INFO     | Logger initialized: pointcloud_ppa_sim
+[2026-03-19 08:06:06] INFO     | Log level: INFO
+[2026-03-19 08:06:06] INFO     | Log file: sim_log/simulation_20260319_080606.log
+[2026-03-19 08:06:06] INFO     | ============================================================
+[2026-03-19 08:06:06] INFO     |  真实数据评估：ModelNet40 样本 + checkpoint 权重 + MNSIM 对应层 PPA
+[2026-03-19 08:06:06] INFO     | ============================================================
+[2026-03-19 08:06:06] INFO     | ACC backend selection: using NeuroSim full-network path (default/supported).
+[2026-03-19 08:06:06] INFO     | Checkpoint: /workspace/PointKAN-pytorch/PointKAN-elite/classification_ModelNet40/checkpoints/pointKANElite-pointkan_elite_exp-42
+[2026-03-19 08:06:06] INFO     | num_points=1024, num_classes=40, batch_size=1
+[2026-03-19 08:06:11] INFO     | 加速器: acc (ACC)
+[2026-03-19 08:06:11] INFO     | CIM 并行度: 128
+[2026-03-19 08:06:11] INFO     | Bit-serial 周期: 6
+[2026-03-19 08:06:11] INFO     | 层间 buffer: size=65536 B, bandwidth=256 B/cycle, spill_to_dram=True, pipeline_mode=pipeline, double_buffering=True, buffer_slots=0
+[2026-03-19 08:06:11] INFO     | DRAM: bandwidth=32 B/cycle, channels_override=None
+[2026-03-19 08:06:11] INFO     | ACC KNN dynamic threshold rounds(mean extra refine): 1
+[2026-03-19 08:06:11] INFO     | 层间量化/反量化: 未启用 (默认，假定 W8A8 已就绪)
+[2026-03-19 08:06:11] INFO     | BN 融合: 启用 (BN 不单独计入)
+[2026-03-19 08:06:11] INFO     | 数字逻辑时钟: 1.0000 ns (1000.00 MHz) (默认 1 GHz)
+[2026-03-19 08:06:11] INFO     | Memory Config Summary:
+[2026-03-19 08:06:11] INFO     |   DRAM: ini=/workspace/PointKAN-pytorch/hw_sim/cycle_simulator/DRAMsim3/configs/LPDDR4_8Gb_x16_2400.ini, bw=32 B/cycle, block=64 B, channels_override=None
+[2026-03-19 08:06:11] INFO     |   feature_sram_buffer: size=65536 B, effective_per_slot=32768 B, block=64 B, bw=256 B/cycle
+[2026-03-19 08:06:11] INFO     | 
+[2026-03-19 08:06:16] INFO     | NeuroSim 全网络未启用: returncode=255
+[2026-03-19 08:06:16] INFO     |   提示: 若为主进程崩溃(returncode≠0)，可检查 DNN_NeuroSim 是否支持当前层数/维度；层数较多时可尝试减少 batch 或先单独运行 NeuroSIM/main 排查。

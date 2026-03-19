@@ -39,6 +39,9 @@ class MemoryContractPolicy:
     dist_sram_bytes: int = 4 * 1024
     fps_min_distance_table_sram_bytes: int = 4 * 1024
     sort_cache_sram_bytes: int = 256
+    self_distance_sram_bytes: int = 4 * 1024
+    temp_max_distance_sram_bytes: int = 128
+    topk_sram_bytes: int = 2 * 1024
     lfp_workspace_sram_bytes: int = 512 * 1024
     gfp_workspace_sram_bytes: int = 512 * 1024
 
@@ -274,6 +277,7 @@ def _estimate_record_energy_nj(record: MemoryContractRecord, hw_config: Any) -> 
 
 def _build_buffer_relationships(hw_config: Any) -> List[BufferRelationship]:
     pipeline_mode = "without_pipeline"
+    is_acc_mode = bool(getattr(hw_config, "is_acc", False))
     double_buffering = False
     slots = 1
     buf = getattr(hw_config, "inter_layer_buffer", None)
@@ -283,16 +287,23 @@ def _build_buffer_relationships(hw_config: Any) -> List[BufferRelationship]:
         slots = int(getattr(buf, "buffer_slots", 0) or 0)
         if slots <= 0:
             slots = 2 if (pipeline_mode == "pipeline" and double_buffering) else 1
-    return [
-        BufferRelationship("xyz_sram_buffer", "point_cloud_frontend", "xyz/query/key cache", "shared across FPS/KNN distance generation", "serialized by distance generator front-end when same bank/port is reused", "stage boundary", "xyz_sram_shared", "can prefetch next query tile while previous distance batch computes when bank budget allows", "Shared source for baseline dist2engine and acc SRAM-CIM array"),
+    relationships = [
+        BufferRelationship("query_xyz_sram_buffer", "point_cloud_frontend", "query xyz cache", "shared across FPS/KNN queries over time", "exclusive with query reload on same SRAM region/port", "query boundary", "query_xyz_sram_shared", "can keep active query tile resident while key tiles stream through companion SRAM", "Holds current query xyz block for baseline dist2engine or acc SRAM-CIM front-end"),
+        BufferRelationship("key_xyz_sram_buffer", "point_cloud_frontend", "key xyz tile buffer", "shared across FPS/KNN key scans over time", "exclusive with key tile refill and key scan on same bank unless ping-ponged", "key-tile boundary", "key_xyz_sram_shared", "supports ping-pong refill in pipeline mode; serialized refill/consume without pipeline", "Streams key xyz tiles from DRAM into distance engine front-end"),
         BufferRelationship("feature_sram_buffer", "layer_intermediate", "persistent layer input/output activations", "shared across layers", f"exclusive per slot; slots={slots}", "layer boundary", "feature_sram_slot_<n>", f"{pipeline_mode}; double_buffering={double_buffering}", "Without pipeline a single slot is reused; with double buffering adjacent layers alternate slots"),
-        BufferRelationship("weight_sram_buffer", "weight_staging", "Conv/Linear weight tile buffer", "shared across Conv/Linear ops over time", "exclusive within a layer's active weight staging window", "operator boundary", "weight_sram_shared", "prefetchable ahead of compute; currently not overlapped globally", "Weights still sourced from DRAM in current runtime path"),
         BufferRelationship("dist_sram_buffer", "distance_path", "shared distance vector buffer for FPS/KNN", "shared physical SRAM reused by FPS and KNN", "FPS and KNN are mutually exclusive in one GAM stage; sorter read vs writer must serialize if same bank", "query/iteration boundary", "dist_sram_shared", "base_v1 full-vector; base_v2/acc stream 64-distance batches", "Physical SRAM shared, but FPS uses extra min-distance table and KNN consumes current distance vector directly"),
         BufferRelationship("fps_min_distance_table_sram", "distance_path", "FPS historical minimum distance table", "FPS-only logical region", "exclusive with FPS update and FPS sorter read on same region", "FPS iteration boundary", "fps_min_table_shared", "updated every sampled-center iteration; can ping-pong with dist_sram in future", "Needed only by FPS"),
         BufferRelationship("sort_cache_sram", "distance_path", "streaming sorter cache for base_v2/acc", "shared by FPS/KNN streaming sorters over time", "exclusive between FPS and KNN sorter cache use", "64-distance batch boundary", "sort_cache_shared", "inactive in base_v1; active in base_v2/acc streaming sort", "Stores previous batch top candidates before merge with next batch"),
-        BufferRelationship("nonlinear_workspace_sram", "nonlinear_workspace", "AffineNorm/SPool/Pool/KAN temporary tensors", "shared across nonlinear ops when lifetimes do not overlap", "exclusive across ops within the same layer execution window", "operator boundary", "nonlinear_workspace_shared", "can be partitioned later into GAM/LFP/GFP workspaces", "Current contract still exports finer names such as spool_workspace_sram and kan_workspace_sram"),
-        BufferRelationship("state_sram_buffer", "operator_local_state", "topk/index/psum/norm-reduce small state SRAM", "shared over time by operator-local stateful micro-steps", "exclusive per operator instance or batch window", "operator or batch boundary", "operator_local_state_sram", "not double-buffered by default; can be folded into dedicated local SRAM later", "Distance accumulation internal state is not modeled as a standalone buffer; other small state is grouped under operator-local SRAM"),
+        BufferRelationship("self_distance_sram_buffer", "distance_path", "acc self-distance k^2 staging buffer", "shared over time by FPS/KNN acc distance frontend", "exclusive with self-distance refill/read on same SRAM region", "query or key-set boundary", "self_distance_shared", "acc only; stores k^2/self-distance terms before cross-term accumulation", "Filled after SRAM-CIM self-square pass and read back during cross-term accumulation"),
+        BufferRelationship("temp_max_distance_sram", "distance_path", "acc FPS temporary max and speculative-radii SRAM", "shared over time by coarse/fine FPS filtering and speculative radii prediction", "exclusive between coarse-filter write, fine-filter consume, resampler, and predictor read/write on the same SRAM", "128-distance batch or FPS-layer boundary", "temp_max_shared", "acc only; stores per-batch FPS max candidates and reuses the same SRAM for exact-prefix/predicted radii curve staging", "Covers both FPS temporary max candidates and speculative radii curve storage"),
+        BufferRelationship("topk_sram_buffer", "distance_path", "acc KNN candidate top-k SRAM", "shared over time by coarse/fine KNN filtering", "exclusive between coarse-filter writes and iterative threshold refinement reads", "query boundary", "topk_sram_shared", "acc only; candidate set iteratively shrinks until fine-filter bandwidth condition is met", "Stores KNN candidate distances/indices after coarse filter"),
+                BufferRelationship("nonlinear_workspace_sram", "nonlinear_workspace", "AffineNorm/SPool/Pool/KAN temporary tensors", "shared across nonlinear ops when lifetimes do not overlap", "exclusive across ops within the same layer execution window", "operator boundary", "nonlinear_workspace_shared", "can be partitioned later into GAM/LFP/GFP workspaces; chunkable for feature pipeline", "Current contract still exports finer names such as spool_workspace_sram and kan_workspace_sram"),
+        BufferRelationship("nonlinear_param_sram", "nonlinear_params", "AffineNorm/LayerNorm/KAT small parameter or LUT SRAM", "shared over time by nonlinear parameter fetches", "exclusive when the same small parameter SRAM/LUT port is reused by concurrent nonlinear ops", "operator boundary", "nonlinear_param_shared", "typically resident; can prefetch ahead of nonlinear engine execution", "Covers affine/layernorm gamma-beta and KAT/GRF LUT or coefficient staging"),
+        BufferRelationship("state_sram_buffer", "operator_local_state", "topk/index/psum/norm-reduce small state SRAM", "shared over time by operator-local stateful micro-steps", "exclusive per operator instance or batch window", "operator or batch boundary", "operator_local_state_sram", "not double-buffered by default; can be folded into dedicated local SRAM later", "All former regfile-like local state is modeled as small SRAM/state buffer in the current contract"),
     ]
+    if not is_acc_mode:
+        relationships.insert(3, BufferRelationship("weight_sram_buffer", "weight_staging", "Conv/Linear weight tile buffer", "shared across Conv/Linear ops over time", "exclusive within a layer's active weight staging window", "operator boundary", "weight_sram_shared", "prefetchable ahead of compute; currently not overlapped globally", "Weights still sourced from DRAM in current runtime path"))
+    return relationships
 
 
 def _emit_layer_io_records(
@@ -315,9 +326,9 @@ def _emit_layer_io_records(
             src_tier=DRAM,
             src_name="offchip_dram",
             dst_tier=SRAM,
-            dst_name="xyz_sram_buffer",
+            dst_name="query_xyz_sram_buffer",
             nbytes=input_bytes,
-            note="Phase1 initial point-cloud load",
+            note="Phase1 initial point-cloud load into query xyz SRAM",
         )
 
     if (not is_first_layer) and input_bytes > 0:
@@ -392,7 +403,7 @@ def _tensor_storage_by_strategy(
         if tensor_bytes <= sram_capacity_bytes:
             return SRAM, sram_name
         return DRAM, "offchip_dram"
-    return REGFILE, reg_name
+    return SRAM, "state_sram_buffer"
 
 
 def _infer_points_channels(shape: Any) -> Tuple[int, int]:
@@ -445,6 +456,7 @@ def _emit_conv_linear_contract(
     shape: Any,
     p: MemoryContractPolicy,
 ) -> None:
+    is_acc_mode = bool(getattr(getattr(p, "hw_config", None), "is_acc", False))
     points, _ = _infer_points_channels_from_shape(shape)
     if op_name == "conv1d":
         in_dim = _safe_int(params.get("in_channels", 1), 1)
@@ -454,7 +466,7 @@ def _emit_conv_linear_contract(
         weight_bytes = in_dim * out_dim * kernel * p.bytes_per_element
         purpose = "Conv1d weight staging for systolic/CIM engine"
         psum_name = "conv_psum_reg"
-        engine = "conv_engine"
+        engine = "rram_cim_conv_engine" if is_acc_mode else "conv_engine"
     else:
         in_dim = _safe_int(params.get("in_features", 1), 1)
         out_dim = _safe_int(params.get("out_features", 1), 1)
@@ -462,24 +474,27 @@ def _emit_conv_linear_contract(
         weight_bytes = in_dim * out_dim * p.bytes_per_element
         purpose = "Linear weight staging for systolic/CIM engine"
         psum_name = "linear_psum_reg"
-        engine = "linear_engine"
+        engine = "rram_cim_linear_engine" if is_acc_mode else "linear_engine"
     input_bytes = max(1, vectors) * max(1, in_dim) * p.bytes_per_element
     output_bytes = max(1, vectors) * max(1, out_dim) * p.bytes_per_element
     psum_bytes = output_bytes
     feature_stage_bytes = min(input_bytes, p.inter_layer_sram_bytes)
 
     _append_record(records, layer_name, op_name, "input_activation", SRAM, "feature_sram_buffer", COMPUTE, engine, input_bytes, "Feature activations consumed from persistent feature SRAM or prior refill")
-    _append_record(records, layer_name, op_name, "weights", DRAM, "offchip_dram", SRAM, "weight_sram_buffer", weight_bytes, purpose)
-    _append_record(records, layer_name, op_name, "weights_staged", SRAM, "weight_sram_buffer", COMPUTE, engine, weight_bytes, "Weights streamed from local SRAM to compute engine")
-    _append_record(records, layer_name, op_name, "partial_sums", COMPUTE, engine, REGFILE, psum_name, psum_bytes, "Partial sums accumulated before output commit")
-    _append_record(records, layer_name, op_name, "output_activation", REGFILE, psum_name, SRAM, "feature_sram_buffer", output_bytes, "Operator output committed back to persistent feature SRAM")
+    if not is_acc_mode:
+        _append_record(records, layer_name, op_name, "weights", DRAM, "offchip_dram", SRAM, "weight_sram_buffer", weight_bytes, purpose)
+        _append_record(records, layer_name, op_name, "weights_staged", SRAM, "weight_sram_buffer", COMPUTE, engine, weight_bytes, "Weights streamed from local SRAM to compute engine")
+    _append_record(records, layer_name, op_name, "partial_sums", COMPUTE, engine, SRAM, "state_sram_buffer", psum_bytes, "Partial sums accumulated in local state SRAM before output commit")
+    _append_record(records, layer_name, op_name, "output_activation", SRAM, "state_sram_buffer", SRAM, "feature_sram_buffer", output_bytes, "Operator output committed back to persistent feature SRAM")
 
     _append_buffer_requirement(buffer_requirements, layer_name, op_name, SRAM, "feature_sram_buffer", feature_stage_bytes, "Shared persistent feature SRAM window for Conv/Linear input/output staging")
-    _append_buffer_requirement(buffer_requirements, layer_name, op_name, SRAM, "weight_sram_buffer", weight_bytes, purpose)
-    _append_buffer_requirement(buffer_requirements, layer_name, op_name, REGFILE, psum_name, psum_bytes, "Output-channel partial sums before write-back")
+    if not is_acc_mode:
+        _append_buffer_requirement(buffer_requirements, layer_name, op_name, SRAM, "weight_sram_buffer", weight_bytes, purpose)
+    _append_buffer_requirement(buffer_requirements, layer_name, op_name, SRAM, "state_sram_buffer", psum_bytes, "Output-channel partial sums before write-back in local SRAM")
     _update_peak(buffer_peaks, "feature_sram_buffer", feature_stage_bytes)
-    _update_peak(buffer_peaks, "weight_sram_buffer", weight_bytes)
-    _update_peak(buffer_peaks, psum_name, psum_bytes)
+    if not is_acc_mode:
+        _update_peak(buffer_peaks, "weight_sram_buffer", weight_bytes)
+    _update_peak(buffer_peaks, "state_sram_buffer", psum_bytes)
 
 
 def _emit_norm_contract(
@@ -526,13 +541,13 @@ def _emit_norm_contract(
     _append_record(records, layer_name, op_name, "input_activation", SRAM, "feature_sram_buffer", COMPUTE, engine, tensor_bytes, "Normalization input activations")
     _append_record(records, layer_name, op_name, "norm_parameters", DRAM, "offchip_dram", SRAM, buffer_name, param_bytes, purpose)
     _append_record(records, layer_name, op_name, "norm_parameters_staged", SRAM, buffer_name, COMPUTE, engine, param_bytes, "Normalization parameters streamed from local SRAM")
-    _append_record(records, layer_name, op_name, "reduction_state", COMPUTE, engine, REGFILE, reduce_name, reduce_bytes, "Mean/variance or affine reduction state")
+    _append_record(records, layer_name, op_name, "reduction_state", COMPUTE, engine, SRAM, "state_sram_buffer", reduce_bytes, "Mean/variance or affine reduction state in small local SRAM")
     _append_record(records, layer_name, op_name, "output_activation", COMPUTE, engine, SRAM, "feature_sram_buffer", tensor_bytes, "Normalized activations written back to persistent feature SRAM")
 
     _append_buffer_requirement(buffer_requirements, layer_name, op_name, SRAM, buffer_name, param_bytes, purpose)
-    _append_buffer_requirement(buffer_requirements, layer_name, op_name, REGFILE, reduce_name, reduce_bytes, "Normalization reduction state")
+    _append_buffer_requirement(buffer_requirements, layer_name, op_name, SRAM, "state_sram_buffer", reduce_bytes, "Normalization reduction state in small SRAM")
     _update_peak(buffer_peaks, buffer_name, param_bytes)
-    _update_peak(buffer_peaks, reduce_name, reduce_bytes)
+    _update_peak(buffer_peaks, "state_sram_buffer", reduce_bytes)
 
 
 def _emit_relu_contract(
@@ -548,10 +563,10 @@ def _emit_relu_contract(
     tensor_bytes = max(1, points) * max(1, channels) * p.bytes_per_element
     lane_bytes = max(1, channels) * p.bytes_per_element
     _append_record(records, layer_name, "relu", "input_activation", SRAM, "feature_sram_buffer", COMPUTE, "relu_engine", tensor_bytes, "Streaming activation read for ReLU")
-    _append_record(records, layer_name, "relu", "activation_lane", COMPUTE, "relu_engine", REGFILE, "relu_lane_reg", lane_bytes, "Per-lane compare/max state")
+    _append_record(records, layer_name, "relu", "activation_lane", COMPUTE, "relu_engine", SRAM, "state_sram_buffer", lane_bytes, "Per-lane compare/max state in local SRAM")
     _append_record(records, layer_name, "relu", "output_activation", COMPUTE, "relu_engine", SRAM, "feature_sram_buffer", tensor_bytes, "ReLU output written back to feature SRAM")
-    _append_buffer_requirement(buffer_requirements, layer_name, "relu", REGFILE, "relu_lane_reg", lane_bytes, "Streaming activation lane register")
-    _update_peak(buffer_peaks, "relu_lane_reg", lane_bytes)
+    _append_buffer_requirement(buffer_requirements, layer_name, "relu", SRAM, "state_sram_buffer", lane_bytes, "Streaming activation lane state SRAM")
+    _update_peak(buffer_peaks, "state_sram_buffer", lane_bytes)
 
 
 def _emit_pool_contract(
@@ -586,13 +601,13 @@ def _emit_pool_contract(
 
     _append_record(records, layer_name, op_name, "pool_input", SRAM, "feature_sram_buffer", SRAM, workspace_name, workspace_bytes, "Pool input window materialized before reduction")
     _append_record(records, layer_name, op_name, "pool_workspace", SRAM, workspace_name, COMPUTE, engine, workspace_bytes, "Pool workspace streamed to reduction engine")
-    _append_record(records, layer_name, op_name, "pool_reduce_state", COMPUTE, engine, REGFILE, reduce_name, output_bytes, "Per-channel max/accumulator state")
-    _append_record(records, layer_name, op_name, "pool_output", REGFILE, reduce_name, SRAM, workspace_name, output_bytes, "Pool result kept on-chip for downstream operator or layer output")
+    _append_record(records, layer_name, op_name, "pool_reduce_state", COMPUTE, engine, SRAM, "state_sram_buffer", output_bytes, "Per-channel max/accumulator state in local SRAM")
+    _append_record(records, layer_name, op_name, "pool_output", SRAM, "state_sram_buffer", SRAM, workspace_name, output_bytes, "Pool result kept on-chip for downstream operator or layer output")
 
     _append_buffer_requirement(buffer_requirements, layer_name, op_name, SRAM, workspace_name, workspace_bytes, purpose)
-    _append_buffer_requirement(buffer_requirements, layer_name, op_name, REGFILE, reduce_name, output_bytes, "Reduction state for pooling")
+    _append_buffer_requirement(buffer_requirements, layer_name, op_name, SRAM, "state_sram_buffer", output_bytes, "Reduction state for pooling in local SRAM")
     _update_peak(buffer_peaks, workspace_name, workspace_bytes)
-    _update_peak(buffer_peaks, reduce_name, output_bytes)
+    _update_peak(buffer_peaks, "state_sram_buffer", output_bytes)
 
 
 def _emit_kan_contract(
@@ -719,6 +734,7 @@ def analyze_memory_contract(
     - FPS/KNN 距离路径: 共享 dist_sram_buffer + FPS min_distance_table + 可选流式 sort_cache_sram
     """
     p = policy or MemoryContractPolicy()
+    setattr(p, "hw_config", hw_config)
 
     inter_buf = getattr(hw_config, "inter_layer_buffer", None)
     if inter_buf is not None:
@@ -819,6 +835,7 @@ def analyze_memory_contract(
                 fps_idx_bytes = n_out * p.index_bytes
                 sort_cache_bytes = max(1, p.distance_bytes + p.index_bytes)
                 sort_mode = "base_v1_full_vector" if not (getattr(hw_config, "is_baseline_v2", False) or getattr(hw_config, "is_acc", False)) else ("base_v2_streaming" if getattr(hw_config, "is_baseline_v2", False) else "acc_streaming")
+                is_acc_mode = bool(getattr(hw_config, "is_acc", False))
 
                 peak_dist_sram_shared = max(peak_dist_sram_shared, dist_vec_bytes)
                 peak_fps_min_table = max(peak_fps_min_table, dist_vec_bytes)
@@ -826,17 +843,31 @@ def analyze_memory_contract(
                     peak_sort_cache = max(peak_sort_cache, sort_cache_bytes)
 
                 _append_record(
-                    records, layer_name, "fps", "query_points",
-                    DRAM, "offchip_dram", COMPUTE, "fps_engine",
-                    query_bytes, "Phase2 query-point reads"
+                    records, layer_name, "fps", "query_points_refill",
+                    DRAM, "offchip_dram", SRAM, "query_xyz_sram_buffer",
+                    query_bytes, "Load current FPS query xyz block into query SRAM"
                 )
-
+                _append_record(
+                    records, layer_name, "fps", "query_points_consume",
+                    SRAM, "query_xyz_sram_buffer", COMPUTE, "fps_engine",
+                    query_bytes, "FPS repeatedly reads current query xyz from query SRAM"
+                )
+                _append_record(
+                    records, layer_name, "fps", "key_points_refill",
+                    DRAM, "offchip_dram", SRAM, "key_xyz_sram_buffer",
+                    scan_bytes, "Key xyz tiles stream from DRAM into key SRAM; each transfer implies DRAM read plus SRAM write"
+                )
+                if is_acc_mode:
+                    _append_record(records, layer_name, "fps", "cim_keyset_row_write", SRAM, "key_xyz_sram_buffer", SRAM, "sram_cim_array", n_ref * p.point_xyz_bytes, "ACC writes full key set row-by-row into SRAM-CIM array before self-distance pass")
+                    _append_record(records, layer_name, "fps", "self_distance_write", COMPUTE, "sram_cim_array", SRAM, "self_distance_sram_buffer", sort_rw_bytes, "ACC self-square k^2 distance terms stored before cross-term accumulation")
+                    _append_record(records, layer_name, "fps", "query_point_stream", DRAM, "offchip_dram", SRAM, "query_xyz_sram_buffer", n_out * p.point_xyz_bytes, "ACC streams one query xyz per FPS iteration from DRAM/query buffer")
+                    _append_record(records, layer_name, "fps", "self_distance_read", SRAM, "self_distance_sram_buffer", COMPUTE, "dist2_merge_adder", sort_rw_bytes, "ACC reads stored k^2 terms into accumulator before adding cross-term distances")
                 if p.model_cim_staging:
                     _append_record(
                         records, layer_name, "fps", "cim_array_preload",
-                        SRAM, "xyz_sram_buffer", SRAM, "sram_cim_array",
+                        SRAM, "key_xyz_sram_buffer", SRAM, "sram_cim_array",
                         n_ref * p.point_xyz_bytes,
-                        "Load key point cloud into distance generator array",
+                        "Load key xyz tile stream into distance generator array",
                     )
                     _append_record(
                         records, layer_name, "fps", "distance_vector_write",
@@ -847,8 +878,8 @@ def analyze_memory_contract(
                 else:
                     _append_record(
                         records, layer_name, "fps", "key_scan_xyz",
-                        SRAM, "xyz_sram_buffer", COMPUTE, "fps_engine",
-                        scan_bytes, "Distance scan against key set"
+                        SRAM, "key_xyz_sram_buffer", COMPUTE, "fps_engine",
+                        scan_bytes, "Distance scan against key xyz tile stream"
                     )
                     if p.materialize_fps_distance_table:
                         _append_record(
@@ -879,9 +910,31 @@ def analyze_memory_contract(
                         n_out * sort_cache_bytes, "Streaming FPS local-max cache across 64-distance batches"
                     )
                     _append_buffer_requirement(buffer_requirements, layer_name, "fps", SRAM, "sort_cache_sram", sort_cache_bytes, f"FPS streaming sorter cache ({sort_mode})")
+                if is_acc_mode:
+                    prefix_points = max(2, math.ceil(n_out * 0.1))
+                    downsample_points = min(64, prefix_points)
+                    speculative_curve_bytes = max(1, n_out) * p.distance_bytes
+                    _append_record(records, layer_name, "fps", "coarse_filter_tempmax_write", COMPUTE, "coarse_filter", SRAM, "temp_max_distance_sram", n_out * max(1, p.distance_bytes + p.index_bytes), "ACC coarse filter writes per-batch max candidate into temporary max-distance SRAM during the post-prediction coarse/fine phase; this SRAM is time-multiplexed with speculative radii staging, not used simultaneously")
+                    _append_record(records, layer_name, "fps", "fine_filter_tempmax_read", SRAM, "temp_max_distance_sram", COMPUTE, "fine_filter", n_out * max(1, p.distance_bytes + p.index_bytes), "ACC fine filter consumes temporary FPS max candidates from the same time-multiplexed temp/speculative SRAM during the post-prediction phase")
+                    _append_record(records, layer_name, "fps", "spec_prefix_resample_down_read", SRAM, "temp_max_distance_sram", COMPUTE, "resampler_downsample", prefix_points * p.distance_bytes, "After the first two exact FPS points, ACC resampler may downsample the growing exact radii prefix while the main FPS loop continues")
+                    _append_record(records, layer_name, "fps", "spec_prefix_resample_down_write", COMPUTE, "resampler_downsample", SRAM, "temp_max_distance_sram", downsample_points * p.distance_bytes, "Downsampled radii prefix written back into the same time-multiplexed temp/speculative SRAM")
+                    _append_record(records, layer_name, "fps", "spec_predictor_read", SRAM, "temp_max_distance_sram", COMPUTE, "spec_efficient_kan", downsample_points * p.distance_bytes, "After 10% FPS points complete, EfficientKAN-style predictor (roughly Linear+KAT) reads the downsampled radii prefix")
+                    _append_record(records, layer_name, "fps", "spec_predictor_write", COMPUTE, "spec_efficient_kan", SRAM, "temp_max_distance_sram", 64 * p.distance_bytes, "Predictor outputs a 64-point radii curve into the same time-multiplexed temp/speculative SRAM")
+                    _append_record(records, layer_name, "fps", "spec_resample_up_read", SRAM, "temp_max_distance_sram", COMPUTE, "resampler_upsample", 64 * p.distance_bytes, "Resampler reads the predicted 64-point radii curve for parallel upsampling")
+                    _append_record(records, layer_name, "fps", "spec_resample_up_write", COMPUTE, "resampler_upsample", SRAM, "temp_max_distance_sram", speculative_curve_bytes, "Upsampled full radii curve written into the same time-multiplexed temp/speculative SRAM and then used as the coarse-filter threshold schedule; before this point FPS still follows full-sort mode")
+                    _append_buffer_requirement(buffer_requirements, layer_name, "fps", SRAM, "self_distance_sram_buffer", dist_vec_bytes, "ACC self-distance k^2 SRAM buffer")
+                    _append_buffer_requirement(buffer_requirements, layer_name, "fps", SRAM, "temp_max_distance_sram", max(speculative_curve_bytes, max(1, p.distance_bytes + p.index_bytes)), "ACC shared temporary max/speculative radii SRAM")
+                    _update_peak(buffer_peak_bytes, "self_distance_sram_buffer", dist_vec_bytes)
+                    _update_peak(buffer_peak_bytes, "temp_max_distance_sram", max(speculative_curve_bytes, max(1, p.distance_bytes + p.index_bytes)))
 
+                _append_buffer_requirement(buffer_requirements, layer_name, "fps", SRAM, "query_xyz_sram_buffer", query_bytes, "Current query xyz SRAM block for FPS")
+                _append_buffer_requirement(buffer_requirements, layer_name, "fps", SRAM, "key_xyz_sram_buffer", min(scan_bytes, 3 * 1024), "Key xyz SRAM tile buffer for FPS (example tile)" )
                 _append_buffer_requirement(buffer_requirements, layer_name, "fps", SRAM, "dist_sram_buffer", dist_vec_bytes, "Shared distance SRAM reused by FPS/KNN")
                 _append_buffer_requirement(buffer_requirements, layer_name, "fps", SRAM, "fps_min_distance_table_sram", dist_vec_bytes, "Historical minimum distance table for FPS")
+                _update_peak(buffer_peak_bytes, "query_xyz_sram_buffer", query_bytes)
+                _update_peak(buffer_peak_bytes, "key_xyz_sram_buffer", min(scan_bytes, 3 * 1024))
+                _update_peak(buffer_peak_bytes, "query_xyz_sram_buffer", query_bytes)
+                _update_peak(buffer_peak_bytes, "key_xyz_sram_buffer", min(scan_bytes, 3 * 1024))
                 _update_peak(buffer_peak_bytes, "dist_sram_buffer", dist_vec_bytes)
                 _update_peak(buffer_peak_bytes, "fps_min_distance_table_sram", dist_vec_bytes)
                 if sort_mode != "base_v1_full_vector":
@@ -889,7 +942,7 @@ def analyze_memory_contract(
 
                 _append_record(
                     records, layer_name, "fps", "fps_index",
-                    COMPUTE, "fps_sorter", REGFILE, "fps_index_regfile",
+                    COMPUTE, "fps_sorter", SRAM, "state_sram_buffer",
                     fps_idx_bytes, "Sampled center indices"
                 )
 
@@ -904,23 +957,38 @@ def analyze_memory_contract(
                 topk_idx_bytes = n_query * k * p.index_bytes
                 sort_cache_bytes = max(32, k) * (p.distance_bytes + p.index_bytes)
                 sort_mode = "base_v1_full_vector" if not (getattr(hw_config, "is_baseline_v2", False) or getattr(hw_config, "is_acc", False)) else ("base_v2_streaming" if getattr(hw_config, "is_baseline_v2", False) else "acc_streaming")
+                is_acc_mode = bool(getattr(hw_config, "is_acc", False))
 
                 peak_dist_sram_shared = max(peak_dist_sram_shared, dist_vec_bytes)
                 if sort_mode != "base_v1_full_vector":
                     peak_sort_cache = max(peak_sort_cache, sort_cache_bytes)
 
                 _append_record(
-                    records, layer_name, "knn", "query_points",
-                    DRAM, "offchip_dram", COMPUTE, "knn_engine",
-                    query_bytes, "Phase2 query-point reads"
+                    records, layer_name, "knn", "query_points_refill",
+                    DRAM, "offchip_dram", SRAM, "query_xyz_sram_buffer",
+                    query_bytes, "Load current KNN query xyz block into query SRAM"
                 )
-
+                _append_record(
+                    records, layer_name, "knn", "query_points_consume",
+                    SRAM, "query_xyz_sram_buffer", COMPUTE, "knn_engine",
+                    query_bytes, "KNN repeatedly reads current query xyz from query SRAM"
+                )
+                _append_record(
+                    records, layer_name, "knn", "key_points_refill",
+                    DRAM, "offchip_dram", SRAM, "key_xyz_sram_buffer",
+                    scan_bytes, "Key xyz tiles stream from DRAM into key SRAM; each transfer implies DRAM read plus SRAM write"
+                )
+                if is_acc_mode:
+                    _append_record(records, layer_name, "knn", "cim_keyset_row_write", SRAM, "key_xyz_sram_buffer", SRAM, "sram_cim_array", n_ref * p.point_xyz_bytes, "ACC writes full key set row-by-row into SRAM-CIM array before self-distance pass")
+                    _append_record(records, layer_name, "knn", "self_distance_write", COMPUTE, "sram_cim_array", SRAM, "self_distance_sram_buffer", sort_rw_bytes, "ACC self-square k^2 distance terms stored before cross-term accumulation")
+                    _append_record(records, layer_name, "knn", "query_point_stream", DRAM, "offchip_dram", SRAM, "query_xyz_sram_buffer", n_query * p.point_xyz_bytes, "ACC streams query xyz from DRAM/query buffer into query SRAM")
+                    _append_record(records, layer_name, "knn", "self_distance_read", SRAM, "self_distance_sram_buffer", COMPUTE, "dist2_merge_adder", sort_rw_bytes, "ACC reads stored k^2 terms into accumulator before adding cross-term distances")
                 if p.model_cim_staging:
                     _append_record(
                         records, layer_name, "knn", "cim_array_preload",
-                        SRAM, "xyz_sram_buffer", SRAM, "sram_cim_array",
+                        SRAM, "key_xyz_sram_buffer", SRAM, "sram_cim_array",
                         n_ref * p.point_xyz_bytes,
-                        "Load key point cloud into distance generator array",
+                        "Load key xyz tile stream into distance generator array",
                     )
                     _append_record(
                         records, layer_name, "knn", "distance_vector_write",
@@ -931,8 +999,8 @@ def analyze_memory_contract(
                 else:
                     _append_record(
                         records, layer_name, "knn", "key_scan_xyz",
-                        SRAM, "xyz_sram_buffer", COMPUTE, "knn_engine",
-                        scan_bytes, "Distance scan against key set"
+                        SRAM, "key_xyz_sram_buffer", COMPUTE, "knn_engine",
+                        scan_bytes, "Distance scan against key xyz tile stream"
                     )
                     if p.materialize_knn_distance_table:
                         _append_record(
@@ -953,7 +1021,16 @@ def analyze_memory_contract(
                         n_query * sort_cache_bytes, "Streaming KNN top-k cache across 64-distance batches"
                     )
                     _append_buffer_requirement(buffer_requirements, layer_name, "knn", SRAM, "sort_cache_sram", sort_cache_bytes, f"KNN streaming sorter cache ({sort_mode})")
+                if is_acc_mode:
+                    _append_record(records, layer_name, "knn", "coarse_filter_topk_write", COMPUTE, "coarse_filter", SRAM, "topk_sram_buffer", n_query * sort_cache_bytes, "ACC KNN coarse filter writes candidate distances/indices into top-k SRAM buffer")
+                    _append_record(records, layer_name, "knn", "topk_refine_read", SRAM, "topk_sram_buffer", COMPUTE, "coarse_filter", n_query * sort_cache_bytes, "ACC KNN iterative threshold refinement rereads top-k SRAM until fine-filter bandwidth condition is met")
+                    _append_buffer_requirement(buffer_requirements, layer_name, "knn", SRAM, "self_distance_sram_buffer", dist_vec_bytes, "ACC self-distance k^2 SRAM buffer")
+                    _append_buffer_requirement(buffer_requirements, layer_name, "knn", SRAM, "topk_sram_buffer", max(sort_cache_bytes, p.topk_sram_bytes), "ACC KNN candidate top-k SRAM buffer")
+                    _update_peak(buffer_peak_bytes, "self_distance_sram_buffer", dist_vec_bytes)
+                    _update_peak(buffer_peak_bytes, "topk_sram_buffer", max(sort_cache_bytes, p.topk_sram_bytes))
 
+                _append_buffer_requirement(buffer_requirements, layer_name, "knn", SRAM, "query_xyz_sram_buffer", query_bytes, "Current query xyz SRAM block for KNN")
+                _append_buffer_requirement(buffer_requirements, layer_name, "knn", SRAM, "key_xyz_sram_buffer", min(scan_bytes, 3 * 1024), "Key xyz SRAM tile buffer for KNN (example tile)")
                 _append_buffer_requirement(buffer_requirements, layer_name, "knn", SRAM, "dist_sram_buffer", dist_vec_bytes, "Shared distance SRAM reused by FPS/KNN")
                 _update_peak(buffer_peak_bytes, "dist_sram_buffer", dist_vec_bytes)
                 if sort_mode != "base_v1_full_vector":
@@ -961,7 +1038,7 @@ def analyze_memory_contract(
 
                 _append_record(
                     records, layer_name, "knn", "knn_topk_index",
-                    COMPUTE, "knn_sorter", REGFILE, "knn_topk_regfile",
+                    COMPUTE, "knn_sorter", SRAM, "state_sram_buffer",
                     topk_idx_bytes, "Top-k neighbor indices"
                 )
 
@@ -993,8 +1070,8 @@ def analyze_memory_contract(
                 _emit_add_records(records, layer_name, layer_type, params, p)
                 add_points, add_channels = _infer_points_channels_for_op(shape, params)
                 add_tensor_bytes = max(1, add_points) * max(1, add_channels) * p.bytes_per_element
-                _append_buffer_requirement(buffer_requirements, layer_name, op_name, REGFILE, "add_lane_reg", max(1, add_channels) * p.bytes_per_element, "Streaming element-wise add lane register")
-                _update_peak(buffer_peak_bytes, "add_lane_reg", max(1, add_channels) * p.bytes_per_element)
+                _append_buffer_requirement(buffer_requirements, layer_name, op_name, SRAM, "state_sram_buffer", max(1, add_channels) * p.bytes_per_element, "Streaming element-wise add lane state SRAM")
+                _update_peak(buffer_peak_bytes, "state_sram_buffer", max(1, add_channels) * p.bytes_per_element)
                 if layer_type.lower() == "lfp":
                     peak_lfp_workspace = max(peak_lfp_workspace, add_tensor_bytes)
                 elif layer_type.lower() == "stage":

@@ -137,9 +137,9 @@ class Dist2MergeAdderConfig:
     """
     Dist2 merge adder (acc).
     """
-    power: float = 0.0                          # TODO: mW
-    area: float = 0.0                           # TODO: mm²
-    cycles: int = 0                             # TODO: execution cycles
+    power: float = 1.3                          # mW
+    area: float = 2179.0                        # um^2
+    cycles: int = 1                             # execution cycles
 
     parallelism: int = 1                        # 设计空间探索参数
 
@@ -188,9 +188,9 @@ class ShiftAddConfig:
 @dataclass
 class MinDistanceTableConfig:
     """FPS 中用于更新最小距离的查找表。"""
-    power: float = 30.0                         # TODO: mW
-    cycles: int = 0                             # TODO: execution cycles
-    area: float = 26610.0                        # TODO: um^2
+    power: float = 30.0                         # mW (acc default; baseline overrides separately)
+    cycles: int = 1                             # execution cycles
+    area: float = 26610.0                       # um^2
 
 
 @dataclass
@@ -227,6 +227,9 @@ class RRAMLutConfig:
     power: float = 0.0                          # TODO: mW
     area: float = 0.0                           # TODO: mm²
     cycles: int = 0                             # TODO: execution cycles
+    post_mac_power: float = 0.0                 # TODO: mW, LUT后乘加模式占位
+    post_mac_area: float = 0.0                  # TODO: mm²
+    post_mac_cycles: int = 0                    # TODO: execution cycles
 
 
 @dataclass
@@ -349,9 +352,22 @@ class FineFilterConfig:
     """
     Fine filter (acc).
     """
-    power: float = 38.0                          # TODO: mW
-    area: float = 53261.0                           # TODO: mm²
-    cycles: int = 0                             # TODO: execution cycles
+    power: float = 38.0                          # mW
+    area: float = 53261.0                        # um^2
+    cycles: int = 2                              # execution cycles
+
+
+@dataclass
+class ThresholdGenConfig:
+    """
+    KNN dynamic-threshold generator (acc).
+
+    用于在 blockwise 第一轮粗筛后，根据累计候选数更新下一轮粗筛阈值。
+    当前作为独立控制模块建模；若无单独标定，默认复用 1 个 FP32 mul + 1 个 FP32 add 的等效 PPA。
+    """
+    power: float = 3.66                          # 2.5 (mul) + 1.16 (add) mW
+    area: float = 3297.0                         # 2024 (mul) + 1273 (add) um^2
+    cycles: int = 1                              # execution cycles
 
 
 @dataclass
@@ -373,6 +389,7 @@ class SortingCircuitConfig:
     merge_sort: Optional[MergeSortConfig] = None   # baseline_v2 流式 FPS/KNN
     coarse_filter: Optional[CoarseFilterConfig] = None
     fine_filter: Optional[FineFilterConfig] = None
+    threshold_gen: Optional[ThresholdGenConfig] = None
 
 
 # =============================================================================
@@ -537,17 +554,22 @@ class ResamplerConfig:
     """
     Resampler（acc only）：FPS radii 推测采样的线性插值，分下采样/上采样两种模式。
 
-    - 下采样、上采样：功耗均为 power（3.95mW），核心面积均为 area（4719 um^2）；考虑并行时
-      功耗与核心面积乘以 parallelism，即 power_total = power * P，area_core_total = area * P。
-    - LUT 面积不乘 parallelism：下采样 LUT lut_area_downsample，上采样 LUT lut_area_upsample，
-      只计一次。总面积 = area * parallelism + lut_area_downsample + lut_area_upsample。
-    需求 3.4：T=N+2 或 T=N/P+2。
+    - 下采样、上采样核心插值单元功耗均为 power（3.95mW），核心面积均为 area（4719 um^2）；
+      考虑并行时功耗与核心面积乘以 parallelism，即 power_total = power * P，
+      area_core_total = area * P。
+    - LUT 读单独建模：下采样 LUT 与上采样 LUT 读功耗均为 0.094mW、1 cycle，
+      面积分别是 13485 / 85331 um^2，不乘 parallelism。
+    - 核心插值流水周期仍按需求 3.4：T=N+2 或 T=N/P+2。
     """
     power: float = 3.95                         # mW @ 每路；总功耗 = power * parallelism
     cycles: int = 0                             # 0 表示 T=N+2 或 T=N/P+2
     area: float = 4719.0                        # um^2 @ 每路；核心总面积 = area * parallelism
     parallelism: int = 1                        # 设计空间探索参数
-    lut_area_downsample: float = 13485.0         # um^2，下采样 LUT，不乘 parallelism
+    lut_power_downsample: float = 0.094         # mW，下采样 LUT 读功耗
+    lut_cycles_downsample: int = 1              # 下采样 LUT 读周期
+    lut_area_downsample: float = 13485.0        # um^2，下采样 LUT，不乘 parallelism
+    lut_power_upsample: float = 0.094           # mW，上采样 LUT 读功耗
+    lut_cycles_upsample: int = 1                # 上采样 LUT 读周期
     lut_area_upsample: float = 85331.0          # um^2，上采样 LUT，不乘 parallelism
 
 
@@ -754,6 +776,10 @@ class HardwareConfig:
     fps_engine_mode: str = "baseline"
     # KNN 引擎模式：baseline/fuse（fuse 使用 coarse+fine 两级筛选事件模型）
     knn_engine_mode: str = "baseline"
+    # acc KNN 动态阈值：用硬件友好的平均收敛轮数代替软件 while-loop
+    # 含义：完成一次 block 粗筛并写入 topk SRAM 后，平均还需要多少轮 threshold refine。
+    # 1 表示只做首轮粗筛后直接细筛；2 表示再做 1 轮 refine；依此类推。
+    knn_dynamic_threshold_rounds_mean: int = 1
     # bn_fuse_with_conv_linear=True：推理时 BN 紧跟 Conv/Linear 则融合，不计 BN cycle/能耗
     bn_fuse_with_conv_linear: bool = True
     # W8A8：Conv/Linear 前插入量化(FP32→INT8)、后插入反量化(INT8→FP32)，供 BN/ReLU 等浮点非线性使用
@@ -836,6 +862,8 @@ class HardwareConfig:
             modules['coarse_filter'] = self.sorting_circuit.coarse_filter
         if self.sorting_circuit.fine_filter is not None:
             modules['fine_filter'] = self.sorting_circuit.fine_filter
+        if self.sorting_circuit.threshold_gen is not None:
+            modules['threshold_gen'] = self.sorting_circuit.threshold_gen
         # Baseline 特征计算（仅 base_v1/base_v2）
         if self.systolic_array is not None:
             modules['systolic_array'] = self.systolic_array
@@ -967,9 +995,9 @@ def _build_baseline() -> HardwareConfig:
         baseline_dist2_engine=BaselineDist2EngineConfig(),  # 94 mW, 89884 um^2
         sorting_circuit=SortingCircuitConfig(
             min_distance_table=MinDistanceTableConfig(
-                power=30.0,                     # mW
+                power=4.3,                      # mW (baseline min-distance update engine)
                 cycles=0,
-                area=26610.0,                   # um^2
+                area=10839.0,                   # um^2
             ),
             bitonic_sort=BitonicSortConfig(),   # 1570/1540 mW, 2157561 um^2
             coarse_filter=None,
@@ -1095,12 +1123,12 @@ def _build_acc() -> HardwareConfig:
             rram_lut=RRAMLutConfig(             # for GRF
                 power=5.0,                       # mW，标称；可由 LUT 工具标定
                 area=0.0,
-                cycles=0,
+                cycles=1,
             ),
             rram_lut_speculative=RRAMLutConfig(  # for speculative sampling
                 power=5.0,                       # mW，标称
                 area=0.0,
-                cycles=0,
+                cycles=1,
             ),
         ),
 
@@ -1115,15 +1143,24 @@ def _build_acc() -> HardwareConfig:
         sorting_circuit=SortingCircuitConfig(
             min_distance_table=MinDistanceTableConfig(
                 power=30.0,                     # mW
-                cycles=0,
+                cycles=1,
                 area=26610.0,                   # um^2
             ),
             bitonic_sort=None,                  # acc: not used
-            coarse_filter=CoarseFilterConfig(), # 38 mW, 644686 um^2
+            coarse_filter=CoarseFilterConfig(
+                power=81.12,                    # mW, FPS/KNN coarse filter
+                area=94204.0,                   # um^2
+                cycles=1,
+            ),
             fine_filter=FineFilterConfig(
                 power=38.0,                     # mW
                 area=53261.0,                   # um^2
-                cycles=0,
+                cycles=2,
+            ),
+            threshold_gen=ThresholdGenConfig(
+                power=3.66,                     # mW = FP32 mul + add
+                area=3297.0,                    # um^2 = 2024 + 1273
+                cycles=1,
             ),
         ),
 

@@ -1,0 +1,53 @@
+{
+  "n_samples": 8,
+  "n_total_test": 2468,
+  "fps_steps": 512,
+  "k_neighbors": 24,
+  "min_candidates_ratio": 1.2,
+  "blockwise_params": {
+    "block_size": 128,
+    "buffer_cap": 512,
+    "init_threshold": 0.1,
+    "max_iter": 10,
+    "use_sqrt": false
+  },
+  "tol_adaptive": 0.05,
+  "iou_coarse_fine_vs_vanilla": {
+    "mean": 0.9969995617866516,
+    "std": 0.002572859637439251,
+    "min": 0.9933055639266968,
+    "max": 1.0
+  },
+  "iou_adaptive_vs_vanilla": {
+    "mean": 0.9527132511138916,
+    "std": 0.010394816286861897,
+    "min": 0.9324133396148682,
+    "max": 0.9661350846290588
+  },
+  "iou_blockwise_vs_vanilla": {
+    "mean": 0.6587320566177368,
+    "std": 0.243645578622818,
+    "min": 0.23583984375,
+    "max": 0.9034830331802368
+  },
+  "iou_blockwise_knn_all_centers_fast_vs_vanilla": {
+    "mean": 0.6587320566177368,
+    "std": 0.243645578622818,
+    "min": 0.23583984375,
+    "max": 0.9034830331802368
+  },
+  "radii_mse_coarse_fine_vs_vanilla": 0.0,
+  "radii_mse_adaptive_vs_vanilla": 0.0,
+  "timing_sec": {
+    "vanilla": 1.6652168270666152,
+    "adaptive": 1.6079011671245098,
+    "coarse_fine": 1.0744747349526733,
+    "blockwise": 0.07927454612217844
+  },
+  "speedup_vs_vanilla": {
+    "adaptive": 1.0356462580623695,
+    "coarse_fine": 1.5497961682086103,
+    "blockwise": 21.00569361192144
+  },
+  "speedup_blockwise_knn_all_centers_fast_vs_vanilla": 21.00569361192144
+}

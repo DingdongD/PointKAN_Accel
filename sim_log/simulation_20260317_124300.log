@@ -1,0 +1,20 @@
+[2026-03-17 12:43:00] INFO     | Logger initialized: pointcloud_ppa_sim
+[2026-03-17 12:43:00] INFO     | Log level: INFO
+[2026-03-17 12:43:00] INFO     | Log file: sim_log/simulation_20260317_124300.log
+[2026-03-17 12:43:00] INFO     | ============================================================
+[2026-03-17 12:43:00] INFO     |  PPA 仿真（与 checkpoint/ModelNet40 配置一致）
+[2026-03-17 12:43:00] INFO     | ============================================================
+[2026-03-17 12:43:00] INFO     | Checkpoint: /workspace/PointKAN-pytorch/PointKAN-elite/classification_ModelNet40/checkpoints/pointKANElite-pointkan_elite_exp-42
+[2026-03-17 12:43:00] INFO     | num_points=4096, num_classes=13
+[2026-03-17 12:43:00] INFO     | ============================================================
+[2026-03-17 12:43:00] INFO     |  网络仿真: pointnet2-sem-ssg
+[2026-03-17 12:43:00] INFO     | ============================================================
+[2026-03-17 12:43:00] INFO     | 网络: pointnet2-sem-ssg（9 层）
+[2026-03-17 12:43:00] INFO     | 点云输入: N×12，N=4096（每样本 196608 B）
+[2026-03-17 12:43:00] INFO     | 加速器: baseline (BASELINE)
+[2026-03-17 12:43:00] INFO     | CIM 并行度: 128
+[2026-03-17 12:43:00] INFO     | Bit-serial 周期: 6
+[2026-03-17 12:43:00] INFO     | 层间 buffer: size=65536 B, bandwidth=256 B/cycle, spill_to_dram=True, pipeline_mode=without_pipeline, double_buffering=False
+[2026-03-17 12:43:00] INFO     | 层间量化/反量化: 未启用 (默认，假定 W8A8 已就绪)
+[2026-03-17 12:43:00] INFO     | 
+[2026-03-17 12:43:00] INFO     | 

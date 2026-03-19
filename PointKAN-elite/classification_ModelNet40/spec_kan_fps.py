@@ -217,6 +217,125 @@ def fps_with_knn_coarse_fine(
 
     return idx, radii, knn_idx, distances_matrix, knn_radii, thresholds
 
+@torch.no_grad()
+def fps_with_knn_coarse_fine_fused(
+    X: torch.Tensor,
+    K: int,
+    k_neighbors: int = 24,
+    init_threshold: float = 0.1,
+    max_iter: int = 10,
+    min_candidates_ratio: float = 1.2,
+    seed: str = "first",
+    return_distances_matrix: bool = True,
+    exclude_self: bool = False,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    融合版 FPS + coarse-fine KNN
+
+    在每一轮 FPS 选出当前 center 后：
+      1) 计算该 center 到所有点距离 d
+      2) 用 d 更新 FPS 的 min_dist
+      3) 立刻对 d 做 coarse-fine KNN
+    从而避免后续再遍历一次 distances_matrix。
+
+    返回：
+      idx, radii, knn_idx, distances_matrix, knn_radii, thresholds
+
+    参数：
+      return_distances_matrix:
+          True  -> 保持和原接口一致，返回 [B, K, N]
+          False -> 返回一个空张量，节省显存
+      exclude_self:
+          True  -> KNN 时排除 center 自身
+          False -> 保持原行为，自身可能进入邻居集合
+    """
+    assert X.ndim == 3
+    B, N, D = X.shape
+    device, dtype = X.device, X.dtype
+
+    K = min(K, N)
+    k_actual = min(k_neighbors, N)
+    min_candidates = max(k_actual + 1, int(k_actual * min_candidates_ratio))
+
+    x2 = (X * X).sum(dim=-1)  # [B, N]
+
+    idx = torch.zeros((B, K), dtype=torch.long, device=device)
+    radii = torch.zeros((B, K), dtype=dtype, device=device)
+    thresholds = torch.zeros((B, K), dtype=dtype, device=device)
+    knn_idx = torch.zeros((B, K, k_actual), dtype=torch.long, device=device)
+    knn_radii = torch.zeros((B, K), dtype=dtype, device=device)
+
+    if return_distances_matrix:
+        distances_matrix = torch.empty((B, K, N), dtype=dtype, device=device)
+    else:
+        distances_matrix = torch.empty((0,), dtype=dtype, device=device)
+
+    # FPS state
+    min_dist = torch.full((B, N), float("inf"), dtype=dtype, device=device)
+    batch_arange = torch.arange(B, device=device)
+
+    # choose first seed
+    if seed == "first":
+        farthest = torch.zeros(B, dtype=torch.long, device=device)
+    elif seed == "random":
+        farthest = torch.randint(0, N, (B,), device=device)
+    elif seed == "max_norm":
+        farthest = torch.argmax(x2, dim=1)
+    else:
+        raise ValueError(f"Unknown seed: {seed}")
+
+    for t in range(K):
+        idx[:, t] = farthest
+
+        # current center C: [B, D]
+        C = X[batch_arange, farthest]
+        c2 = (C * C).sum(dim=-1, keepdim=True)              # [B, 1]
+        dot = (X @ C.unsqueeze(-1)).squeeze(-1)             # [B, N]
+        d = (x2 + c2 - 2.0 * dot).clamp_min_(0.0).sqrt()    # [B, N]
+
+        if return_distances_matrix:
+            distances_matrix[:, t, :] = d
+
+        # -----------------------------
+        # coarse-fine KNN for current center
+        # -----------------------------
+        threshold = torch.full((B,), init_threshold, dtype=dtype, device=device)
+
+        # 可选：排除自身
+        if exclude_self:
+            d_knn = d.clone()
+            d_knn[batch_arange, farthest] = float("inf")
+        else:
+            d_knn = d
+
+        for _ in range(max_iter):
+            mask = d_knn < threshold.unsqueeze(-1)          # [B, N]
+            count = mask.sum(dim=1)                         # [B]
+            done = count >= min_candidates
+            if done.all():
+                break
+            threshold = torch.where(done, threshold, threshold * 1.1)
+
+        thresholds[:, t] = threshold
+
+        masked_d = d_knn.masked_fill(~mask, float("inf"))
+        knn_vals, knn_idx_t = torch.topk(masked_d, k=k_actual, dim=1, largest=False)
+        knn_idx[:, t, :] = knn_idx_t
+        knn_radii[:, t] = knn_vals[:, -1]
+
+        # -----------------------------
+        # FPS min_dist update
+        # -----------------------------
+        torch.minimum(min_dist, d, out=min_dist)
+        min_dist[batch_arange, farthest] = 0.0
+        radii[:, t], _ = torch.max(min_dist, dim=1)
+
+        # next farthest
+        if t < K - 1:
+            farthest = torch.argmax(min_dist, dim=1)
+
+    return idx, radii, knn_idx, distances_matrix, knn_radii, thresholds
+
 
 @torch.no_grad()
 def fps_with_knn_vanilla(

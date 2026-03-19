@@ -233,6 +233,8 @@ def run_evaluation_enhanced(
         all_candidate_ratio_exact.append(stats_exact["candidate_ratio"])
         all_used_fallback_exact.append(stats_exact["used_fallback"])
 
+
+        # 这里接入了KAN的预测结果 【这里需要考虑segment的消融实验 距离不是全部出来】
         if model_kan is not None and cfg_kan is not None:
             radii_ref_kan = predict_full_radii_squared_from_exact(radii_sq, model_kan, cfg_kan, device)
             idx_seg_kan, _, _, stats_kan = fps_adaptive_argmax(
@@ -295,7 +297,7 @@ def main():
         ds,
         batch_size=args.batch_size,
         shuffle=False,
-        num_workers=0,
+        num_workers=8,
         drop_last=False,
         collate_fn=collate_points,
     )

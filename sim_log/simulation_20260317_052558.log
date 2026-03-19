@@ -1,0 +1,20 @@
+[2026-03-17 05:25:58] INFO     | Logger initialized: pointcloud_ppa_sim
+[2026-03-17 05:25:58] INFO     | Log level: INFO
+[2026-03-17 05:25:58] INFO     | Log file: sim_log/simulation_20260317_052558.log
+[2026-03-17 05:25:58] INFO     | ============================================================
+[2026-03-17 05:25:58] INFO     |  真实数据评估：ModelNet40 样本 + checkpoint 权重 + MNSIM 对应层 PPA
+[2026-03-17 05:25:58] INFO     | ============================================================
+[2026-03-17 05:25:58] INFO     | Checkpoint: /workspace/PointKAN-pytorch/PointKAN-elite/classification_ModelNet40/checkpoints/pointKANElite-pointkan_elite_exp-42
+[2026-03-17 05:25:58] INFO     | num_points=1024, num_classes=40, batch_size=1
+[2026-03-17 05:26:04] INFO     | 加速器: baseline (BASELINE)
+[2026-03-17 05:26:04] INFO     | CIM 并行度: 128
+[2026-03-17 05:26:04] INFO     | Bit-serial 周期: 6
+[2026-03-17 05:26:04] INFO     | 层间 buffer: size=65536 B, bandwidth=256 B/cycle, spill_to_dram=True, pipeline_mode=without_pipeline, double_buffering=False, buffer_slots=0
+[2026-03-17 05:26:04] INFO     | DRAM: bandwidth=32 B/cycle, channels_override=None
+[2026-03-17 05:26:04] INFO     | 层间量化/反量化: 未启用 (默认，假定 W8A8 已就绪)
+[2026-03-17 05:26:04] INFO     | BN 融合: 启用 (BN 不单独计入)
+[2026-03-17 05:26:04] INFO     | SCALE-Sim 脉动 Conv/Linear: 启用（周期与 MAC/访问由 SCALE-Sim 统计，能耗仍用本工程内存建模）
+[2026-03-17 05:26:04] INFO     | 脉动阵列尺寸: 64×64 (ArrayHeight×ArrayWidth)
+[2026-03-17 05:26:04] INFO     | 数字逻辑时钟: 1.0000 ns (1000.00 MHz) (由 --logic_clk_freq 设置)
+[2026-03-17 05:26:04] INFO     | 
+[2026-03-17 05:26:05] INFO     | 真实前向共 36 个 conv/linear（baseline 脉动由 SCALE-Sim 逐层统计）

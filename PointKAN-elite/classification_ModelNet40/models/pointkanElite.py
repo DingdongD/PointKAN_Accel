@@ -393,7 +393,8 @@ class Model(nn.Module):
         super(Model, self).__init__()
         self.stages = len(LFP_blocks)
         self.class_num = class_num
-        self.points = points
+        self.points = points  
+        # 激活前将数据传入SRAM Buffer 需要从DRAM到SRAM
         self.embedding = ConvBNReLU1D(3, embed_dim, bias=bias, activation=activation)# 将3D坐标转换为embed_dim=64维特征
         assert len(LFP_blocks) == len(k_neighbors) == len(reducers) == len(GFP_blocks) == len(dim_expansion), \
             "Please check stage number consistent for pre_blocks, pos_blocks k_neighbors, reducers."

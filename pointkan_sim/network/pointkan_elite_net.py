@@ -97,7 +97,7 @@ def _build_lfp_operators_elite(channels: int, num_points: int) -> List[OperatorR
     # transfer1: Conv1d + BN + ReLU
     ops.append(OperatorRef(
         op_type="conv1d",
-        params={"in_channels": channels, "out_channels": channels, "kernel_size": 1},
+        params={"in_channels": channels, "out_channels": channels, "kernel_size": 1, "num_points": num_points},
         description=f"LFP transfer1: Conv1d({channels}→{channels}, k=1)",
     ))
     ops.append(OperatorRef(
@@ -120,7 +120,7 @@ def _build_lfp_operators_elite(channels: int, num_points: int) -> List[OperatorR
     # 仅对有效 KAT(act2) 建一层 KAN；act1(Identity) 不建算子、不计 cycle/energy
     ops.append(OperatorRef(
         op_type="linear",
-        params={"in_features": channels, "out_features": channels},
+        params={"in_features": channels, "out_features": channels, "tokens": num_points},
         description=f"LFP local operation1.fc1 Linear({channels}→{channels})",
     ))
     ops.append(OperatorRef(
@@ -130,7 +130,7 @@ def _build_lfp_operators_elite(channels: int, num_points: int) -> List[OperatorR
     ))
     ops.append(OperatorRef(
         op_type="linear",
-        params={"in_features": channels, "out_features": channels},
+        params={"in_features": channels, "out_features": channels, "tokens": num_points},
         description=f"LFP local operation1.fc2 Linear({channels}→{channels})",
     ))
     # Pre-Norm residual add: x + operation1(LayerNorm(x))
@@ -150,7 +150,7 @@ def _build_lfp_operators_elite(channels: int, num_points: int) -> List[OperatorR
     # transfer2: Conv1d + BN + ReLU
     ops.append(OperatorRef(
         op_type="conv1d",
-        params={"in_channels": channels, "out_channels": channels, "kernel_size": 1},
+        params={"in_channels": channels, "out_channels": channels, "kernel_size": 1, "num_points": num_points},
         description=f"LFP transfer2: Conv1d({channels}→{channels}, k=1)",
     ))
     ops.append(OperatorRef(
@@ -173,7 +173,7 @@ def _build_lfp_operators_elite(channels: int, num_points: int) -> List[OperatorR
     # 仅对有效 KAT(act2) 建一层 KAN；act1(Identity) 不建算子、不计 cycle/energy
     ops.append(OperatorRef(
         op_type="linear",
-        params={"in_features": channels, "out_features": channels},
+        params={"in_features": channels, "out_features": channels, "tokens": num_points},
         description=f"LFP center operation2.fc1 Linear({channels}→{channels})",
     ))
     ops.append(OperatorRef(
@@ -183,7 +183,7 @@ def _build_lfp_operators_elite(channels: int, num_points: int) -> List[OperatorR
     ))
     ops.append(OperatorRef(
         op_type="linear",
-        params={"in_features": channels, "out_features": channels},
+        params={"in_features": channels, "out_features": channels, "tokens": num_points},
         description=f"LFP center operation2.fc2 Linear({channels}→{channels})",
     ))
     # Pre-Norm residual add: center + operation2(LayerNorm(center))
@@ -361,7 +361,7 @@ def create_pointkan_elite_classification(
     classifier_ops = [
         OperatorRef(
             op_type="linear",
-            params={"in_features": fc_dim, "out_features": fc_dim},
+            params={"in_features": fc_dim, "out_features": fc_dim, "tokens": 1},
             description=f"Classifier FC1: Linear({fc_dim}→{fc_dim})",
         ),
         OperatorRef(
@@ -377,7 +377,7 @@ def create_pointkan_elite_classification(
         # Dropout(0.5) — ignored (inference no-op)
         OperatorRef(
             op_type="linear",
-            params={"in_features": fc_dim, "out_features": mid_dim},
+            params={"in_features": fc_dim, "out_features": mid_dim, "tokens": 1},
             description=f"Classifier FC2: Linear({fc_dim}→{mid_dim})",
         ),
         OperatorRef(
@@ -393,7 +393,7 @@ def create_pointkan_elite_classification(
         # Dropout(0.5) — ignored (inference no-op)
         OperatorRef(
             op_type="linear",
-            params={"in_features": mid_dim, "out_features": num_classes},
+            params={"in_features": mid_dim, "out_features": num_classes, "tokens": 1},
             description=f"Classifier FC3: Linear({mid_dim}→{num_classes})",
         ),
     ]

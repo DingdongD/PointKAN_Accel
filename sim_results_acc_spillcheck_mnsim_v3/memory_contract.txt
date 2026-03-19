@@ -1,0 +1,1097 @@
+# PointKAN Memory Contract Report
+
+## Suggested SRAM Minimum
+- dist_sram_buffer_min: 4096 B (0.0039 MiB)
+- feature_sram_buffer_min: 65536 B (0.0625 MiB)
+- fps_min_distance_table_sram_min: 4096 B (0.0039 MiB)
+- gam_workspace_sram_min: 3145728 B (3.0000 MiB)
+- gfp_workspace_sram_min: 131072 B (0.1250 MiB)
+- kan_workspace_sram_min: 131072 B (0.1250 MiB)
+- lfp_workspace_sram_min: 131072 B (0.1250 MiB)
+- norm_param_sram_min: 8192 B (0.0078 MiB)
+- pool_workspace_sram_min: 3145728 B (3.0000 MiB)
+- sort_cache_sram_min: 256 B (0.0002 MiB)
+- weight_sram_buffer_min: 0 B (0.0000 MiB)
+
+
+## Energy Estimate Note
+- memory_contract 中的 estimated_energy_nj 是静态代理值：按每条事务的字节数乘以当前 SRAM/DRAM 单次访问参数估算。
+- 它用于比较不同事务/不同 buffer 的相对强弱，不是 runtime 总能耗，不能与 breakdown 中的 SRAM/DRAM 总能耗直接对比或求和。
+- 尤其对 spool_workspace_sram、kan_workspace_sram 等逻辑 buffer，目前会复用 inter_layer SRAM 的 CACTI 参数做代理，因此更应视为 rough proxy。
+
+## Feature Residency Plan
+layer_name	layer_type	input_bytes	input_sram_bytes	input_dram_bytes	output_bytes	output_sram_bytes	output_dram_bytes	usable_buffer_bytes	total_buffer_bytes	buffer_slots	pipeline_mode	double_buffering	note
+embedding	embedding	12288	12288	0	131072	32768	98304	32768	65536	2	pipeline	True	first-layer input assumed prefetched before compute; double-buffered feature SRAM reserves one slot per in-flight tensor
+GAM-stage0	GAM	131072	32768	98304	131072	32768	98304	32768	65536	2	pipeline	True	input prefers persistent feature SRAM; spill bytes refill from DRAM; double-buffered feature SRAM reserves one slot per in-flight tensor
+LFP-stage0	LFP	131072	32768	98304	256	256	0	32768	65536	2	pipeline	True	input prefers persistent feature SRAM; spill bytes refill from DRAM; double-buffered feature SRAM reserves one slot per in-flight tensor
+stage-0	stage	256	256	0	131072	32768	98304	32768	65536	2	pipeline	True	input prefers persistent feature SRAM; spill bytes refill from DRAM; double-buffered feature SRAM reserves one slot per in-flight tensor
+GAM-stage1	GAM	131072	32768	98304	131072	32768	98304	32768	65536	2	pipeline	True	input prefers persistent feature SRAM; spill bytes refill from DRAM; double-buffered feature SRAM reserves one slot per in-flight tensor
+LFP-stage1	LFP	131072	32768	98304	512	512	0	32768	65536	2	pipeline	True	input prefers persistent feature SRAM; spill bytes refill from DRAM; double-buffered feature SRAM reserves one slot per in-flight tensor
+stage-1	stage	512	512	0	131072	32768	98304	32768	65536	2	pipeline	True	input prefers persistent feature SRAM; spill bytes refill from DRAM; double-buffered feature SRAM reserves one slot per in-flight tensor
+GAM-stage2	GAM	131072	32768	98304	131072	32768	98304	32768	65536	2	pipeline	True	input prefers persistent feature SRAM; spill bytes refill from DRAM; double-buffered feature SRAM reserves one slot per in-flight tensor
+LFP-stage2	LFP	131072	32768	98304	1024	1024	0	32768	65536	2	pipeline	True	input prefers persistent feature SRAM; spill bytes refill from DRAM; double-buffered feature SRAM reserves one slot per in-flight tensor
+stage-2	stage	1024	1024	0	131072	32768	98304	32768	65536	2	pipeline	True	input prefers persistent feature SRAM; spill bytes refill from DRAM; double-buffered feature SRAM reserves one slot per in-flight tensor
+GAM-stage3	GAM	131072	32768	98304	131072	32768	98304	32768	65536	2	pipeline	True	input prefers persistent feature SRAM; spill bytes refill from DRAM; double-buffered feature SRAM reserves one slot per in-flight tensor
+LFP-stage3	LFP	131072	32768	98304	2048	2048	0	32768	65536	2	pipeline	True	input prefers persistent feature SRAM; spill bytes refill from DRAM; double-buffered feature SRAM reserves one slot per in-flight tensor
+stage-3	stage	2048	2048	0	131072	32768	98304	32768	65536	2	pipeline	True	input prefers persistent feature SRAM; spill bytes refill from DRAM; double-buffered feature SRAM reserves one slot per in-flight tensor
+global_maxpool	global_maxpool	131072	32768	98304	2048	2048	0	32768	65536	2	pipeline	True	input prefers persistent feature SRAM; spill bytes refill from DRAM; double-buffered feature SRAM reserves one slot per in-flight tensor
+classifier	classifier	2048	2048	0	160	160	0	32768	65536	2	pipeline	True	input prefers persistent feature SRAM; spill bytes refill from DRAM; double-buffered feature SRAM reserves one slot per in-flight tensor
+
+## Buffer Peak Summary
+buffer_name	peak_bytes	MiB
+gam_workspace_sram	3145728	3.000000
+spool_workspace_sram	3145728	3.000000
+affine_norm_workspace_sram	1572864	1.500000
+adaptive_pool_workspace_sram	131072	0.125000
+gfp_workspace_sram	131072	0.125000
+kan_workspace_sram	131072	0.125000
+lfp_workspace_sram	131072	0.125000
+state_sram_buffer	131072	0.125000
+feature_sram_buffer	65536	0.062500
+kan_param_sram	20480	0.019531
+bn_param_sram	8192	0.007812
+query_xyz_sram_buffer	6144	0.005859
+dist_sram_buffer	4096	0.003906
+fps_min_distance_table_sram	4096	0.003906
+layernorm_param_sram	4096	0.003906
+self_distance_sram_buffer	4096	0.003906
+key_xyz_sram_buffer	3072	0.002930
+affine_norm_param_sram	2048	0.001953
+temp_max_distance_sram	2048	0.001953
+topk_sram_buffer	2048	0.001953
+sort_cache_sram	256	0.000244
+
+## Operator Buffer Requirements
+layer_name	op_name	buffer_tier	buffer_name	peak_bytes	MiB	purpose	note
+GAM-stage0	s-pool	SRAM	spool_workspace_sram	3145728	3.000000	Neighbor window workspace for softmax pooling	
+GAM-stage1	s-pool	SRAM	spool_workspace_sram	3145728	3.000000	Neighbor window workspace for softmax pooling	
+GAM-stage2	s-pool	SRAM	spool_workspace_sram	3145728	3.000000	Neighbor window workspace for softmax pooling	
+GAM-stage3	s-pool	SRAM	spool_workspace_sram	3145728	3.000000	Neighbor window workspace for softmax pooling	
+GAM-stage0	affine_norm	SRAM	affine_norm_workspace_sram	1572864	1.500000	Neighborhood tensor workspace for GAM affine normalization	
+GAM-stage1	affine_norm	SRAM	affine_norm_workspace_sram	1572864	1.500000	Neighborhood tensor workspace for GAM affine normalization	
+GAM-stage2	affine_norm	SRAM	affine_norm_workspace_sram	1572864	1.500000	Neighborhood tensor workspace for GAM affine normalization	
+GAM-stage3	affine_norm	SRAM	affine_norm_workspace_sram	1572864	1.500000	Neighborhood tensor workspace for GAM affine normalization	
+GAM-stage0	s-pool	SRAM	state_sram_buffer	131072	0.125000	Reduction state for pooling in local SRAM	
+GAM-stage1	s-pool	SRAM	state_sram_buffer	131072	0.125000	Reduction state for pooling in local SRAM	
+GAM-stage2	s-pool	SRAM	state_sram_buffer	131072	0.125000	Reduction state for pooling in local SRAM	
+GAM-stage3	s-pool	SRAM	state_sram_buffer	131072	0.125000	Reduction state for pooling in local SRAM	
+LFP-stage0	adaptive_max_pool1d	SRAM	adaptive_pool_workspace_sram	131072	0.125000	Reduction window workspace for adaptive max pool	
+LFP-stage0	conv1d	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+LFP-stage0	conv1d	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+LFP-stage0	kan	SRAM	kan_workspace_sram	131072	0.125000	KAN activation workspace/output hold	
+LFP-stage0	kan	SRAM	kan_workspace_sram	131072	0.125000	KAN activation workspace/output hold	
+LFP-stage0	linear	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+LFP-stage0	linear	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+LFP-stage0	linear	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+LFP-stage0	linear	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+LFP-stage1	adaptive_max_pool1d	SRAM	adaptive_pool_workspace_sram	131072	0.125000	Reduction window workspace for adaptive max pool	
+LFP-stage1	conv1d	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+LFP-stage1	conv1d	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+LFP-stage1	kan	SRAM	kan_workspace_sram	131072	0.125000	KAN activation workspace/output hold	
+LFP-stage1	kan	SRAM	kan_workspace_sram	131072	0.125000	KAN activation workspace/output hold	
+LFP-stage1	linear	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+LFP-stage1	linear	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+LFP-stage1	linear	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+LFP-stage1	linear	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+LFP-stage2	adaptive_max_pool1d	SRAM	adaptive_pool_workspace_sram	131072	0.125000	Reduction window workspace for adaptive max pool	
+LFP-stage2	conv1d	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+LFP-stage2	conv1d	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+LFP-stage2	kan	SRAM	kan_workspace_sram	131072	0.125000	KAN activation workspace/output hold	
+LFP-stage2	kan	SRAM	kan_workspace_sram	131072	0.125000	KAN activation workspace/output hold	
+LFP-stage2	linear	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+LFP-stage2	linear	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+LFP-stage2	linear	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+LFP-stage2	linear	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+LFP-stage3	adaptive_max_pool1d	SRAM	adaptive_pool_workspace_sram	131072	0.125000	Reduction window workspace for adaptive max pool	
+LFP-stage3	conv1d	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+LFP-stage3	conv1d	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+LFP-stage3	kan	SRAM	kan_workspace_sram	131072	0.125000	KAN activation workspace/output hold	
+LFP-stage3	kan	SRAM	kan_workspace_sram	131072	0.125000	KAN activation workspace/output hold	
+LFP-stage3	linear	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+LFP-stage3	linear	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+LFP-stage3	linear	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+LFP-stage3	linear	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+embedding	conv1d	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+global_maxpool	adaptive_max_pool1d	SRAM	adaptive_pool_workspace_sram	131072	0.125000	Reduction window workspace for adaptive max pool	
+stage-0	conv1d	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+stage-0	conv1d	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+stage-1	conv1d	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+stage-1	conv1d	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+stage-2	conv1d	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+stage-2	conv1d	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+stage-3	conv1d	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+stage-3	conv1d	SRAM	state_sram_buffer	131072	0.125000	Output-channel partial sums before write-back in local SRAM	
+LFP-stage0	conv1d	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+LFP-stage0	conv1d	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+LFP-stage0	linear	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+LFP-stage0	linear	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+LFP-stage0	linear	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+LFP-stage0	linear	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+LFP-stage1	conv1d	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+LFP-stage1	conv1d	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+LFP-stage1	linear	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+LFP-stage1	linear	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+LFP-stage1	linear	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+LFP-stage1	linear	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+LFP-stage2	conv1d	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+LFP-stage2	conv1d	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+LFP-stage2	linear	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+LFP-stage2	linear	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+LFP-stage2	linear	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+LFP-stage2	linear	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+LFP-stage3	conv1d	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+LFP-stage3	conv1d	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+LFP-stage3	linear	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+LFP-stage3	linear	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+LFP-stage3	linear	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+LFP-stage3	linear	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+stage-0	conv1d	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+stage-0	conv1d	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+stage-1	conv1d	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+stage-1	conv1d	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+stage-2	conv1d	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+stage-2	conv1d	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+stage-3	conv1d	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+stage-3	conv1d	SRAM	feature_sram_buffer	65536	0.062500	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+LFP-stage3	kan	SRAM	kan_param_sram	20480	0.019531	KAN rational/LUT coefficient buffer	
+LFP-stage3	kan	SRAM	kan_param_sram	20480	0.019531	KAN rational/LUT coefficient buffer	
+embedding	conv1d	SRAM	feature_sram_buffer	12288	0.011719	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+LFP-stage2	kan	SRAM	kan_param_sram	10240	0.009766	KAN rational/LUT coefficient buffer	
+LFP-stage2	kan	SRAM	kan_param_sram	10240	0.009766	KAN rational/LUT coefficient buffer	
+LFP-stage3	bn	SRAM	bn_param_sram	8192	0.007812	BN affine/stat parameter staging	
+LFP-stage3	bn	SRAM	bn_param_sram	8192	0.007812	BN affine/stat parameter staging	
+classifier	batchnorm1d	SRAM	bn_param_sram	8192	0.007812	BN affine/stat parameter staging	
+stage-3	bn	SRAM	bn_param_sram	8192	0.007812	BN affine/stat parameter staging	
+stage-3	bn	SRAM	bn_param_sram	8192	0.007812	BN affine/stat parameter staging	
+GAM-stage0	fps	SRAM	query_xyz_sram_buffer	6144	0.005859	Current query xyz SRAM block for FPS	
+GAM-stage0	knn	SRAM	query_xyz_sram_buffer	6144	0.005859	Current query xyz SRAM block for KNN	
+LFP-stage1	kan	SRAM	kan_param_sram	5120	0.004883	KAN rational/LUT coefficient buffer	
+LFP-stage1	kan	SRAM	kan_param_sram	5120	0.004883	KAN rational/LUT coefficient buffer	
+GAM-stage0	fps	SRAM	dist_sram_buffer	4096	0.003906	Shared distance SRAM reused by FPS/KNN	
+GAM-stage0	fps	SRAM	fps_min_distance_table_sram	4096	0.003906	Historical minimum distance table for FPS	
+GAM-stage0	fps	SRAM	self_distance_sram_buffer	4096	0.003906	ACC self-distance k^2 SRAM buffer	
+GAM-stage0	knn	SRAM	dist_sram_buffer	4096	0.003906	Shared distance SRAM reused by FPS/KNN	
+GAM-stage0	knn	SRAM	self_distance_sram_buffer	4096	0.003906	ACC self-distance k^2 SRAM buffer	
+LFP-stage2	bn	SRAM	bn_param_sram	4096	0.003906	BN affine/stat parameter staging	
+LFP-stage2	bn	SRAM	bn_param_sram	4096	0.003906	BN affine/stat parameter staging	
+LFP-stage3	bn	SRAM	state_sram_buffer	4096	0.003906	Normalization reduction state in small SRAM	
+LFP-stage3	bn	SRAM	state_sram_buffer	4096	0.003906	Normalization reduction state in small SRAM	
+LFP-stage3	layernorm	SRAM	layernorm_param_sram	4096	0.003906	LayerNorm gamma/beta staging	
+LFP-stage3	layernorm	SRAM	layernorm_param_sram	4096	0.003906	LayerNorm gamma/beta staging	
+LFP-stage3	layernorm	SRAM	state_sram_buffer	4096	0.003906	Normalization reduction state in small SRAM	
+LFP-stage3	layernorm	SRAM	state_sram_buffer	4096	0.003906	Normalization reduction state in small SRAM	
+classifier	batchnorm1d	SRAM	bn_param_sram	4096	0.003906	BN affine/stat parameter staging	
+classifier	batchnorm1d	SRAM	state_sram_buffer	4096	0.003906	Normalization reduction state in small SRAM	
+stage-2	bn	SRAM	bn_param_sram	4096	0.003906	BN affine/stat parameter staging	
+stage-2	bn	SRAM	bn_param_sram	4096	0.003906	BN affine/stat parameter staging	
+stage-3	bn	SRAM	state_sram_buffer	4096	0.003906	Normalization reduction state in small SRAM	
+stage-3	bn	SRAM	state_sram_buffer	4096	0.003906	Normalization reduction state in small SRAM	
+GAM-stage0	fps	SRAM	key_xyz_sram_buffer	3072	0.002930	Key xyz SRAM tile buffer for FPS (example tile)	
+GAM-stage0	knn	SRAM	key_xyz_sram_buffer	3072	0.002930	Key xyz SRAM tile buffer for KNN (example tile)	
+GAM-stage1	fps	SRAM	key_xyz_sram_buffer	3072	0.002930	Key xyz SRAM tile buffer for FPS (example tile)	
+GAM-stage1	fps	SRAM	query_xyz_sram_buffer	3072	0.002930	Current query xyz SRAM block for FPS	
+GAM-stage1	knn	SRAM	key_xyz_sram_buffer	3072	0.002930	Key xyz SRAM tile buffer for KNN (example tile)	
+GAM-stage1	knn	SRAM	query_xyz_sram_buffer	3072	0.002930	Current query xyz SRAM block for KNN	
+GAM-stage2	fps	SRAM	key_xyz_sram_buffer	3072	0.002930	Key xyz SRAM tile buffer for FPS (example tile)	
+GAM-stage2	knn	SRAM	key_xyz_sram_buffer	3072	0.002930	Key xyz SRAM tile buffer for KNN (example tile)	
+GAM-stage3	fps	SRAM	key_xyz_sram_buffer	3072	0.002930	Key xyz SRAM tile buffer for FPS (example tile)	
+GAM-stage3	knn	SRAM	key_xyz_sram_buffer	3072	0.002930	Key xyz SRAM tile buffer for KNN (example tile)	
+LFP-stage0	kan	SRAM	kan_param_sram	2560	0.002441	KAN rational/LUT coefficient buffer	
+LFP-stage0	kan	SRAM	kan_param_sram	2560	0.002441	KAN rational/LUT coefficient buffer	
+GAM-stage0	fps	SRAM	temp_max_distance_sram	2048	0.001953	ACC shared temporary max/speculative radii SRAM	
+GAM-stage0	knn	SRAM	topk_sram_buffer	2048	0.001953	ACC KNN candidate top-k SRAM buffer	
+GAM-stage1	fps	SRAM	dist_sram_buffer	2048	0.001953	Shared distance SRAM reused by FPS/KNN	
+GAM-stage1	fps	SRAM	fps_min_distance_table_sram	2048	0.001953	Historical minimum distance table for FPS	
+GAM-stage1	fps	SRAM	self_distance_sram_buffer	2048	0.001953	ACC self-distance k^2 SRAM buffer	
+GAM-stage1	knn	SRAM	dist_sram_buffer	2048	0.001953	Shared distance SRAM reused by FPS/KNN	
+GAM-stage1	knn	SRAM	self_distance_sram_buffer	2048	0.001953	ACC self-distance k^2 SRAM buffer	
+GAM-stage1	knn	SRAM	topk_sram_buffer	2048	0.001953	ACC KNN candidate top-k SRAM buffer	
+GAM-stage2	knn	SRAM	topk_sram_buffer	2048	0.001953	ACC KNN candidate top-k SRAM buffer	
+GAM-stage3	affine_norm	SRAM	affine_norm_param_sram	2048	0.001953	AffineNorm alpha/beta staging	
+GAM-stage3	affine_norm	SRAM	state_sram_buffer	2048	0.001953	Normalization reduction state in small SRAM	
+GAM-stage3	knn	SRAM	topk_sram_buffer	2048	0.001953	ACC KNN candidate top-k SRAM buffer	
+LFP-stage1	bn	SRAM	bn_param_sram	2048	0.001953	BN affine/stat parameter staging	
+LFP-stage1	bn	SRAM	bn_param_sram	2048	0.001953	BN affine/stat parameter staging	
+LFP-stage2	bn	SRAM	state_sram_buffer	2048	0.001953	Normalization reduction state in small SRAM	
+LFP-stage2	bn	SRAM	state_sram_buffer	2048	0.001953	Normalization reduction state in small SRAM	
+LFP-stage2	layernorm	SRAM	layernorm_param_sram	2048	0.001953	LayerNorm gamma/beta staging	
+LFP-stage2	layernorm	SRAM	layernorm_param_sram	2048	0.001953	LayerNorm gamma/beta staging	
+LFP-stage2	layernorm	SRAM	state_sram_buffer	2048	0.001953	Normalization reduction state in small SRAM	
+LFP-stage2	layernorm	SRAM	state_sram_buffer	2048	0.001953	Normalization reduction state in small SRAM	
+LFP-stage3	adaptive_max_pool1d	SRAM	state_sram_buffer	2048	0.001953	Reduction state for pooling in local SRAM	
+LFP-stage3	add	SRAM	state_sram_buffer	2048	0.001953	Streaming element-wise add lane state SRAM	
+LFP-stage3	add	SRAM	state_sram_buffer	2048	0.001953	Streaming element-wise add lane state SRAM	
+LFP-stage3	add	SRAM	state_sram_buffer	2048	0.001953	Streaming element-wise add lane state SRAM	
+LFP-stage3	relu	SRAM	state_sram_buffer	2048	0.001953	Streaming activation lane state SRAM	
+LFP-stage3	relu	SRAM	state_sram_buffer	2048	0.001953	Streaming activation lane state SRAM	
+classifier	batchnorm1d	SRAM	state_sram_buffer	2048	0.001953	Normalization reduction state in small SRAM	
+classifier	linear	SRAM	feature_sram_buffer	2048	0.001953	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+classifier	linear	SRAM	feature_sram_buffer	2048	0.001953	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+classifier	linear	SRAM	state_sram_buffer	2048	0.001953	Output-channel partial sums before write-back in local SRAM	
+classifier	relu	SRAM	state_sram_buffer	2048	0.001953	Streaming activation lane state SRAM	
+global_maxpool	adaptive_max_pool1d	SRAM	state_sram_buffer	2048	0.001953	Reduction state for pooling in local SRAM	
+stage-1	bn	SRAM	bn_param_sram	2048	0.001953	BN affine/stat parameter staging	
+stage-1	bn	SRAM	bn_param_sram	2048	0.001953	BN affine/stat parameter staging	
+stage-2	bn	SRAM	state_sram_buffer	2048	0.001953	Normalization reduction state in small SRAM	
+stage-2	bn	SRAM	state_sram_buffer	2048	0.001953	Normalization reduction state in small SRAM	
+stage-3	add	SRAM	state_sram_buffer	2048	0.001953	Streaming element-wise add lane state SRAM	
+stage-3	relu	SRAM	state_sram_buffer	2048	0.001953	Streaming activation lane state SRAM	
+stage-3	relu	SRAM	state_sram_buffer	2048	0.001953	Streaming activation lane state SRAM	
+GAM-stage2	fps	SRAM	query_xyz_sram_buffer	1536	0.001465	Current query xyz SRAM block for FPS	
+GAM-stage2	knn	SRAM	query_xyz_sram_buffer	1536	0.001465	Current query xyz SRAM block for KNN	
+GAM-stage1	fps	SRAM	temp_max_distance_sram	1024	0.000977	ACC shared temporary max/speculative radii SRAM	
+GAM-stage2	affine_norm	SRAM	affine_norm_param_sram	1024	0.000977	AffineNorm alpha/beta staging	
+GAM-stage2	affine_norm	SRAM	state_sram_buffer	1024	0.000977	Normalization reduction state in small SRAM	
+GAM-stage2	fps	SRAM	dist_sram_buffer	1024	0.000977	Shared distance SRAM reused by FPS/KNN	
+GAM-stage2	fps	SRAM	fps_min_distance_table_sram	1024	0.000977	Historical minimum distance table for FPS	
+GAM-stage2	fps	SRAM	self_distance_sram_buffer	1024	0.000977	ACC self-distance k^2 SRAM buffer	
+GAM-stage2	knn	SRAM	dist_sram_buffer	1024	0.000977	Shared distance SRAM reused by FPS/KNN	
+GAM-stage2	knn	SRAM	self_distance_sram_buffer	1024	0.000977	ACC self-distance k^2 SRAM buffer	
+LFP-stage0	bn	SRAM	bn_param_sram	1024	0.000977	BN affine/stat parameter staging	
+LFP-stage0	bn	SRAM	bn_param_sram	1024	0.000977	BN affine/stat parameter staging	
+LFP-stage1	bn	SRAM	state_sram_buffer	1024	0.000977	Normalization reduction state in small SRAM	
+LFP-stage1	bn	SRAM	state_sram_buffer	1024	0.000977	Normalization reduction state in small SRAM	
+LFP-stage1	layernorm	SRAM	layernorm_param_sram	1024	0.000977	LayerNorm gamma/beta staging	
+LFP-stage1	layernorm	SRAM	layernorm_param_sram	1024	0.000977	LayerNorm gamma/beta staging	
+LFP-stage1	layernorm	SRAM	state_sram_buffer	1024	0.000977	Normalization reduction state in small SRAM	
+LFP-stage1	layernorm	SRAM	state_sram_buffer	1024	0.000977	Normalization reduction state in small SRAM	
+LFP-stage2	adaptive_max_pool1d	SRAM	state_sram_buffer	1024	0.000977	Reduction state for pooling in local SRAM	
+LFP-stage2	add	SRAM	state_sram_buffer	1024	0.000977	Streaming element-wise add lane state SRAM	
+LFP-stage2	add	SRAM	state_sram_buffer	1024	0.000977	Streaming element-wise add lane state SRAM	
+LFP-stage2	add	SRAM	state_sram_buffer	1024	0.000977	Streaming element-wise add lane state SRAM	
+LFP-stage2	relu	SRAM	state_sram_buffer	1024	0.000977	Streaming activation lane state SRAM	
+LFP-stage2	relu	SRAM	state_sram_buffer	1024	0.000977	Streaming activation lane state SRAM	
+classifier	linear	SRAM	feature_sram_buffer	1024	0.000977	Shared persistent feature SRAM window for Conv/Linear input/output staging	
+classifier	linear	SRAM	state_sram_buffer	1024	0.000977	Output-channel partial sums before write-back in local SRAM	
+classifier	relu	SRAM	state_sram_buffer	1024	0.000977	Streaming activation lane state SRAM	
+stage-0	bn	SRAM	bn_param_sram	1024	0.000977	BN affine/stat parameter staging	
+stage-0	bn	SRAM	bn_param_sram	1024	0.000977	BN affine/stat parameter staging	
+stage-1	bn	SRAM	state_sram_buffer	1024	0.000977	Normalization reduction state in small SRAM	
+stage-1	bn	SRAM	state_sram_buffer	1024	0.000977	Normalization reduction state in small SRAM	
+stage-2	add	SRAM	state_sram_buffer	1024	0.000977	Streaming element-wise add lane state SRAM	
+stage-2	relu	SRAM	state_sram_buffer	1024	0.000977	Streaming activation lane state SRAM	
+stage-2	relu	SRAM	state_sram_buffer	1024	0.000977	Streaming activation lane state SRAM	
+GAM-stage3	fps	SRAM	query_xyz_sram_buffer	768	0.000732	Current query xyz SRAM block for FPS	
+GAM-stage3	knn	SRAM	query_xyz_sram_buffer	768	0.000732	Current query xyz SRAM block for KNN	
+GAM-stage1	affine_norm	SRAM	affine_norm_param_sram	512	0.000488	AffineNorm alpha/beta staging	
+GAM-stage1	affine_norm	SRAM	state_sram_buffer	512	0.000488	Normalization reduction state in small SRAM	
+GAM-stage2	fps	SRAM	temp_max_distance_sram	512	0.000488	ACC shared temporary max/speculative radii SRAM	
+GAM-stage3	fps	SRAM	dist_sram_buffer	512	0.000488	Shared distance SRAM reused by FPS/KNN	
+GAM-stage3	fps	SRAM	fps_min_distance_table_sram	512	0.000488	Historical minimum distance table for FPS	
+GAM-stage3	fps	SRAM	self_distance_sram_buffer	512	0.000488	ACC self-distance k^2 SRAM buffer	
+GAM-stage3	knn	SRAM	dist_sram_buffer	512	0.000488	Shared distance SRAM reused by FPS/KNN	
+GAM-stage3	knn	SRAM	self_distance_sram_buffer	512	0.000488	ACC self-distance k^2 SRAM buffer	
+LFP-stage0	bn	SRAM	state_sram_buffer	512	0.000488	Normalization reduction state in small SRAM	
+LFP-stage0	bn	SRAM	state_sram_buffer	512	0.000488	Normalization reduction state in small SRAM	
+LFP-stage0	layernorm	SRAM	layernorm_param_sram	512	0.000488	LayerNorm gamma/beta staging	
+LFP-stage0	layernorm	SRAM	layernorm_param_sram	512	0.000488	LayerNorm gamma/beta staging	
+LFP-stage0	layernorm	SRAM	state_sram_buffer	512	0.000488	Normalization reduction state in small SRAM	
+LFP-stage0	layernorm	SRAM	state_sram_buffer	512	0.000488	Normalization reduction state in small SRAM	
+LFP-stage1	adaptive_max_pool1d	SRAM	state_sram_buffer	512	0.000488	Reduction state for pooling in local SRAM	
+LFP-stage1	add	SRAM	state_sram_buffer	512	0.000488	Streaming element-wise add lane state SRAM	
+LFP-stage1	add	SRAM	state_sram_buffer	512	0.000488	Streaming element-wise add lane state SRAM	
+LFP-stage1	add	SRAM	state_sram_buffer	512	0.000488	Streaming element-wise add lane state SRAM	
+LFP-stage1	relu	SRAM	state_sram_buffer	512	0.000488	Streaming activation lane state SRAM	
+LFP-stage1	relu	SRAM	state_sram_buffer	512	0.000488	Streaming activation lane state SRAM	
+embedding	bn	SRAM	bn_param_sram	512	0.000488	BN affine/stat parameter staging	
+stage-0	bn	SRAM	state_sram_buffer	512	0.000488	Normalization reduction state in small SRAM	
+stage-0	bn	SRAM	state_sram_buffer	512	0.000488	Normalization reduction state in small SRAM	
+stage-1	add	SRAM	state_sram_buffer	512	0.000488	Streaming element-wise add lane state SRAM	
+stage-1	relu	SRAM	state_sram_buffer	512	0.000488	Streaming activation lane state SRAM	
+stage-1	relu	SRAM	state_sram_buffer	512	0.000488	Streaming activation lane state SRAM	
+GAM-stage0	affine_norm	SRAM	affine_norm_param_sram	256	0.000244	AffineNorm alpha/beta staging	
+GAM-stage0	affine_norm	SRAM	state_sram_buffer	256	0.000244	Normalization reduction state in small SRAM	
+GAM-stage0	knn	SRAM	sort_cache_sram	256	0.000244	KNN streaming sorter cache (acc_streaming)	
+GAM-stage1	knn	SRAM	sort_cache_sram	256	0.000244	KNN streaming sorter cache (acc_streaming)	
+GAM-stage2	knn	SRAM	sort_cache_sram	256	0.000244	KNN streaming sorter cache (acc_streaming)	
+GAM-stage3	fps	SRAM	temp_max_distance_sram	256	0.000244	ACC shared temporary max/speculative radii SRAM	
+GAM-stage3	knn	SRAM	sort_cache_sram	256	0.000244	KNN streaming sorter cache (acc_streaming)	
+LFP-stage0	adaptive_max_pool1d	SRAM	state_sram_buffer	256	0.000244	Reduction state for pooling in local SRAM	
+LFP-stage0	add	SRAM	state_sram_buffer	256	0.000244	Streaming element-wise add lane state SRAM	
+LFP-stage0	add	SRAM	state_sram_buffer	256	0.000244	Streaming element-wise add lane state SRAM	
+LFP-stage0	add	SRAM	state_sram_buffer	256	0.000244	Streaming element-wise add lane state SRAM	
+LFP-stage0	relu	SRAM	state_sram_buffer	256	0.000244	Streaming activation lane state SRAM	
+LFP-stage0	relu	SRAM	state_sram_buffer	256	0.000244	Streaming activation lane state SRAM	
+embedding	bn	SRAM	state_sram_buffer	256	0.000244	Normalization reduction state in small SRAM	
+stage-0	add	SRAM	state_sram_buffer	256	0.000244	Streaming element-wise add lane state SRAM	
+stage-0	relu	SRAM	state_sram_buffer	256	0.000244	Streaming activation lane state SRAM	
+stage-0	relu	SRAM	state_sram_buffer	256	0.000244	Streaming activation lane state SRAM	
+classifier	linear	SRAM	state_sram_buffer	160	0.000153	Output-channel partial sums before write-back in local SRAM	
+embedding	relu	SRAM	state_sram_buffer	128	0.000122	Streaming activation lane state SRAM	
+GAM-stage0	fps	SRAM	sort_cache_sram	8	0.000008	FPS streaming sorter cache (acc_streaming)	
+GAM-stage1	fps	SRAM	sort_cache_sram	8	0.000008	FPS streaming sorter cache (acc_streaming)	
+GAM-stage2	fps	SRAM	sort_cache_sram	8	0.000008	FPS streaming sorter cache (acc_streaming)	
+GAM-stage3	fps	SRAM	sort_cache_sram	8	0.000008	FPS streaming sorter cache (acc_streaming)	
+
+## Buffer Relationship Table
+buffer_name	shared_group	role	physical_sharing	mutual_exclusion	reset_scope	scheduler_resource_id	pipeline_behavior	note
+query_xyz_sram_buffer	point_cloud_frontend	query xyz cache	shared across FPS/KNN queries over time	exclusive with query reload on same SRAM region/port	query boundary	query_xyz_sram_shared	can keep active query tile resident while key tiles stream through companion SRAM	Holds current query xyz block for baseline dist2engine or acc SRAM-CIM front-end
+key_xyz_sram_buffer	point_cloud_frontend	key xyz tile buffer	shared across FPS/KNN key scans over time	exclusive with key tile refill and key scan on same bank unless ping-ponged	key-tile boundary	key_xyz_sram_shared	supports ping-pong refill in pipeline mode; serialized refill/consume without pipeline	Streams key xyz tiles from DRAM into distance engine front-end
+feature_sram_buffer	layer_intermediate	persistent layer input/output activations	shared across layers	exclusive per slot; slots=2	layer boundary	feature_sram_slot_<n>	pipeline; double_buffering=True	Without pipeline a single slot is reused; with double buffering adjacent layers alternate slots
+dist_sram_buffer	distance_path	shared distance vector buffer for FPS/KNN	shared physical SRAM reused by FPS and KNN	FPS and KNN are mutually exclusive in one GAM stage; sorter read vs writer must serialize if same bank	query/iteration boundary	dist_sram_shared	base_v1 full-vector; base_v2/acc stream 64-distance batches	Physical SRAM shared, but FPS uses extra min-distance table and KNN consumes current distance vector directly
+fps_min_distance_table_sram	distance_path	FPS historical minimum distance table	FPS-only logical region	exclusive with FPS update and FPS sorter read on same region	FPS iteration boundary	fps_min_table_shared	updated every sampled-center iteration; can ping-pong with dist_sram in future	Needed only by FPS
+sort_cache_sram	distance_path	streaming sorter cache for base_v2/acc	shared by FPS/KNN streaming sorters over time	exclusive between FPS and KNN sorter cache use	64-distance batch boundary	sort_cache_shared	inactive in base_v1; active in base_v2/acc streaming sort	Stores previous batch top candidates before merge with next batch
+self_distance_sram_buffer	distance_path	acc self-distance k^2 staging buffer	shared over time by FPS/KNN acc distance frontend	exclusive with self-distance refill/read on same SRAM region	query or key-set boundary	self_distance_shared	acc only; stores k^2/self-distance terms before cross-term accumulation	Filled after SRAM-CIM self-square pass and read back during cross-term accumulation
+temp_max_distance_sram	distance_path	acc FPS temporary max and speculative-radii SRAM	shared over time by coarse/fine FPS filtering and speculative radii prediction	exclusive between coarse-filter write, fine-filter consume, resampler, and predictor read/write on the same SRAM	128-distance batch or FPS-layer boundary	temp_max_shared	acc only; stores per-batch FPS max candidates and reuses the same SRAM for exact-prefix/predicted radii curve staging	Covers both FPS temporary max candidates and speculative radii curve storage
+topk_sram_buffer	distance_path	acc KNN candidate top-k SRAM	shared over time by coarse/fine KNN filtering	exclusive between coarse-filter writes and iterative threshold refinement reads	query boundary	topk_sram_shared	acc only; candidate set iteratively shrinks until fine-filter bandwidth condition is met	Stores KNN candidate distances/indices after coarse filter
+nonlinear_workspace_sram	nonlinear_workspace	AffineNorm/SPool/Pool/KAN temporary tensors	shared across nonlinear ops when lifetimes do not overlap	exclusive across ops within the same layer execution window	operator boundary	nonlinear_workspace_shared	can be partitioned later into GAM/LFP/GFP workspaces; chunkable for feature pipeline	Current contract still exports finer names such as spool_workspace_sram and kan_workspace_sram
+nonlinear_param_sram	nonlinear_params	AffineNorm/LayerNorm/KAT small parameter or LUT SRAM	shared over time by nonlinear parameter fetches	exclusive when the same small parameter SRAM/LUT port is reused by concurrent nonlinear ops	operator boundary	nonlinear_param_shared	typically resident; can prefetch ahead of nonlinear engine execution	Covers affine/layernorm gamma-beta and KAT/GRF LUT or coefficient staging
+state_sram_buffer	operator_local_state	topk/index/psum/norm-reduce small state SRAM	shared over time by operator-local stateful micro-steps	exclusive per operator instance or batch window	operator or batch boundary	operator_local_state_sram	not double-buffered by default; can be folded into dedicated local SRAM later	All former regfile-like local state is modeled as small SRAM/state buffer in the current contract
+
+## Route Summary (Tier)
+src_tier	dst_tier	bytes	MiB
+SRAM	COMPUTE	41355024	39.439224
+COMPUTE	SRAM	27965096	26.669594
+SRAM	SRAM	18189216	17.346588
+DRAM	SRAM	16940288	16.155518
+SRAM	DRAM	6291456	6.000000
+COMPUTE	DRAM	589824	0.562500
+DRAM	COMPUTE	589824	0.562500
+
+## Route Summary (Detailed)
+src	dst	bytes	MiB
+DRAM:offchip_dram	SRAM:key_xyz_sram_buffer	16711680	15.937500
+SRAM:feature_sram_buffer	SRAM:spool_workspace_sram	12582912	12.000000
+SRAM:spool_workspace_sram	COMPUTE:spool_engine	12582912	12.000000
+SRAM:inter_layer_sram	DRAM:offchip_dram	6291456	6.000000
+COMPUTE:distance_generator	SRAM:dist_sram_buffer	5570560	5.312500
+COMPUTE:sram_cim_array	SRAM:self_distance_sram_buffer	5570560	5.312500
+SRAM:self_distance_sram_buffer	COMPUTE:dist2_merge_adder	5570560	5.312500
+SRAM:state_sram_buffer	SRAM:feature_sram_buffer	4328608	4.128082
+SRAM:state_sram_buffer	COMPUTE:add_unit	4194304	4.000000
+COMPUTE:fps_min_update	SRAM:fps_min_distance_table_sram	2785280	2.656250
+SRAM:dist_sram_buffer	COMPUTE:knn_sorter	2785280	2.656250
+SRAM:fps_min_distance_table_sram	COMPUTE:fps_min_update	2785280	2.656250
+SRAM:fps_min_distance_table_sram	COMPUTE:fps_sorter	2785280	2.656250
+COMPUTE:rram_cim_conv_engine	SRAM:state_sram_buffer	2228224	2.125000
+SRAM:feature_sram_buffer	COMPUTE:rram_cim_conv_engine	2109440	2.011719
+SRAM:feature_sram_buffer	COMPUTE:rram_cim_linear_engine	2102272	2.004883
+COMPUTE:rram_cim_linear_engine	SRAM:state_sram_buffer	2100384	2.003082
+COMPUTE:add_unit	SRAM:state_sram_buffer	2097152	2.000000
+COMPUTE:bn_engine	SRAM:feature_sram_buffer	1190400	1.135254
+COMPUTE:relu_engine	SRAM:feature_sram_buffer	1190400	1.135254
+SRAM:feature_sram_buffer	COMPUTE:bn_engine	1190400	1.135254
+SRAM:feature_sram_buffer	COMPUTE:relu_engine	1190400	1.135254
+COMPUTE:compute_fabric	SRAM:state_sram_buffer	1063936	1.014648
+COMPUTE:kan_engine	SRAM:kan_workspace_sram	1048576	1.000000
+COMPUTE:layernorm_engine	SRAM:feature_sram_buffer	1048576	1.000000
+SRAM:feature_sram_buffer	COMPUTE:kan_engine	1048576	1.000000
+SRAM:feature_sram_buffer	COMPUTE:layernorm_engine	1048576	1.000000
+SRAM:adaptive_pool_workspace_sram	COMPUTE:adaptive_pool_engine	655360	0.625000
+SRAM:feature_sram_buffer	SRAM:adaptive_pool_workspace_sram	655360	0.625000
+COMPUTE:compute_fabric	SRAM:inter_layer_sram	595712	0.568115
+SRAM:inter_layer_sram	COMPUTE:compute_fabric	595712	0.568115
+COMPUTE:compute_fabric	DRAM:offchip_dram	589824	0.562500
+DRAM:offchip_dram	COMPUTE:compute_fabric	589824	0.562500
+COMPUTE:spool_engine	SRAM:state_sram_buffer	524288	0.500000
+SRAM:state_sram_buffer	SRAM:spool_workspace_sram	524288	0.500000
+COMPUTE:affine_norm_engine	SRAM:feature_sram_buffer	262144	0.250000
+SRAM:feature_sram_buffer	COMPUTE:affine_norm_engine	262144	0.250000
+COMPUTE:coarse_filter	SRAM:topk_sram_buffer	245760	0.234375
+COMPUTE:knn_sorter	SRAM:sort_cache_sram	245760	0.234375
+SRAM:topk_sram_buffer	COMPUTE:coarse_filter	245760	0.234375
+COMPUTE:knn_sorter	SRAM:state_sram_buffer	92160	0.087891
+SRAM:key_xyz_sram_buffer	SRAM:sram_cim_array	92160	0.087891
+DRAM:offchip_dram	SRAM:kan_param_sram	76800	0.073242
+SRAM:kan_param_sram	COMPUTE:kan_engine	76800	0.073242
+DRAM:offchip_dram	SRAM:bn_param_sram	74240	0.070801
+SRAM:bn_param_sram	COMPUTE:bn_engine	74240	0.070801
+DRAM:offchip_dram	SRAM:query_xyz_sram_buffer	58368	0.055664
+COMPUTE:bn_engine	SRAM:state_sram_buffer	37120	0.035400
+COMPUTE:relu_engine	SRAM:state_sram_buffer	18560	0.017700
+COMPUTE:layernorm_engine	SRAM:state_sram_buffer	15360	0.014648
+DRAM:offchip_dram	SRAM:layernorm_param_sram	15360	0.014648
+SRAM:layernorm_param_sram	COMPUTE:layernorm_engine	15360	0.014648
+SRAM:query_xyz_sram_buffer	COMPUTE:fps_engine	11520	0.010986
+SRAM:query_xyz_sram_buffer	COMPUTE:knn_engine	11520	0.010986
+COMPUTE:coarse_filter	SRAM:temp_max_distance_sram	7680	0.007324
+COMPUTE:fps_sorter	SRAM:sort_cache_sram	7680	0.007324
+SRAM:temp_max_distance_sram	COMPUTE:fine_filter	7680	0.007324
+COMPUTE:adaptive_pool_engine	SRAM:state_sram_buffer	5888	0.005615
+SRAM:state_sram_buffer	SRAM:adaptive_pool_workspace_sram	5888	0.005615
+COMPUTE:affine_norm_engine	SRAM:state_sram_buffer	3840	0.003662
+COMPUTE:fps_sorter	SRAM:state_sram_buffer	3840	0.003662
+COMPUTE:resampler_upsample	SRAM:temp_max_distance_sram	3840	0.003662
+DRAM:offchip_dram	SRAM:affine_norm_param_sram	3840	0.003662
+SRAM:affine_norm_param_sram	COMPUTE:affine_norm_engine	3840	0.003662
+COMPUTE:spec_efficient_kan	SRAM:temp_max_distance_sram	1024	0.000977
+SRAM:temp_max_distance_sram	COMPUTE:resampler_upsample	1024	0.000977
+COMPUTE:resampler_downsample	SRAM:temp_max_distance_sram	392	0.000374
+SRAM:temp_max_distance_sram	COMPUTE:resampler_downsample	392	0.000374
+SRAM:temp_max_distance_sram	COMPUTE:spec_efficient_kan	392	0.000374
+
+## Per-Layer Total
+layer_name	bytes	MiB
+GAM-stage0	42620784	40.646347
+GAM-stage1	17183032	16.387016
+GAM-stage2	10756764	10.258450
+GAM-stage3	9118804	8.696369
+LFP-stage3	5419008	5.167969
+LFP-stage2	5330944	5.083984
+LFP-stage1	5286912	5.041992
+LFP-stage0	5264896	5.020996
+stage-3	2412544	2.300781
+stage-2	2385920	2.275391
+stage-1	2372608	2.262695
+stage-0	2365952	2.256348
+embedding	943488	0.899780
+global_maxpool	399360	0.380859
+classifier	59712	0.056946
+
+## Detailed Records
+layer_name	op_name	tensor_name	src_tier	src_name	dst_tier	dst_name	bytes	MiB	note
+embedding	layer_input	point_cloud_input	DRAM	offchip_dram	SRAM	query_xyz_sram_buffer	12288	0.011719	Phase1 initial point-cloud load into query xyz SRAM
+embedding	layer_output	inter_layer_activation	COMPUTE	compute_fabric	SRAM	inter_layer_sram	65536	0.062500	Layer output write to inter-layer SRAM
+embedding	layer_output	inter_layer_spill	COMPUTE	compute_fabric	DRAM	offchip_dram	65536	0.062500	Spill write when layer output exceeds inter-layer SRAM capacity
+embedding	conv1d	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_conv_engine	12288	0.011719	Feature activations consumed from persistent feature SRAM or prior refill
+embedding	conv1d	partial_sums	COMPUTE	rram_cim_conv_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+embedding	conv1d	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+embedding	bn	input_activation	SRAM	feature_sram_buffer	COMPUTE	bn_engine	131072	0.125000	Normalization input activations
+embedding	bn	norm_parameters	DRAM	offchip_dram	SRAM	bn_param_sram	512	0.000488	BN affine/stat parameter staging
+embedding	bn	norm_parameters_staged	SRAM	bn_param_sram	COMPUTE	bn_engine	512	0.000488	Normalization parameters streamed from local SRAM
+embedding	bn	reduction_state	COMPUTE	bn_engine	SRAM	state_sram_buffer	256	0.000244	Mean/variance or affine reduction state in small local SRAM
+embedding	bn	output_activation	COMPUTE	bn_engine	SRAM	feature_sram_buffer	131072	0.125000	Normalized activations written back to persistent feature SRAM
+embedding	relu	input_activation	SRAM	feature_sram_buffer	COMPUTE	relu_engine	131072	0.125000	Streaming activation read for ReLU
+embedding	relu	activation_lane	COMPUTE	relu_engine	SRAM	state_sram_buffer	128	0.000122	Per-lane compare/max state in local SRAM
+embedding	relu	output_activation	COMPUTE	relu_engine	SRAM	feature_sram_buffer	131072	0.125000	ReLU output written back to feature SRAM
+GAM-stage0	layer_input	inter_layer_activation	SRAM	inter_layer_sram	COMPUTE	compute_fabric	65536	0.062500	Layer input read from inter-layer SRAM
+GAM-stage0	layer_input	inter_layer_spill	DRAM	offchip_dram	COMPUTE	compute_fabric	65536	0.062500	Spill read when layer input exceeds inter-layer SRAM capacity
+GAM-stage0	layer_output	inter_layer_activation	COMPUTE	compute_fabric	SRAM	inter_layer_sram	65536	0.062500	Layer output write to inter-layer SRAM
+GAM-stage0	layer_output	inter_layer_spill	COMPUTE	compute_fabric	DRAM	offchip_dram	65536	0.062500	Spill write when layer output exceeds inter-layer SRAM capacity
+GAM-stage0	fps	query_points_refill	DRAM	offchip_dram	SRAM	query_xyz_sram_buffer	6144	0.005859	Load current FPS query xyz block into query SRAM
+GAM-stage0	fps	query_points_consume	SRAM	query_xyz_sram_buffer	COMPUTE	fps_engine	6144	0.005859	FPS repeatedly reads current query xyz from query SRAM
+GAM-stage0	fps	key_points_refill	DRAM	offchip_dram	SRAM	key_xyz_sram_buffer	6291456	6.000000	Key xyz tiles stream from DRAM into key SRAM; each transfer implies DRAM read plus SRAM write
+GAM-stage0	fps	cim_keyset_row_write	SRAM	key_xyz_sram_buffer	SRAM	sram_cim_array	12288	0.011719	ACC writes full key set row-by-row into SRAM-CIM array before self-distance pass
+GAM-stage0	fps	self_distance_write	COMPUTE	sram_cim_array	SRAM	self_distance_sram_buffer	2097152	2.000000	ACC self-square k^2 distance terms stored before cross-term accumulation
+GAM-stage0	fps	query_point_stream	DRAM	offchip_dram	SRAM	query_xyz_sram_buffer	6144	0.005859	ACC streams one query xyz per FPS iteration from DRAM/query buffer
+GAM-stage0	fps	self_distance_read	SRAM	self_distance_sram_buffer	COMPUTE	dist2_merge_adder	2097152	2.000000	ACC reads stored k^2 terms into accumulator before adding cross-term distances
+GAM-stage0	fps	cim_array_preload	SRAM	key_xyz_sram_buffer	SRAM	sram_cim_array	12288	0.011719	Load key xyz tile stream into distance generator array
+GAM-stage0	fps	distance_vector_write	COMPUTE	distance_generator	SRAM	dist_sram_buffer	2097152	2.000000	Distance results written to shared dist SRAM; shift-add local state already accounted inside engine
+GAM-stage0	fps	min_distance_table_read	SRAM	fps_min_distance_table_sram	COMPUTE	fps_min_update	2097152	2.000000	Read historical min-distance table before update
+GAM-stage0	fps	min_distance_table_write	COMPUTE	fps_min_update	SRAM	fps_min_distance_table_sram	2097152	2.000000	Update FPS historical min-distance table
+GAM-stage0	fps	sorter_input_read	SRAM	fps_min_distance_table_sram	COMPUTE	fps_sorter	2097152	2.000000	Sorter consumes FPS min-distance table (acc_streaming)
+GAM-stage0	fps	sort_cache_write	COMPUTE	fps_sorter	SRAM	sort_cache_sram	4096	0.003906	Streaming FPS local-max cache across 64-distance batches
+GAM-stage0	fps	coarse_filter_tempmax_write	COMPUTE	coarse_filter	SRAM	temp_max_distance_sram	4096	0.003906	ACC coarse filter writes per-batch max candidate into temporary max-distance SRAM during the post-prediction coarse/fine phase; this SRAM is time-multiplexed with speculative radii staging, not used simultaneously
+GAM-stage0	fps	fine_filter_tempmax_read	SRAM	temp_max_distance_sram	COMPUTE	fine_filter	4096	0.003906	ACC fine filter consumes temporary FPS max candidates from the same time-multiplexed temp/speculative SRAM during the post-prediction phase
+GAM-stage0	fps	spec_prefix_resample_down_read	SRAM	temp_max_distance_sram	COMPUTE	resampler_downsample	208	0.000198	After the first two exact FPS points, ACC resampler may downsample the growing exact radii prefix while the main FPS loop continues
+GAM-stage0	fps	spec_prefix_resample_down_write	COMPUTE	resampler_downsample	SRAM	temp_max_distance_sram	208	0.000198	Downsampled radii prefix written back into the same time-multiplexed temp/speculative SRAM
+GAM-stage0	fps	spec_predictor_read	SRAM	temp_max_distance_sram	COMPUTE	spec_efficient_kan	208	0.000198	After 10% FPS points complete, EfficientKAN-style predictor (roughly Linear+KAT) reads the downsampled radii prefix
+GAM-stage0	fps	spec_predictor_write	COMPUTE	spec_efficient_kan	SRAM	temp_max_distance_sram	256	0.000244	Predictor outputs a 64-point radii curve into the same time-multiplexed temp/speculative SRAM
+GAM-stage0	fps	spec_resample_up_read	SRAM	temp_max_distance_sram	COMPUTE	resampler_upsample	256	0.000244	Resampler reads the predicted 64-point radii curve for parallel upsampling
+GAM-stage0	fps	spec_resample_up_write	COMPUTE	resampler_upsample	SRAM	temp_max_distance_sram	2048	0.001953	Upsampled full radii curve written into the same time-multiplexed temp/speculative SRAM and then used as the coarse-filter threshold schedule; before this point FPS still follows full-sort mode
+GAM-stage0	fps	fps_index	COMPUTE	fps_sorter	SRAM	state_sram_buffer	2048	0.001953	Sampled center indices
+GAM-stage0	knn	query_points_refill	DRAM	offchip_dram	SRAM	query_xyz_sram_buffer	6144	0.005859	Load current KNN query xyz block into query SRAM
+GAM-stage0	knn	query_points_consume	SRAM	query_xyz_sram_buffer	COMPUTE	knn_engine	6144	0.005859	KNN repeatedly reads current query xyz from query SRAM
+GAM-stage0	knn	key_points_refill	DRAM	offchip_dram	SRAM	key_xyz_sram_buffer	6291456	6.000000	Key xyz tiles stream from DRAM into key SRAM; each transfer implies DRAM read plus SRAM write
+GAM-stage0	knn	cim_keyset_row_write	SRAM	key_xyz_sram_buffer	SRAM	sram_cim_array	12288	0.011719	ACC writes full key set row-by-row into SRAM-CIM array before self-distance pass
+GAM-stage0	knn	self_distance_write	COMPUTE	sram_cim_array	SRAM	self_distance_sram_buffer	2097152	2.000000	ACC self-square k^2 distance terms stored before cross-term accumulation
+GAM-stage0	knn	query_point_stream	DRAM	offchip_dram	SRAM	query_xyz_sram_buffer	6144	0.005859	ACC streams query xyz from DRAM/query buffer into query SRAM
+GAM-stage0	knn	self_distance_read	SRAM	self_distance_sram_buffer	COMPUTE	dist2_merge_adder	2097152	2.000000	ACC reads stored k^2 terms into accumulator before adding cross-term distances
+GAM-stage0	knn	cim_array_preload	SRAM	key_xyz_sram_buffer	SRAM	sram_cim_array	12288	0.011719	Load key xyz tile stream into distance generator array
+GAM-stage0	knn	distance_vector_write	COMPUTE	distance_generator	SRAM	dist_sram_buffer	2097152	2.000000	Distance results written to shared dist SRAM; shift-add local state already accounted inside engine
+GAM-stage0	knn	sorter_input_read	SRAM	dist_sram_buffer	COMPUTE	knn_sorter	2097152	2.000000	Sorter consumes shared distance SRAM (acc_streaming)
+GAM-stage0	knn	sort_cache_write	COMPUTE	knn_sorter	SRAM	sort_cache_sram	131072	0.125000	Streaming KNN top-k cache across 64-distance batches
+GAM-stage0	knn	coarse_filter_topk_write	COMPUTE	coarse_filter	SRAM	topk_sram_buffer	131072	0.125000	ACC KNN coarse filter writes candidate distances/indices into top-k SRAM buffer
+GAM-stage0	knn	topk_refine_read	SRAM	topk_sram_buffer	COMPUTE	coarse_filter	131072	0.125000	ACC KNN iterative threshold refinement rereads top-k SRAM until fine-filter bandwidth condition is met
+GAM-stage0	knn	knn_topk_index	COMPUTE	knn_sorter	SRAM	state_sram_buffer	49152	0.046875	Top-k neighbor indices
+GAM-stage0	knn	neighbor_features_spill	SRAM	inter_layer_sram	DRAM	offchip_dram	1572864	1.500000	Gather workspace exceeds SRAM, spill to DRAM
+GAM-stage0	affine_norm	input_activation	SRAM	feature_sram_buffer	COMPUTE	affine_norm_engine	65536	0.062500	Normalization input activations
+GAM-stage0	affine_norm	norm_parameters	DRAM	offchip_dram	SRAM	affine_norm_param_sram	256	0.000244	AffineNorm alpha/beta staging
+GAM-stage0	affine_norm	norm_parameters_staged	SRAM	affine_norm_param_sram	COMPUTE	affine_norm_engine	256	0.000244	Normalization parameters streamed from local SRAM
+GAM-stage0	affine_norm	reduction_state	COMPUTE	affine_norm_engine	SRAM	state_sram_buffer	256	0.000244	Mean/variance or affine reduction state in small local SRAM
+GAM-stage0	affine_norm	output_activation	COMPUTE	affine_norm_engine	SRAM	feature_sram_buffer	65536	0.062500	Normalized activations written back to persistent feature SRAM
+GAM-stage0	s-pool	pool_input	SRAM	feature_sram_buffer	SRAM	spool_workspace_sram	3145728	3.000000	Pool input window materialized before reduction
+GAM-stage0	s-pool	pool_workspace	SRAM	spool_workspace_sram	COMPUTE	spool_engine	3145728	3.000000	Pool workspace streamed to reduction engine
+GAM-stage0	s-pool	pool_reduce_state	COMPUTE	spool_engine	SRAM	state_sram_buffer	131072	0.125000	Per-channel max/accumulator state in local SRAM
+GAM-stage0	s-pool	pool_output	SRAM	state_sram_buffer	SRAM	spool_workspace_sram	131072	0.125000	Pool result kept on-chip for downstream operator or layer output
+LFP-stage0	layer_input	inter_layer_activation	SRAM	inter_layer_sram	COMPUTE	compute_fabric	65536	0.062500	Layer input read from inter-layer SRAM
+LFP-stage0	layer_input	inter_layer_spill	DRAM	offchip_dram	COMPUTE	compute_fabric	65536	0.062500	Spill read when layer input exceeds inter-layer SRAM capacity
+LFP-stage0	layer_output	inter_layer_activation	COMPUTE	compute_fabric	SRAM	inter_layer_sram	256	0.000244	Layer output write to inter-layer SRAM
+LFP-stage0	lfp_path	local_path_tensor	COMPUTE	compute_fabric	SRAM	state_sram_buffer	131072	0.125000	lfp local-path intermediate (stream_through)
+LFP-stage0	lfp_path	center_path_tensor	COMPUTE	compute_fabric	SRAM	state_sram_buffer	131072	0.125000	lfp center-path intermediate (stream_through)
+LFP-stage0	lfp_path	pooled_local_tensor	COMPUTE	compute_fabric	SRAM	state_sram_buffer	256	0.000244	lfp pooled tensor (stream_through)
+LFP-stage0	conv1d	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_conv_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage0	conv1d	partial_sums	COMPUTE	rram_cim_conv_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+LFP-stage0	conv1d	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+LFP-stage0	bn	input_activation	SRAM	feature_sram_buffer	COMPUTE	bn_engine	256	0.000244	Normalization input activations
+LFP-stage0	bn	norm_parameters	DRAM	offchip_dram	SRAM	bn_param_sram	1024	0.000977	BN affine/stat parameter staging
+LFP-stage0	bn	norm_parameters_staged	SRAM	bn_param_sram	COMPUTE	bn_engine	1024	0.000977	Normalization parameters streamed from local SRAM
+LFP-stage0	bn	reduction_state	COMPUTE	bn_engine	SRAM	state_sram_buffer	512	0.000488	Mean/variance or affine reduction state in small local SRAM
+LFP-stage0	bn	output_activation	COMPUTE	bn_engine	SRAM	feature_sram_buffer	256	0.000244	Normalized activations written back to persistent feature SRAM
+LFP-stage0	relu	input_activation	SRAM	feature_sram_buffer	COMPUTE	relu_engine	256	0.000244	Streaming activation read for ReLU
+LFP-stage0	relu	activation_lane	COMPUTE	relu_engine	SRAM	state_sram_buffer	256	0.000244	Per-lane compare/max state in local SRAM
+LFP-stage0	relu	output_activation	COMPUTE	relu_engine	SRAM	feature_sram_buffer	256	0.000244	ReLU output written back to feature SRAM
+LFP-stage0	layernorm	input_activation	SRAM	feature_sram_buffer	COMPUTE	layernorm_engine	131072	0.125000	Normalization input activations
+LFP-stage0	layernorm	norm_parameters	DRAM	offchip_dram	SRAM	layernorm_param_sram	512	0.000488	LayerNorm gamma/beta staging
+LFP-stage0	layernorm	norm_parameters_staged	SRAM	layernorm_param_sram	COMPUTE	layernorm_engine	512	0.000488	Normalization parameters streamed from local SRAM
+LFP-stage0	layernorm	reduction_state	COMPUTE	layernorm_engine	SRAM	state_sram_buffer	512	0.000488	Mean/variance or affine reduction state in small local SRAM
+LFP-stage0	layernorm	output_activation	COMPUTE	layernorm_engine	SRAM	feature_sram_buffer	131072	0.125000	Normalized activations written back to persistent feature SRAM
+LFP-stage0	linear	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_linear_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage0	linear	partial_sums	COMPUTE	rram_cim_linear_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+LFP-stage0	linear	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+LFP-stage0	kan	input_activation	SRAM	feature_sram_buffer	COMPUTE	kan_engine	131072	0.125000	KAN/KAT input activations
+LFP-stage0	kan	activation_coefficients	DRAM	offchip_dram	SRAM	kan_param_sram	2560	0.002441	Rational activation coefficients staged on-chip
+LFP-stage0	kan	activation_coefficients_staged	SRAM	kan_param_sram	COMPUTE	kan_engine	2560	0.002441	KAN parameters streamed from local SRAM
+LFP-stage0	kan	kan_workspace	COMPUTE	kan_engine	SRAM	kan_workspace_sram	131072	0.125000	KAN nonlinear output workspace
+LFP-stage0	linear	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_linear_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage0	linear	partial_sums	COMPUTE	rram_cim_linear_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+LFP-stage0	linear	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+LFP-stage0	add	main_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add main input read (stream_through)
+LFP-stage0	add	residual_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add residual input read (residual=True, stream_through)
+LFP-stage0	add	add_output_write	COMPUTE	add_unit	SRAM	state_sram_buffer	131072	0.125000	add output write (stream_through)
+LFP-stage0	adaptive_max_pool1d	pool_input	SRAM	feature_sram_buffer	SRAM	adaptive_pool_workspace_sram	131072	0.125000	Pool input window materialized before reduction
+LFP-stage0	adaptive_max_pool1d	pool_workspace	SRAM	adaptive_pool_workspace_sram	COMPUTE	adaptive_pool_engine	131072	0.125000	Pool workspace streamed to reduction engine
+LFP-stage0	adaptive_max_pool1d	pool_reduce_state	COMPUTE	adaptive_pool_engine	SRAM	state_sram_buffer	256	0.000244	Per-channel max/accumulator state in local SRAM
+LFP-stage0	adaptive_max_pool1d	pool_output	SRAM	state_sram_buffer	SRAM	adaptive_pool_workspace_sram	256	0.000244	Pool result kept on-chip for downstream operator or layer output
+LFP-stage0	conv1d	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_conv_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage0	conv1d	partial_sums	COMPUTE	rram_cim_conv_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+LFP-stage0	conv1d	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+LFP-stage0	bn	input_activation	SRAM	feature_sram_buffer	COMPUTE	bn_engine	256	0.000244	Normalization input activations
+LFP-stage0	bn	norm_parameters	DRAM	offchip_dram	SRAM	bn_param_sram	1024	0.000977	BN affine/stat parameter staging
+LFP-stage0	bn	norm_parameters_staged	SRAM	bn_param_sram	COMPUTE	bn_engine	1024	0.000977	Normalization parameters streamed from local SRAM
+LFP-stage0	bn	reduction_state	COMPUTE	bn_engine	SRAM	state_sram_buffer	512	0.000488	Mean/variance or affine reduction state in small local SRAM
+LFP-stage0	bn	output_activation	COMPUTE	bn_engine	SRAM	feature_sram_buffer	256	0.000244	Normalized activations written back to persistent feature SRAM
+LFP-stage0	relu	input_activation	SRAM	feature_sram_buffer	COMPUTE	relu_engine	256	0.000244	Streaming activation read for ReLU
+LFP-stage0	relu	activation_lane	COMPUTE	relu_engine	SRAM	state_sram_buffer	256	0.000244	Per-lane compare/max state in local SRAM
+LFP-stage0	relu	output_activation	COMPUTE	relu_engine	SRAM	feature_sram_buffer	256	0.000244	ReLU output written back to feature SRAM
+LFP-stage0	layernorm	input_activation	SRAM	feature_sram_buffer	COMPUTE	layernorm_engine	131072	0.125000	Normalization input activations
+LFP-stage0	layernorm	norm_parameters	DRAM	offchip_dram	SRAM	layernorm_param_sram	512	0.000488	LayerNorm gamma/beta staging
+LFP-stage0	layernorm	norm_parameters_staged	SRAM	layernorm_param_sram	COMPUTE	layernorm_engine	512	0.000488	Normalization parameters streamed from local SRAM
+LFP-stage0	layernorm	reduction_state	COMPUTE	layernorm_engine	SRAM	state_sram_buffer	512	0.000488	Mean/variance or affine reduction state in small local SRAM
+LFP-stage0	layernorm	output_activation	COMPUTE	layernorm_engine	SRAM	feature_sram_buffer	131072	0.125000	Normalized activations written back to persistent feature SRAM
+LFP-stage0	linear	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_linear_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage0	linear	partial_sums	COMPUTE	rram_cim_linear_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+LFP-stage0	linear	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+LFP-stage0	kan	input_activation	SRAM	feature_sram_buffer	COMPUTE	kan_engine	131072	0.125000	KAN/KAT input activations
+LFP-stage0	kan	activation_coefficients	DRAM	offchip_dram	SRAM	kan_param_sram	2560	0.002441	Rational activation coefficients staged on-chip
+LFP-stage0	kan	activation_coefficients_staged	SRAM	kan_param_sram	COMPUTE	kan_engine	2560	0.002441	KAN parameters streamed from local SRAM
+LFP-stage0	kan	kan_workspace	COMPUTE	kan_engine	SRAM	kan_workspace_sram	131072	0.125000	KAN nonlinear output workspace
+LFP-stage0	linear	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_linear_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage0	linear	partial_sums	COMPUTE	rram_cim_linear_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+LFP-stage0	linear	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+LFP-stage0	add	main_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add main input read (stream_through)
+LFP-stage0	add	residual_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add residual input read (residual=True, stream_through)
+LFP-stage0	add	add_output_write	COMPUTE	add_unit	SRAM	state_sram_buffer	131072	0.125000	add output write (stream_through)
+LFP-stage0	add	main_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add main input read (stream_through)
+LFP-stage0	add	residual_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add residual input read (residual=False, stream_through)
+LFP-stage0	add	add_output_write	COMPUTE	add_unit	SRAM	state_sram_buffer	131072	0.125000	add output write (stream_through)
+stage-0	layer_input	inter_layer_activation	SRAM	inter_layer_sram	COMPUTE	compute_fabric	256	0.000244	Layer input read from inter-layer SRAM
+stage-0	layer_output	inter_layer_activation	COMPUTE	compute_fabric	SRAM	inter_layer_sram	65536	0.062500	Layer output write to inter-layer SRAM
+stage-0	layer_output	inter_layer_spill	COMPUTE	compute_fabric	DRAM	offchip_dram	65536	0.062500	Spill write when layer output exceeds inter-layer SRAM capacity
+stage-0	stage_path	local_path_tensor	COMPUTE	compute_fabric	SRAM	state_sram_buffer	256	0.000244	stage local-path intermediate (stream_through)
+stage-0	stage_path	center_path_tensor	COMPUTE	compute_fabric	SRAM	state_sram_buffer	256	0.000244	stage center-path intermediate (stream_through)
+stage-0	stage_path	pooled_local_tensor	COMPUTE	compute_fabric	SRAM	state_sram_buffer	256	0.000244	stage pooled tensor (stream_through)
+stage-0	conv1d	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_conv_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+stage-0	conv1d	partial_sums	COMPUTE	rram_cim_conv_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+stage-0	conv1d	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+stage-0	bn	input_activation	SRAM	feature_sram_buffer	COMPUTE	bn_engine	131072	0.125000	Normalization input activations
+stage-0	bn	norm_parameters	DRAM	offchip_dram	SRAM	bn_param_sram	1024	0.000977	BN affine/stat parameter staging
+stage-0	bn	norm_parameters_staged	SRAM	bn_param_sram	COMPUTE	bn_engine	1024	0.000977	Normalization parameters streamed from local SRAM
+stage-0	bn	reduction_state	COMPUTE	bn_engine	SRAM	state_sram_buffer	512	0.000488	Mean/variance or affine reduction state in small local SRAM
+stage-0	bn	output_activation	COMPUTE	bn_engine	SRAM	feature_sram_buffer	131072	0.125000	Normalized activations written back to persistent feature SRAM
+stage-0	relu	input_activation	SRAM	feature_sram_buffer	COMPUTE	relu_engine	131072	0.125000	Streaming activation read for ReLU
+stage-0	relu	activation_lane	COMPUTE	relu_engine	SRAM	state_sram_buffer	256	0.000244	Per-lane compare/max state in local SRAM
+stage-0	relu	output_activation	COMPUTE	relu_engine	SRAM	feature_sram_buffer	131072	0.125000	ReLU output written back to feature SRAM
+stage-0	conv1d	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_conv_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+stage-0	conv1d	partial_sums	COMPUTE	rram_cim_conv_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+stage-0	conv1d	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+stage-0	bn	input_activation	SRAM	feature_sram_buffer	COMPUTE	bn_engine	131072	0.125000	Normalization input activations
+stage-0	bn	norm_parameters	DRAM	offchip_dram	SRAM	bn_param_sram	1024	0.000977	BN affine/stat parameter staging
+stage-0	bn	norm_parameters_staged	SRAM	bn_param_sram	COMPUTE	bn_engine	1024	0.000977	Normalization parameters streamed from local SRAM
+stage-0	bn	reduction_state	COMPUTE	bn_engine	SRAM	state_sram_buffer	512	0.000488	Mean/variance or affine reduction state in small local SRAM
+stage-0	bn	output_activation	COMPUTE	bn_engine	SRAM	feature_sram_buffer	131072	0.125000	Normalized activations written back to persistent feature SRAM
+stage-0	add	main_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add main input read (stream_through)
+stage-0	add	residual_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add residual input read (residual=True, stream_through)
+stage-0	add	add_output_write	COMPUTE	add_unit	SRAM	state_sram_buffer	131072	0.125000	add output write (stream_through)
+stage-0	relu	input_activation	SRAM	feature_sram_buffer	COMPUTE	relu_engine	131072	0.125000	Streaming activation read for ReLU
+stage-0	relu	activation_lane	COMPUTE	relu_engine	SRAM	state_sram_buffer	256	0.000244	Per-lane compare/max state in local SRAM
+stage-0	relu	output_activation	COMPUTE	relu_engine	SRAM	feature_sram_buffer	131072	0.125000	ReLU output written back to feature SRAM
+GAM-stage1	layer_input	inter_layer_activation	SRAM	inter_layer_sram	COMPUTE	compute_fabric	65536	0.062500	Layer input read from inter-layer SRAM
+GAM-stage1	layer_input	inter_layer_spill	DRAM	offchip_dram	COMPUTE	compute_fabric	65536	0.062500	Spill read when layer input exceeds inter-layer SRAM capacity
+GAM-stage1	layer_output	inter_layer_activation	COMPUTE	compute_fabric	SRAM	inter_layer_sram	65536	0.062500	Layer output write to inter-layer SRAM
+GAM-stage1	layer_output	inter_layer_spill	COMPUTE	compute_fabric	DRAM	offchip_dram	65536	0.062500	Spill write when layer output exceeds inter-layer SRAM capacity
+GAM-stage1	fps	query_points_refill	DRAM	offchip_dram	SRAM	query_xyz_sram_buffer	3072	0.002930	Load current FPS query xyz block into query SRAM
+GAM-stage1	fps	query_points_consume	SRAM	query_xyz_sram_buffer	COMPUTE	fps_engine	3072	0.002930	FPS repeatedly reads current query xyz from query SRAM
+GAM-stage1	fps	key_points_refill	DRAM	offchip_dram	SRAM	key_xyz_sram_buffer	1572864	1.500000	Key xyz tiles stream from DRAM into key SRAM; each transfer implies DRAM read plus SRAM write
+GAM-stage1	fps	cim_keyset_row_write	SRAM	key_xyz_sram_buffer	SRAM	sram_cim_array	6144	0.005859	ACC writes full key set row-by-row into SRAM-CIM array before self-distance pass
+GAM-stage1	fps	self_distance_write	COMPUTE	sram_cim_array	SRAM	self_distance_sram_buffer	524288	0.500000	ACC self-square k^2 distance terms stored before cross-term accumulation
+GAM-stage1	fps	query_point_stream	DRAM	offchip_dram	SRAM	query_xyz_sram_buffer	3072	0.002930	ACC streams one query xyz per FPS iteration from DRAM/query buffer
+GAM-stage1	fps	self_distance_read	SRAM	self_distance_sram_buffer	COMPUTE	dist2_merge_adder	524288	0.500000	ACC reads stored k^2 terms into accumulator before adding cross-term distances
+GAM-stage1	fps	cim_array_preload	SRAM	key_xyz_sram_buffer	SRAM	sram_cim_array	6144	0.005859	Load key xyz tile stream into distance generator array
+GAM-stage1	fps	distance_vector_write	COMPUTE	distance_generator	SRAM	dist_sram_buffer	524288	0.500000	Distance results written to shared dist SRAM; shift-add local state already accounted inside engine
+GAM-stage1	fps	min_distance_table_read	SRAM	fps_min_distance_table_sram	COMPUTE	fps_min_update	524288	0.500000	Read historical min-distance table before update
+GAM-stage1	fps	min_distance_table_write	COMPUTE	fps_min_update	SRAM	fps_min_distance_table_sram	524288	0.500000	Update FPS historical min-distance table
+GAM-stage1	fps	sorter_input_read	SRAM	fps_min_distance_table_sram	COMPUTE	fps_sorter	524288	0.500000	Sorter consumes FPS min-distance table (acc_streaming)
+GAM-stage1	fps	sort_cache_write	COMPUTE	fps_sorter	SRAM	sort_cache_sram	2048	0.001953	Streaming FPS local-max cache across 64-distance batches
+GAM-stage1	fps	coarse_filter_tempmax_write	COMPUTE	coarse_filter	SRAM	temp_max_distance_sram	2048	0.001953	ACC coarse filter writes per-batch max candidate into temporary max-distance SRAM during the post-prediction coarse/fine phase; this SRAM is time-multiplexed with speculative radii staging, not used simultaneously
+GAM-stage1	fps	fine_filter_tempmax_read	SRAM	temp_max_distance_sram	COMPUTE	fine_filter	2048	0.001953	ACC fine filter consumes temporary FPS max candidates from the same time-multiplexed temp/speculative SRAM during the post-prediction phase
+GAM-stage1	fps	spec_prefix_resample_down_read	SRAM	temp_max_distance_sram	COMPUTE	resampler_downsample	104	0.000099	After the first two exact FPS points, ACC resampler may downsample the growing exact radii prefix while the main FPS loop continues
+GAM-stage1	fps	spec_prefix_resample_down_write	COMPUTE	resampler_downsample	SRAM	temp_max_distance_sram	104	0.000099	Downsampled radii prefix written back into the same time-multiplexed temp/speculative SRAM
+GAM-stage1	fps	spec_predictor_read	SRAM	temp_max_distance_sram	COMPUTE	spec_efficient_kan	104	0.000099	After 10% FPS points complete, EfficientKAN-style predictor (roughly Linear+KAT) reads the downsampled radii prefix
+GAM-stage1	fps	spec_predictor_write	COMPUTE	spec_efficient_kan	SRAM	temp_max_distance_sram	256	0.000244	Predictor outputs a 64-point radii curve into the same time-multiplexed temp/speculative SRAM
+GAM-stage1	fps	spec_resample_up_read	SRAM	temp_max_distance_sram	COMPUTE	resampler_upsample	256	0.000244	Resampler reads the predicted 64-point radii curve for parallel upsampling
+GAM-stage1	fps	spec_resample_up_write	COMPUTE	resampler_upsample	SRAM	temp_max_distance_sram	1024	0.000977	Upsampled full radii curve written into the same time-multiplexed temp/speculative SRAM and then used as the coarse-filter threshold schedule; before this point FPS still follows full-sort mode
+GAM-stage1	fps	fps_index	COMPUTE	fps_sorter	SRAM	state_sram_buffer	1024	0.000977	Sampled center indices
+GAM-stage1	knn	query_points_refill	DRAM	offchip_dram	SRAM	query_xyz_sram_buffer	3072	0.002930	Load current KNN query xyz block into query SRAM
+GAM-stage1	knn	query_points_consume	SRAM	query_xyz_sram_buffer	COMPUTE	knn_engine	3072	0.002930	KNN repeatedly reads current query xyz from query SRAM
+GAM-stage1	knn	key_points_refill	DRAM	offchip_dram	SRAM	key_xyz_sram_buffer	1572864	1.500000	Key xyz tiles stream from DRAM into key SRAM; each transfer implies DRAM read plus SRAM write
+GAM-stage1	knn	cim_keyset_row_write	SRAM	key_xyz_sram_buffer	SRAM	sram_cim_array	6144	0.005859	ACC writes full key set row-by-row into SRAM-CIM array before self-distance pass
+GAM-stage1	knn	self_distance_write	COMPUTE	sram_cim_array	SRAM	self_distance_sram_buffer	524288	0.500000	ACC self-square k^2 distance terms stored before cross-term accumulation
+GAM-stage1	knn	query_point_stream	DRAM	offchip_dram	SRAM	query_xyz_sram_buffer	3072	0.002930	ACC streams query xyz from DRAM/query buffer into query SRAM
+GAM-stage1	knn	self_distance_read	SRAM	self_distance_sram_buffer	COMPUTE	dist2_merge_adder	524288	0.500000	ACC reads stored k^2 terms into accumulator before adding cross-term distances
+GAM-stage1	knn	cim_array_preload	SRAM	key_xyz_sram_buffer	SRAM	sram_cim_array	6144	0.005859	Load key xyz tile stream into distance generator array
+GAM-stage1	knn	distance_vector_write	COMPUTE	distance_generator	SRAM	dist_sram_buffer	524288	0.500000	Distance results written to shared dist SRAM; shift-add local state already accounted inside engine
+GAM-stage1	knn	sorter_input_read	SRAM	dist_sram_buffer	COMPUTE	knn_sorter	524288	0.500000	Sorter consumes shared distance SRAM (acc_streaming)
+GAM-stage1	knn	sort_cache_write	COMPUTE	knn_sorter	SRAM	sort_cache_sram	65536	0.062500	Streaming KNN top-k cache across 64-distance batches
+GAM-stage1	knn	coarse_filter_topk_write	COMPUTE	coarse_filter	SRAM	topk_sram_buffer	65536	0.062500	ACC KNN coarse filter writes candidate distances/indices into top-k SRAM buffer
+GAM-stage1	knn	topk_refine_read	SRAM	topk_sram_buffer	COMPUTE	coarse_filter	65536	0.062500	ACC KNN iterative threshold refinement rereads top-k SRAM until fine-filter bandwidth condition is met
+GAM-stage1	knn	knn_topk_index	COMPUTE	knn_sorter	SRAM	state_sram_buffer	24576	0.023438	Top-k neighbor indices
+GAM-stage1	knn	neighbor_features_spill	SRAM	inter_layer_sram	DRAM	offchip_dram	1572864	1.500000	Gather workspace exceeds SRAM, spill to DRAM
+GAM-stage1	affine_norm	input_activation	SRAM	feature_sram_buffer	COMPUTE	affine_norm_engine	65536	0.062500	Normalization input activations
+GAM-stage1	affine_norm	norm_parameters	DRAM	offchip_dram	SRAM	affine_norm_param_sram	512	0.000488	AffineNorm alpha/beta staging
+GAM-stage1	affine_norm	norm_parameters_staged	SRAM	affine_norm_param_sram	COMPUTE	affine_norm_engine	512	0.000488	Normalization parameters streamed from local SRAM
+GAM-stage1	affine_norm	reduction_state	COMPUTE	affine_norm_engine	SRAM	state_sram_buffer	512	0.000488	Mean/variance or affine reduction state in small local SRAM
+GAM-stage1	affine_norm	output_activation	COMPUTE	affine_norm_engine	SRAM	feature_sram_buffer	65536	0.062500	Normalized activations written back to persistent feature SRAM
+GAM-stage1	s-pool	pool_input	SRAM	feature_sram_buffer	SRAM	spool_workspace_sram	3145728	3.000000	Pool input window materialized before reduction
+GAM-stage1	s-pool	pool_workspace	SRAM	spool_workspace_sram	COMPUTE	spool_engine	3145728	3.000000	Pool workspace streamed to reduction engine
+GAM-stage1	s-pool	pool_reduce_state	COMPUTE	spool_engine	SRAM	state_sram_buffer	131072	0.125000	Per-channel max/accumulator state in local SRAM
+GAM-stage1	s-pool	pool_output	SRAM	state_sram_buffer	SRAM	spool_workspace_sram	131072	0.125000	Pool result kept on-chip for downstream operator or layer output
+LFP-stage1	layer_input	inter_layer_activation	SRAM	inter_layer_sram	COMPUTE	compute_fabric	65536	0.062500	Layer input read from inter-layer SRAM
+LFP-stage1	layer_input	inter_layer_spill	DRAM	offchip_dram	COMPUTE	compute_fabric	65536	0.062500	Spill read when layer input exceeds inter-layer SRAM capacity
+LFP-stage1	layer_output	inter_layer_activation	COMPUTE	compute_fabric	SRAM	inter_layer_sram	512	0.000488	Layer output write to inter-layer SRAM
+LFP-stage1	lfp_path	local_path_tensor	COMPUTE	compute_fabric	SRAM	state_sram_buffer	131072	0.125000	lfp local-path intermediate (stream_through)
+LFP-stage1	lfp_path	center_path_tensor	COMPUTE	compute_fabric	SRAM	state_sram_buffer	131072	0.125000	lfp center-path intermediate (stream_through)
+LFP-stage1	lfp_path	pooled_local_tensor	COMPUTE	compute_fabric	SRAM	state_sram_buffer	512	0.000488	lfp pooled tensor (stream_through)
+LFP-stage1	conv1d	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_conv_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage1	conv1d	partial_sums	COMPUTE	rram_cim_conv_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+LFP-stage1	conv1d	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+LFP-stage1	bn	input_activation	SRAM	feature_sram_buffer	COMPUTE	bn_engine	512	0.000488	Normalization input activations
+LFP-stage1	bn	norm_parameters	DRAM	offchip_dram	SRAM	bn_param_sram	2048	0.001953	BN affine/stat parameter staging
+LFP-stage1	bn	norm_parameters_staged	SRAM	bn_param_sram	COMPUTE	bn_engine	2048	0.001953	Normalization parameters streamed from local SRAM
+LFP-stage1	bn	reduction_state	COMPUTE	bn_engine	SRAM	state_sram_buffer	1024	0.000977	Mean/variance or affine reduction state in small local SRAM
+LFP-stage1	bn	output_activation	COMPUTE	bn_engine	SRAM	feature_sram_buffer	512	0.000488	Normalized activations written back to persistent feature SRAM
+LFP-stage1	relu	input_activation	SRAM	feature_sram_buffer	COMPUTE	relu_engine	512	0.000488	Streaming activation read for ReLU
+LFP-stage1	relu	activation_lane	COMPUTE	relu_engine	SRAM	state_sram_buffer	512	0.000488	Per-lane compare/max state in local SRAM
+LFP-stage1	relu	output_activation	COMPUTE	relu_engine	SRAM	feature_sram_buffer	512	0.000488	ReLU output written back to feature SRAM
+LFP-stage1	layernorm	input_activation	SRAM	feature_sram_buffer	COMPUTE	layernorm_engine	131072	0.125000	Normalization input activations
+LFP-stage1	layernorm	norm_parameters	DRAM	offchip_dram	SRAM	layernorm_param_sram	1024	0.000977	LayerNorm gamma/beta staging
+LFP-stage1	layernorm	norm_parameters_staged	SRAM	layernorm_param_sram	COMPUTE	layernorm_engine	1024	0.000977	Normalization parameters streamed from local SRAM
+LFP-stage1	layernorm	reduction_state	COMPUTE	layernorm_engine	SRAM	state_sram_buffer	1024	0.000977	Mean/variance or affine reduction state in small local SRAM
+LFP-stage1	layernorm	output_activation	COMPUTE	layernorm_engine	SRAM	feature_sram_buffer	131072	0.125000	Normalized activations written back to persistent feature SRAM
+LFP-stage1	linear	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_linear_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage1	linear	partial_sums	COMPUTE	rram_cim_linear_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+LFP-stage1	linear	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+LFP-stage1	kan	input_activation	SRAM	feature_sram_buffer	COMPUTE	kan_engine	131072	0.125000	KAN/KAT input activations
+LFP-stage1	kan	activation_coefficients	DRAM	offchip_dram	SRAM	kan_param_sram	5120	0.004883	Rational activation coefficients staged on-chip
+LFP-stage1	kan	activation_coefficients_staged	SRAM	kan_param_sram	COMPUTE	kan_engine	5120	0.004883	KAN parameters streamed from local SRAM
+LFP-stage1	kan	kan_workspace	COMPUTE	kan_engine	SRAM	kan_workspace_sram	131072	0.125000	KAN nonlinear output workspace
+LFP-stage1	linear	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_linear_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage1	linear	partial_sums	COMPUTE	rram_cim_linear_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+LFP-stage1	linear	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+LFP-stage1	add	main_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add main input read (stream_through)
+LFP-stage1	add	residual_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add residual input read (residual=True, stream_through)
+LFP-stage1	add	add_output_write	COMPUTE	add_unit	SRAM	state_sram_buffer	131072	0.125000	add output write (stream_through)
+LFP-stage1	adaptive_max_pool1d	pool_input	SRAM	feature_sram_buffer	SRAM	adaptive_pool_workspace_sram	131072	0.125000	Pool input window materialized before reduction
+LFP-stage1	adaptive_max_pool1d	pool_workspace	SRAM	adaptive_pool_workspace_sram	COMPUTE	adaptive_pool_engine	131072	0.125000	Pool workspace streamed to reduction engine
+LFP-stage1	adaptive_max_pool1d	pool_reduce_state	COMPUTE	adaptive_pool_engine	SRAM	state_sram_buffer	512	0.000488	Per-channel max/accumulator state in local SRAM
+LFP-stage1	adaptive_max_pool1d	pool_output	SRAM	state_sram_buffer	SRAM	adaptive_pool_workspace_sram	512	0.000488	Pool result kept on-chip for downstream operator or layer output
+LFP-stage1	conv1d	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_conv_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage1	conv1d	partial_sums	COMPUTE	rram_cim_conv_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+LFP-stage1	conv1d	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+LFP-stage1	bn	input_activation	SRAM	feature_sram_buffer	COMPUTE	bn_engine	512	0.000488	Normalization input activations
+LFP-stage1	bn	norm_parameters	DRAM	offchip_dram	SRAM	bn_param_sram	2048	0.001953	BN affine/stat parameter staging
+LFP-stage1	bn	norm_parameters_staged	SRAM	bn_param_sram	COMPUTE	bn_engine	2048	0.001953	Normalization parameters streamed from local SRAM
+LFP-stage1	bn	reduction_state	COMPUTE	bn_engine	SRAM	state_sram_buffer	1024	0.000977	Mean/variance or affine reduction state in small local SRAM
+LFP-stage1	bn	output_activation	COMPUTE	bn_engine	SRAM	feature_sram_buffer	512	0.000488	Normalized activations written back to persistent feature SRAM
+LFP-stage1	relu	input_activation	SRAM	feature_sram_buffer	COMPUTE	relu_engine	512	0.000488	Streaming activation read for ReLU
+LFP-stage1	relu	activation_lane	COMPUTE	relu_engine	SRAM	state_sram_buffer	512	0.000488	Per-lane compare/max state in local SRAM
+LFP-stage1	relu	output_activation	COMPUTE	relu_engine	SRAM	feature_sram_buffer	512	0.000488	ReLU output written back to feature SRAM
+LFP-stage1	layernorm	input_activation	SRAM	feature_sram_buffer	COMPUTE	layernorm_engine	131072	0.125000	Normalization input activations
+LFP-stage1	layernorm	norm_parameters	DRAM	offchip_dram	SRAM	layernorm_param_sram	1024	0.000977	LayerNorm gamma/beta staging
+LFP-stage1	layernorm	norm_parameters_staged	SRAM	layernorm_param_sram	COMPUTE	layernorm_engine	1024	0.000977	Normalization parameters streamed from local SRAM
+LFP-stage1	layernorm	reduction_state	COMPUTE	layernorm_engine	SRAM	state_sram_buffer	1024	0.000977	Mean/variance or affine reduction state in small local SRAM
+LFP-stage1	layernorm	output_activation	COMPUTE	layernorm_engine	SRAM	feature_sram_buffer	131072	0.125000	Normalized activations written back to persistent feature SRAM
+LFP-stage1	linear	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_linear_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage1	linear	partial_sums	COMPUTE	rram_cim_linear_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+LFP-stage1	linear	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+LFP-stage1	kan	input_activation	SRAM	feature_sram_buffer	COMPUTE	kan_engine	131072	0.125000	KAN/KAT input activations
+LFP-stage1	kan	activation_coefficients	DRAM	offchip_dram	SRAM	kan_param_sram	5120	0.004883	Rational activation coefficients staged on-chip
+LFP-stage1	kan	activation_coefficients_staged	SRAM	kan_param_sram	COMPUTE	kan_engine	5120	0.004883	KAN parameters streamed from local SRAM
+LFP-stage1	kan	kan_workspace	COMPUTE	kan_engine	SRAM	kan_workspace_sram	131072	0.125000	KAN nonlinear output workspace
+LFP-stage1	linear	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_linear_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage1	linear	partial_sums	COMPUTE	rram_cim_linear_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+LFP-stage1	linear	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+LFP-stage1	add	main_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add main input read (stream_through)
+LFP-stage1	add	residual_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add residual input read (residual=True, stream_through)
+LFP-stage1	add	add_output_write	COMPUTE	add_unit	SRAM	state_sram_buffer	131072	0.125000	add output write (stream_through)
+LFP-stage1	add	main_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add main input read (stream_through)
+LFP-stage1	add	residual_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add residual input read (residual=False, stream_through)
+LFP-stage1	add	add_output_write	COMPUTE	add_unit	SRAM	state_sram_buffer	131072	0.125000	add output write (stream_through)
+stage-1	layer_input	inter_layer_activation	SRAM	inter_layer_sram	COMPUTE	compute_fabric	512	0.000488	Layer input read from inter-layer SRAM
+stage-1	layer_output	inter_layer_activation	COMPUTE	compute_fabric	SRAM	inter_layer_sram	65536	0.062500	Layer output write to inter-layer SRAM
+stage-1	layer_output	inter_layer_spill	COMPUTE	compute_fabric	DRAM	offchip_dram	65536	0.062500	Spill write when layer output exceeds inter-layer SRAM capacity
+stage-1	stage_path	local_path_tensor	COMPUTE	compute_fabric	SRAM	state_sram_buffer	512	0.000488	stage local-path intermediate (stream_through)
+stage-1	stage_path	center_path_tensor	COMPUTE	compute_fabric	SRAM	state_sram_buffer	512	0.000488	stage center-path intermediate (stream_through)
+stage-1	stage_path	pooled_local_tensor	COMPUTE	compute_fabric	SRAM	state_sram_buffer	512	0.000488	stage pooled tensor (stream_through)
+stage-1	conv1d	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_conv_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+stage-1	conv1d	partial_sums	COMPUTE	rram_cim_conv_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+stage-1	conv1d	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+stage-1	bn	input_activation	SRAM	feature_sram_buffer	COMPUTE	bn_engine	131072	0.125000	Normalization input activations
+stage-1	bn	norm_parameters	DRAM	offchip_dram	SRAM	bn_param_sram	2048	0.001953	BN affine/stat parameter staging
+stage-1	bn	norm_parameters_staged	SRAM	bn_param_sram	COMPUTE	bn_engine	2048	0.001953	Normalization parameters streamed from local SRAM
+stage-1	bn	reduction_state	COMPUTE	bn_engine	SRAM	state_sram_buffer	1024	0.000977	Mean/variance or affine reduction state in small local SRAM
+stage-1	bn	output_activation	COMPUTE	bn_engine	SRAM	feature_sram_buffer	131072	0.125000	Normalized activations written back to persistent feature SRAM
+stage-1	relu	input_activation	SRAM	feature_sram_buffer	COMPUTE	relu_engine	131072	0.125000	Streaming activation read for ReLU
+stage-1	relu	activation_lane	COMPUTE	relu_engine	SRAM	state_sram_buffer	512	0.000488	Per-lane compare/max state in local SRAM
+stage-1	relu	output_activation	COMPUTE	relu_engine	SRAM	feature_sram_buffer	131072	0.125000	ReLU output written back to feature SRAM
+stage-1	conv1d	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_conv_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+stage-1	conv1d	partial_sums	COMPUTE	rram_cim_conv_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+stage-1	conv1d	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+stage-1	bn	input_activation	SRAM	feature_sram_buffer	COMPUTE	bn_engine	131072	0.125000	Normalization input activations
+stage-1	bn	norm_parameters	DRAM	offchip_dram	SRAM	bn_param_sram	2048	0.001953	BN affine/stat parameter staging
+stage-1	bn	norm_parameters_staged	SRAM	bn_param_sram	COMPUTE	bn_engine	2048	0.001953	Normalization parameters streamed from local SRAM
+stage-1	bn	reduction_state	COMPUTE	bn_engine	SRAM	state_sram_buffer	1024	0.000977	Mean/variance or affine reduction state in small local SRAM
+stage-1	bn	output_activation	COMPUTE	bn_engine	SRAM	feature_sram_buffer	131072	0.125000	Normalized activations written back to persistent feature SRAM
+stage-1	add	main_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add main input read (stream_through)
+stage-1	add	residual_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add residual input read (residual=True, stream_through)
+stage-1	add	add_output_write	COMPUTE	add_unit	SRAM	state_sram_buffer	131072	0.125000	add output write (stream_through)
+stage-1	relu	input_activation	SRAM	feature_sram_buffer	COMPUTE	relu_engine	131072	0.125000	Streaming activation read for ReLU
+stage-1	relu	activation_lane	COMPUTE	relu_engine	SRAM	state_sram_buffer	512	0.000488	Per-lane compare/max state in local SRAM
+stage-1	relu	output_activation	COMPUTE	relu_engine	SRAM	feature_sram_buffer	131072	0.125000	ReLU output written back to feature SRAM
+GAM-stage2	layer_input	inter_layer_activation	SRAM	inter_layer_sram	COMPUTE	compute_fabric	65536	0.062500	Layer input read from inter-layer SRAM
+GAM-stage2	layer_input	inter_layer_spill	DRAM	offchip_dram	COMPUTE	compute_fabric	65536	0.062500	Spill read when layer input exceeds inter-layer SRAM capacity
+GAM-stage2	layer_output	inter_layer_activation	COMPUTE	compute_fabric	SRAM	inter_layer_sram	65536	0.062500	Layer output write to inter-layer SRAM
+GAM-stage2	layer_output	inter_layer_spill	COMPUTE	compute_fabric	DRAM	offchip_dram	65536	0.062500	Spill write when layer output exceeds inter-layer SRAM capacity
+GAM-stage2	fps	query_points_refill	DRAM	offchip_dram	SRAM	query_xyz_sram_buffer	1536	0.001465	Load current FPS query xyz block into query SRAM
+GAM-stage2	fps	query_points_consume	SRAM	query_xyz_sram_buffer	COMPUTE	fps_engine	1536	0.001465	FPS repeatedly reads current query xyz from query SRAM
+GAM-stage2	fps	key_points_refill	DRAM	offchip_dram	SRAM	key_xyz_sram_buffer	393216	0.375000	Key xyz tiles stream from DRAM into key SRAM; each transfer implies DRAM read plus SRAM write
+GAM-stage2	fps	cim_keyset_row_write	SRAM	key_xyz_sram_buffer	SRAM	sram_cim_array	3072	0.002930	ACC writes full key set row-by-row into SRAM-CIM array before self-distance pass
+GAM-stage2	fps	self_distance_write	COMPUTE	sram_cim_array	SRAM	self_distance_sram_buffer	131072	0.125000	ACC self-square k^2 distance terms stored before cross-term accumulation
+GAM-stage2	fps	query_point_stream	DRAM	offchip_dram	SRAM	query_xyz_sram_buffer	1536	0.001465	ACC streams one query xyz per FPS iteration from DRAM/query buffer
+GAM-stage2	fps	self_distance_read	SRAM	self_distance_sram_buffer	COMPUTE	dist2_merge_adder	131072	0.125000	ACC reads stored k^2 terms into accumulator before adding cross-term distances
+GAM-stage2	fps	cim_array_preload	SRAM	key_xyz_sram_buffer	SRAM	sram_cim_array	3072	0.002930	Load key xyz tile stream into distance generator array
+GAM-stage2	fps	distance_vector_write	COMPUTE	distance_generator	SRAM	dist_sram_buffer	131072	0.125000	Distance results written to shared dist SRAM; shift-add local state already accounted inside engine
+GAM-stage2	fps	min_distance_table_read	SRAM	fps_min_distance_table_sram	COMPUTE	fps_min_update	131072	0.125000	Read historical min-distance table before update
+GAM-stage2	fps	min_distance_table_write	COMPUTE	fps_min_update	SRAM	fps_min_distance_table_sram	131072	0.125000	Update FPS historical min-distance table
+GAM-stage2	fps	sorter_input_read	SRAM	fps_min_distance_table_sram	COMPUTE	fps_sorter	131072	0.125000	Sorter consumes FPS min-distance table (acc_streaming)
+GAM-stage2	fps	sort_cache_write	COMPUTE	fps_sorter	SRAM	sort_cache_sram	1024	0.000977	Streaming FPS local-max cache across 64-distance batches
+GAM-stage2	fps	coarse_filter_tempmax_write	COMPUTE	coarse_filter	SRAM	temp_max_distance_sram	1024	0.000977	ACC coarse filter writes per-batch max candidate into temporary max-distance SRAM during the post-prediction coarse/fine phase; this SRAM is time-multiplexed with speculative radii staging, not used simultaneously
+GAM-stage2	fps	fine_filter_tempmax_read	SRAM	temp_max_distance_sram	COMPUTE	fine_filter	1024	0.000977	ACC fine filter consumes temporary FPS max candidates from the same time-multiplexed temp/speculative SRAM during the post-prediction phase
+GAM-stage2	fps	spec_prefix_resample_down_read	SRAM	temp_max_distance_sram	COMPUTE	resampler_downsample	52	0.000050	After the first two exact FPS points, ACC resampler may downsample the growing exact radii prefix while the main FPS loop continues
+GAM-stage2	fps	spec_prefix_resample_down_write	COMPUTE	resampler_downsample	SRAM	temp_max_distance_sram	52	0.000050	Downsampled radii prefix written back into the same time-multiplexed temp/speculative SRAM
+GAM-stage2	fps	spec_predictor_read	SRAM	temp_max_distance_sram	COMPUTE	spec_efficient_kan	52	0.000050	After 10% FPS points complete, EfficientKAN-style predictor (roughly Linear+KAT) reads the downsampled radii prefix
+GAM-stage2	fps	spec_predictor_write	COMPUTE	spec_efficient_kan	SRAM	temp_max_distance_sram	256	0.000244	Predictor outputs a 64-point radii curve into the same time-multiplexed temp/speculative SRAM
+GAM-stage2	fps	spec_resample_up_read	SRAM	temp_max_distance_sram	COMPUTE	resampler_upsample	256	0.000244	Resampler reads the predicted 64-point radii curve for parallel upsampling
+GAM-stage2	fps	spec_resample_up_write	COMPUTE	resampler_upsample	SRAM	temp_max_distance_sram	512	0.000488	Upsampled full radii curve written into the same time-multiplexed temp/speculative SRAM and then used as the coarse-filter threshold schedule; before this point FPS still follows full-sort mode
+GAM-stage2	fps	fps_index	COMPUTE	fps_sorter	SRAM	state_sram_buffer	512	0.000488	Sampled center indices
+GAM-stage2	knn	query_points_refill	DRAM	offchip_dram	SRAM	query_xyz_sram_buffer	1536	0.001465	Load current KNN query xyz block into query SRAM
+GAM-stage2	knn	query_points_consume	SRAM	query_xyz_sram_buffer	COMPUTE	knn_engine	1536	0.001465	KNN repeatedly reads current query xyz from query SRAM
+GAM-stage2	knn	key_points_refill	DRAM	offchip_dram	SRAM	key_xyz_sram_buffer	393216	0.375000	Key xyz tiles stream from DRAM into key SRAM; each transfer implies DRAM read plus SRAM write
+GAM-stage2	knn	cim_keyset_row_write	SRAM	key_xyz_sram_buffer	SRAM	sram_cim_array	3072	0.002930	ACC writes full key set row-by-row into SRAM-CIM array before self-distance pass
+GAM-stage2	knn	self_distance_write	COMPUTE	sram_cim_array	SRAM	self_distance_sram_buffer	131072	0.125000	ACC self-square k^2 distance terms stored before cross-term accumulation
+GAM-stage2	knn	query_point_stream	DRAM	offchip_dram	SRAM	query_xyz_sram_buffer	1536	0.001465	ACC streams query xyz from DRAM/query buffer into query SRAM
+GAM-stage2	knn	self_distance_read	SRAM	self_distance_sram_buffer	COMPUTE	dist2_merge_adder	131072	0.125000	ACC reads stored k^2 terms into accumulator before adding cross-term distances
+GAM-stage2	knn	cim_array_preload	SRAM	key_xyz_sram_buffer	SRAM	sram_cim_array	3072	0.002930	Load key xyz tile stream into distance generator array
+GAM-stage2	knn	distance_vector_write	COMPUTE	distance_generator	SRAM	dist_sram_buffer	131072	0.125000	Distance results written to shared dist SRAM; shift-add local state already accounted inside engine
+GAM-stage2	knn	sorter_input_read	SRAM	dist_sram_buffer	COMPUTE	knn_sorter	131072	0.125000	Sorter consumes shared distance SRAM (acc_streaming)
+GAM-stage2	knn	sort_cache_write	COMPUTE	knn_sorter	SRAM	sort_cache_sram	32768	0.031250	Streaming KNN top-k cache across 64-distance batches
+GAM-stage2	knn	coarse_filter_topk_write	COMPUTE	coarse_filter	SRAM	topk_sram_buffer	32768	0.031250	ACC KNN coarse filter writes candidate distances/indices into top-k SRAM buffer
+GAM-stage2	knn	topk_refine_read	SRAM	topk_sram_buffer	COMPUTE	coarse_filter	32768	0.031250	ACC KNN iterative threshold refinement rereads top-k SRAM until fine-filter bandwidth condition is met
+GAM-stage2	knn	knn_topk_index	COMPUTE	knn_sorter	SRAM	state_sram_buffer	12288	0.011719	Top-k neighbor indices
+GAM-stage2	knn	neighbor_features_spill	SRAM	inter_layer_sram	DRAM	offchip_dram	1572864	1.500000	Gather workspace exceeds SRAM, spill to DRAM
+GAM-stage2	affine_norm	input_activation	SRAM	feature_sram_buffer	COMPUTE	affine_norm_engine	65536	0.062500	Normalization input activations
+GAM-stage2	affine_norm	norm_parameters	DRAM	offchip_dram	SRAM	affine_norm_param_sram	1024	0.000977	AffineNorm alpha/beta staging
+GAM-stage2	affine_norm	norm_parameters_staged	SRAM	affine_norm_param_sram	COMPUTE	affine_norm_engine	1024	0.000977	Normalization parameters streamed from local SRAM
+GAM-stage2	affine_norm	reduction_state	COMPUTE	affine_norm_engine	SRAM	state_sram_buffer	1024	0.000977	Mean/variance or affine reduction state in small local SRAM
+GAM-stage2	affine_norm	output_activation	COMPUTE	affine_norm_engine	SRAM	feature_sram_buffer	65536	0.062500	Normalized activations written back to persistent feature SRAM
+GAM-stage2	s-pool	pool_input	SRAM	feature_sram_buffer	SRAM	spool_workspace_sram	3145728	3.000000	Pool input window materialized before reduction
+GAM-stage2	s-pool	pool_workspace	SRAM	spool_workspace_sram	COMPUTE	spool_engine	3145728	3.000000	Pool workspace streamed to reduction engine
+GAM-stage2	s-pool	pool_reduce_state	COMPUTE	spool_engine	SRAM	state_sram_buffer	131072	0.125000	Per-channel max/accumulator state in local SRAM
+GAM-stage2	s-pool	pool_output	SRAM	state_sram_buffer	SRAM	spool_workspace_sram	131072	0.125000	Pool result kept on-chip for downstream operator or layer output
+LFP-stage2	layer_input	inter_layer_activation	SRAM	inter_layer_sram	COMPUTE	compute_fabric	65536	0.062500	Layer input read from inter-layer SRAM
+LFP-stage2	layer_input	inter_layer_spill	DRAM	offchip_dram	COMPUTE	compute_fabric	65536	0.062500	Spill read when layer input exceeds inter-layer SRAM capacity
+LFP-stage2	layer_output	inter_layer_activation	COMPUTE	compute_fabric	SRAM	inter_layer_sram	1024	0.000977	Layer output write to inter-layer SRAM
+LFP-stage2	lfp_path	local_path_tensor	COMPUTE	compute_fabric	SRAM	state_sram_buffer	131072	0.125000	lfp local-path intermediate (stream_through)
+LFP-stage2	lfp_path	center_path_tensor	COMPUTE	compute_fabric	SRAM	state_sram_buffer	131072	0.125000	lfp center-path intermediate (stream_through)
+LFP-stage2	lfp_path	pooled_local_tensor	COMPUTE	compute_fabric	SRAM	state_sram_buffer	1024	0.000977	lfp pooled tensor (stream_through)
+LFP-stage2	conv1d	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_conv_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage2	conv1d	partial_sums	COMPUTE	rram_cim_conv_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+LFP-stage2	conv1d	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+LFP-stage2	bn	input_activation	SRAM	feature_sram_buffer	COMPUTE	bn_engine	1024	0.000977	Normalization input activations
+LFP-stage2	bn	norm_parameters	DRAM	offchip_dram	SRAM	bn_param_sram	4096	0.003906	BN affine/stat parameter staging
+LFP-stage2	bn	norm_parameters_staged	SRAM	bn_param_sram	COMPUTE	bn_engine	4096	0.003906	Normalization parameters streamed from local SRAM
+LFP-stage2	bn	reduction_state	COMPUTE	bn_engine	SRAM	state_sram_buffer	2048	0.001953	Mean/variance or affine reduction state in small local SRAM
+LFP-stage2	bn	output_activation	COMPUTE	bn_engine	SRAM	feature_sram_buffer	1024	0.000977	Normalized activations written back to persistent feature SRAM
+LFP-stage2	relu	input_activation	SRAM	feature_sram_buffer	COMPUTE	relu_engine	1024	0.000977	Streaming activation read for ReLU
+LFP-stage2	relu	activation_lane	COMPUTE	relu_engine	SRAM	state_sram_buffer	1024	0.000977	Per-lane compare/max state in local SRAM
+LFP-stage2	relu	output_activation	COMPUTE	relu_engine	SRAM	feature_sram_buffer	1024	0.000977	ReLU output written back to feature SRAM
+LFP-stage2	layernorm	input_activation	SRAM	feature_sram_buffer	COMPUTE	layernorm_engine	131072	0.125000	Normalization input activations
+LFP-stage2	layernorm	norm_parameters	DRAM	offchip_dram	SRAM	layernorm_param_sram	2048	0.001953	LayerNorm gamma/beta staging
+LFP-stage2	layernorm	norm_parameters_staged	SRAM	layernorm_param_sram	COMPUTE	layernorm_engine	2048	0.001953	Normalization parameters streamed from local SRAM
+LFP-stage2	layernorm	reduction_state	COMPUTE	layernorm_engine	SRAM	state_sram_buffer	2048	0.001953	Mean/variance or affine reduction state in small local SRAM
+LFP-stage2	layernorm	output_activation	COMPUTE	layernorm_engine	SRAM	feature_sram_buffer	131072	0.125000	Normalized activations written back to persistent feature SRAM
+LFP-stage2	linear	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_linear_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage2	linear	partial_sums	COMPUTE	rram_cim_linear_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+LFP-stage2	linear	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+LFP-stage2	kan	input_activation	SRAM	feature_sram_buffer	COMPUTE	kan_engine	131072	0.125000	KAN/KAT input activations
+LFP-stage2	kan	activation_coefficients	DRAM	offchip_dram	SRAM	kan_param_sram	10240	0.009766	Rational activation coefficients staged on-chip
+LFP-stage2	kan	activation_coefficients_staged	SRAM	kan_param_sram	COMPUTE	kan_engine	10240	0.009766	KAN parameters streamed from local SRAM
+LFP-stage2	kan	kan_workspace	COMPUTE	kan_engine	SRAM	kan_workspace_sram	131072	0.125000	KAN nonlinear output workspace
+LFP-stage2	linear	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_linear_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage2	linear	partial_sums	COMPUTE	rram_cim_linear_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+LFP-stage2	linear	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+LFP-stage2	add	main_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add main input read (stream_through)
+LFP-stage2	add	residual_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add residual input read (residual=True, stream_through)
+LFP-stage2	add	add_output_write	COMPUTE	add_unit	SRAM	state_sram_buffer	131072	0.125000	add output write (stream_through)
+LFP-stage2	adaptive_max_pool1d	pool_input	SRAM	feature_sram_buffer	SRAM	adaptive_pool_workspace_sram	131072	0.125000	Pool input window materialized before reduction
+LFP-stage2	adaptive_max_pool1d	pool_workspace	SRAM	adaptive_pool_workspace_sram	COMPUTE	adaptive_pool_engine	131072	0.125000	Pool workspace streamed to reduction engine
+LFP-stage2	adaptive_max_pool1d	pool_reduce_state	COMPUTE	adaptive_pool_engine	SRAM	state_sram_buffer	1024	0.000977	Per-channel max/accumulator state in local SRAM
+LFP-stage2	adaptive_max_pool1d	pool_output	SRAM	state_sram_buffer	SRAM	adaptive_pool_workspace_sram	1024	0.000977	Pool result kept on-chip for downstream operator or layer output
+LFP-stage2	conv1d	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_conv_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage2	conv1d	partial_sums	COMPUTE	rram_cim_conv_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+LFP-stage2	conv1d	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+LFP-stage2	bn	input_activation	SRAM	feature_sram_buffer	COMPUTE	bn_engine	1024	0.000977	Normalization input activations
+LFP-stage2	bn	norm_parameters	DRAM	offchip_dram	SRAM	bn_param_sram	4096	0.003906	BN affine/stat parameter staging
+LFP-stage2	bn	norm_parameters_staged	SRAM	bn_param_sram	COMPUTE	bn_engine	4096	0.003906	Normalization parameters streamed from local SRAM
+LFP-stage2	bn	reduction_state	COMPUTE	bn_engine	SRAM	state_sram_buffer	2048	0.001953	Mean/variance or affine reduction state in small local SRAM
+LFP-stage2	bn	output_activation	COMPUTE	bn_engine	SRAM	feature_sram_buffer	1024	0.000977	Normalized activations written back to persistent feature SRAM
+LFP-stage2	relu	input_activation	SRAM	feature_sram_buffer	COMPUTE	relu_engine	1024	0.000977	Streaming activation read for ReLU
+LFP-stage2	relu	activation_lane	COMPUTE	relu_engine	SRAM	state_sram_buffer	1024	0.000977	Per-lane compare/max state in local SRAM
+LFP-stage2	relu	output_activation	COMPUTE	relu_engine	SRAM	feature_sram_buffer	1024	0.000977	ReLU output written back to feature SRAM
+LFP-stage2	layernorm	input_activation	SRAM	feature_sram_buffer	COMPUTE	layernorm_engine	131072	0.125000	Normalization input activations
+LFP-stage2	layernorm	norm_parameters	DRAM	offchip_dram	SRAM	layernorm_param_sram	2048	0.001953	LayerNorm gamma/beta staging
+LFP-stage2	layernorm	norm_parameters_staged	SRAM	layernorm_param_sram	COMPUTE	layernorm_engine	2048	0.001953	Normalization parameters streamed from local SRAM
+LFP-stage2	layernorm	reduction_state	COMPUTE	layernorm_engine	SRAM	state_sram_buffer	2048	0.001953	Mean/variance or affine reduction state in small local SRAM
+LFP-stage2	layernorm	output_activation	COMPUTE	layernorm_engine	SRAM	feature_sram_buffer	131072	0.125000	Normalized activations written back to persistent feature SRAM
+LFP-stage2	linear	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_linear_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage2	linear	partial_sums	COMPUTE	rram_cim_linear_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+LFP-stage2	linear	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+LFP-stage2	kan	input_activation	SRAM	feature_sram_buffer	COMPUTE	kan_engine	131072	0.125000	KAN/KAT input activations
+LFP-stage2	kan	activation_coefficients	DRAM	offchip_dram	SRAM	kan_param_sram	10240	0.009766	Rational activation coefficients staged on-chip
+LFP-stage2	kan	activation_coefficients_staged	SRAM	kan_param_sram	COMPUTE	kan_engine	10240	0.009766	KAN parameters streamed from local SRAM
+LFP-stage2	kan	kan_workspace	COMPUTE	kan_engine	SRAM	kan_workspace_sram	131072	0.125000	KAN nonlinear output workspace
+LFP-stage2	linear	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_linear_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage2	linear	partial_sums	COMPUTE	rram_cim_linear_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+LFP-stage2	linear	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+LFP-stage2	add	main_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add main input read (stream_through)
+LFP-stage2	add	residual_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add residual input read (residual=True, stream_through)
+LFP-stage2	add	add_output_write	COMPUTE	add_unit	SRAM	state_sram_buffer	131072	0.125000	add output write (stream_through)
+LFP-stage2	add	main_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add main input read (stream_through)
+LFP-stage2	add	residual_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add residual input read (residual=False, stream_through)
+LFP-stage2	add	add_output_write	COMPUTE	add_unit	SRAM	state_sram_buffer	131072	0.125000	add output write (stream_through)
+stage-2	layer_input	inter_layer_activation	SRAM	inter_layer_sram	COMPUTE	compute_fabric	1024	0.000977	Layer input read from inter-layer SRAM
+stage-2	layer_output	inter_layer_activation	COMPUTE	compute_fabric	SRAM	inter_layer_sram	65536	0.062500	Layer output write to inter-layer SRAM
+stage-2	layer_output	inter_layer_spill	COMPUTE	compute_fabric	DRAM	offchip_dram	65536	0.062500	Spill write when layer output exceeds inter-layer SRAM capacity
+stage-2	stage_path	local_path_tensor	COMPUTE	compute_fabric	SRAM	state_sram_buffer	1024	0.000977	stage local-path intermediate (stream_through)
+stage-2	stage_path	center_path_tensor	COMPUTE	compute_fabric	SRAM	state_sram_buffer	1024	0.000977	stage center-path intermediate (stream_through)
+stage-2	stage_path	pooled_local_tensor	COMPUTE	compute_fabric	SRAM	state_sram_buffer	1024	0.000977	stage pooled tensor (stream_through)
+stage-2	conv1d	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_conv_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+stage-2	conv1d	partial_sums	COMPUTE	rram_cim_conv_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+stage-2	conv1d	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+stage-2	bn	input_activation	SRAM	feature_sram_buffer	COMPUTE	bn_engine	131072	0.125000	Normalization input activations
+stage-2	bn	norm_parameters	DRAM	offchip_dram	SRAM	bn_param_sram	4096	0.003906	BN affine/stat parameter staging
+stage-2	bn	norm_parameters_staged	SRAM	bn_param_sram	COMPUTE	bn_engine	4096	0.003906	Normalization parameters streamed from local SRAM
+stage-2	bn	reduction_state	COMPUTE	bn_engine	SRAM	state_sram_buffer	2048	0.001953	Mean/variance or affine reduction state in small local SRAM
+stage-2	bn	output_activation	COMPUTE	bn_engine	SRAM	feature_sram_buffer	131072	0.125000	Normalized activations written back to persistent feature SRAM
+stage-2	relu	input_activation	SRAM	feature_sram_buffer	COMPUTE	relu_engine	131072	0.125000	Streaming activation read for ReLU
+stage-2	relu	activation_lane	COMPUTE	relu_engine	SRAM	state_sram_buffer	1024	0.000977	Per-lane compare/max state in local SRAM
+stage-2	relu	output_activation	COMPUTE	relu_engine	SRAM	feature_sram_buffer	131072	0.125000	ReLU output written back to feature SRAM
+stage-2	conv1d	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_conv_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+stage-2	conv1d	partial_sums	COMPUTE	rram_cim_conv_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+stage-2	conv1d	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+stage-2	bn	input_activation	SRAM	feature_sram_buffer	COMPUTE	bn_engine	131072	0.125000	Normalization input activations
+stage-2	bn	norm_parameters	DRAM	offchip_dram	SRAM	bn_param_sram	4096	0.003906	BN affine/stat parameter staging
+stage-2	bn	norm_parameters_staged	SRAM	bn_param_sram	COMPUTE	bn_engine	4096	0.003906	Normalization parameters streamed from local SRAM
+stage-2	bn	reduction_state	COMPUTE	bn_engine	SRAM	state_sram_buffer	2048	0.001953	Mean/variance or affine reduction state in small local SRAM
+stage-2	bn	output_activation	COMPUTE	bn_engine	SRAM	feature_sram_buffer	131072	0.125000	Normalized activations written back to persistent feature SRAM
+stage-2	add	main_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add main input read (stream_through)
+stage-2	add	residual_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add residual input read (residual=True, stream_through)
+stage-2	add	add_output_write	COMPUTE	add_unit	SRAM	state_sram_buffer	131072	0.125000	add output write (stream_through)
+stage-2	relu	input_activation	SRAM	feature_sram_buffer	COMPUTE	relu_engine	131072	0.125000	Streaming activation read for ReLU
+stage-2	relu	activation_lane	COMPUTE	relu_engine	SRAM	state_sram_buffer	1024	0.000977	Per-lane compare/max state in local SRAM
+stage-2	relu	output_activation	COMPUTE	relu_engine	SRAM	feature_sram_buffer	131072	0.125000	ReLU output written back to feature SRAM
+GAM-stage3	layer_input	inter_layer_activation	SRAM	inter_layer_sram	COMPUTE	compute_fabric	65536	0.062500	Layer input read from inter-layer SRAM
+GAM-stage3	layer_input	inter_layer_spill	DRAM	offchip_dram	COMPUTE	compute_fabric	65536	0.062500	Spill read when layer input exceeds inter-layer SRAM capacity
+GAM-stage3	layer_output	inter_layer_activation	COMPUTE	compute_fabric	SRAM	inter_layer_sram	65536	0.062500	Layer output write to inter-layer SRAM
+GAM-stage3	layer_output	inter_layer_spill	COMPUTE	compute_fabric	DRAM	offchip_dram	65536	0.062500	Spill write when layer output exceeds inter-layer SRAM capacity
+GAM-stage3	fps	query_points_refill	DRAM	offchip_dram	SRAM	query_xyz_sram_buffer	768	0.000732	Load current FPS query xyz block into query SRAM
+GAM-stage3	fps	query_points_consume	SRAM	query_xyz_sram_buffer	COMPUTE	fps_engine	768	0.000732	FPS repeatedly reads current query xyz from query SRAM
+GAM-stage3	fps	key_points_refill	DRAM	offchip_dram	SRAM	key_xyz_sram_buffer	98304	0.093750	Key xyz tiles stream from DRAM into key SRAM; each transfer implies DRAM read plus SRAM write
+GAM-stage3	fps	cim_keyset_row_write	SRAM	key_xyz_sram_buffer	SRAM	sram_cim_array	1536	0.001465	ACC writes full key set row-by-row into SRAM-CIM array before self-distance pass
+GAM-stage3	fps	self_distance_write	COMPUTE	sram_cim_array	SRAM	self_distance_sram_buffer	32768	0.031250	ACC self-square k^2 distance terms stored before cross-term accumulation
+GAM-stage3	fps	query_point_stream	DRAM	offchip_dram	SRAM	query_xyz_sram_buffer	768	0.000732	ACC streams one query xyz per FPS iteration from DRAM/query buffer
+GAM-stage3	fps	self_distance_read	SRAM	self_distance_sram_buffer	COMPUTE	dist2_merge_adder	32768	0.031250	ACC reads stored k^2 terms into accumulator before adding cross-term distances
+GAM-stage3	fps	cim_array_preload	SRAM	key_xyz_sram_buffer	SRAM	sram_cim_array	1536	0.001465	Load key xyz tile stream into distance generator array
+GAM-stage3	fps	distance_vector_write	COMPUTE	distance_generator	SRAM	dist_sram_buffer	32768	0.031250	Distance results written to shared dist SRAM; shift-add local state already accounted inside engine
+GAM-stage3	fps	min_distance_table_read	SRAM	fps_min_distance_table_sram	COMPUTE	fps_min_update	32768	0.031250	Read historical min-distance table before update
+GAM-stage3	fps	min_distance_table_write	COMPUTE	fps_min_update	SRAM	fps_min_distance_table_sram	32768	0.031250	Update FPS historical min-distance table
+GAM-stage3	fps	sorter_input_read	SRAM	fps_min_distance_table_sram	COMPUTE	fps_sorter	32768	0.031250	Sorter consumes FPS min-distance table (acc_streaming)
+GAM-stage3	fps	sort_cache_write	COMPUTE	fps_sorter	SRAM	sort_cache_sram	512	0.000488	Streaming FPS local-max cache across 64-distance batches
+GAM-stage3	fps	coarse_filter_tempmax_write	COMPUTE	coarse_filter	SRAM	temp_max_distance_sram	512	0.000488	ACC coarse filter writes per-batch max candidate into temporary max-distance SRAM during the post-prediction coarse/fine phase; this SRAM is time-multiplexed with speculative radii staging, not used simultaneously
+GAM-stage3	fps	fine_filter_tempmax_read	SRAM	temp_max_distance_sram	COMPUTE	fine_filter	512	0.000488	ACC fine filter consumes temporary FPS max candidates from the same time-multiplexed temp/speculative SRAM during the post-prediction phase
+GAM-stage3	fps	spec_prefix_resample_down_read	SRAM	temp_max_distance_sram	COMPUTE	resampler_downsample	28	0.000027	After the first two exact FPS points, ACC resampler may downsample the growing exact radii prefix while the main FPS loop continues
+GAM-stage3	fps	spec_prefix_resample_down_write	COMPUTE	resampler_downsample	SRAM	temp_max_distance_sram	28	0.000027	Downsampled radii prefix written back into the same time-multiplexed temp/speculative SRAM
+GAM-stage3	fps	spec_predictor_read	SRAM	temp_max_distance_sram	COMPUTE	spec_efficient_kan	28	0.000027	After 10% FPS points complete, EfficientKAN-style predictor (roughly Linear+KAT) reads the downsampled radii prefix
+GAM-stage3	fps	spec_predictor_write	COMPUTE	spec_efficient_kan	SRAM	temp_max_distance_sram	256	0.000244	Predictor outputs a 64-point radii curve into the same time-multiplexed temp/speculative SRAM
+GAM-stage3	fps	spec_resample_up_read	SRAM	temp_max_distance_sram	COMPUTE	resampler_upsample	256	0.000244	Resampler reads the predicted 64-point radii curve for parallel upsampling
+GAM-stage3	fps	spec_resample_up_write	COMPUTE	resampler_upsample	SRAM	temp_max_distance_sram	256	0.000244	Upsampled full radii curve written into the same time-multiplexed temp/speculative SRAM and then used as the coarse-filter threshold schedule; before this point FPS still follows full-sort mode
+GAM-stage3	fps	fps_index	COMPUTE	fps_sorter	SRAM	state_sram_buffer	256	0.000244	Sampled center indices
+GAM-stage3	knn	query_points_refill	DRAM	offchip_dram	SRAM	query_xyz_sram_buffer	768	0.000732	Load current KNN query xyz block into query SRAM
+GAM-stage3	knn	query_points_consume	SRAM	query_xyz_sram_buffer	COMPUTE	knn_engine	768	0.000732	KNN repeatedly reads current query xyz from query SRAM
+GAM-stage3	knn	key_points_refill	DRAM	offchip_dram	SRAM	key_xyz_sram_buffer	98304	0.093750	Key xyz tiles stream from DRAM into key SRAM; each transfer implies DRAM read plus SRAM write
+GAM-stage3	knn	cim_keyset_row_write	SRAM	key_xyz_sram_buffer	SRAM	sram_cim_array	1536	0.001465	ACC writes full key set row-by-row into SRAM-CIM array before self-distance pass
+GAM-stage3	knn	self_distance_write	COMPUTE	sram_cim_array	SRAM	self_distance_sram_buffer	32768	0.031250	ACC self-square k^2 distance terms stored before cross-term accumulation
+GAM-stage3	knn	query_point_stream	DRAM	offchip_dram	SRAM	query_xyz_sram_buffer	768	0.000732	ACC streams query xyz from DRAM/query buffer into query SRAM
+GAM-stage3	knn	self_distance_read	SRAM	self_distance_sram_buffer	COMPUTE	dist2_merge_adder	32768	0.031250	ACC reads stored k^2 terms into accumulator before adding cross-term distances
+GAM-stage3	knn	cim_array_preload	SRAM	key_xyz_sram_buffer	SRAM	sram_cim_array	1536	0.001465	Load key xyz tile stream into distance generator array
+GAM-stage3	knn	distance_vector_write	COMPUTE	distance_generator	SRAM	dist_sram_buffer	32768	0.031250	Distance results written to shared dist SRAM; shift-add local state already accounted inside engine
+GAM-stage3	knn	sorter_input_read	SRAM	dist_sram_buffer	COMPUTE	knn_sorter	32768	0.031250	Sorter consumes shared distance SRAM (acc_streaming)
+GAM-stage3	knn	sort_cache_write	COMPUTE	knn_sorter	SRAM	sort_cache_sram	16384	0.015625	Streaming KNN top-k cache across 64-distance batches
+GAM-stage3	knn	coarse_filter_topk_write	COMPUTE	coarse_filter	SRAM	topk_sram_buffer	16384	0.015625	ACC KNN coarse filter writes candidate distances/indices into top-k SRAM buffer
+GAM-stage3	knn	topk_refine_read	SRAM	topk_sram_buffer	COMPUTE	coarse_filter	16384	0.015625	ACC KNN iterative threshold refinement rereads top-k SRAM until fine-filter bandwidth condition is met
+GAM-stage3	knn	knn_topk_index	COMPUTE	knn_sorter	SRAM	state_sram_buffer	6144	0.005859	Top-k neighbor indices
+GAM-stage3	knn	neighbor_features_spill	SRAM	inter_layer_sram	DRAM	offchip_dram	1572864	1.500000	Gather workspace exceeds SRAM, spill to DRAM
+GAM-stage3	affine_norm	input_activation	SRAM	feature_sram_buffer	COMPUTE	affine_norm_engine	65536	0.062500	Normalization input activations
+GAM-stage3	affine_norm	norm_parameters	DRAM	offchip_dram	SRAM	affine_norm_param_sram	2048	0.001953	AffineNorm alpha/beta staging
+GAM-stage3	affine_norm	norm_parameters_staged	SRAM	affine_norm_param_sram	COMPUTE	affine_norm_engine	2048	0.001953	Normalization parameters streamed from local SRAM
+GAM-stage3	affine_norm	reduction_state	COMPUTE	affine_norm_engine	SRAM	state_sram_buffer	2048	0.001953	Mean/variance or affine reduction state in small local SRAM
+GAM-stage3	affine_norm	output_activation	COMPUTE	affine_norm_engine	SRAM	feature_sram_buffer	65536	0.062500	Normalized activations written back to persistent feature SRAM
+GAM-stage3	s-pool	pool_input	SRAM	feature_sram_buffer	SRAM	spool_workspace_sram	3145728	3.000000	Pool input window materialized before reduction
+GAM-stage3	s-pool	pool_workspace	SRAM	spool_workspace_sram	COMPUTE	spool_engine	3145728	3.000000	Pool workspace streamed to reduction engine
+GAM-stage3	s-pool	pool_reduce_state	COMPUTE	spool_engine	SRAM	state_sram_buffer	131072	0.125000	Per-channel max/accumulator state in local SRAM
+GAM-stage3	s-pool	pool_output	SRAM	state_sram_buffer	SRAM	spool_workspace_sram	131072	0.125000	Pool result kept on-chip for downstream operator or layer output
+LFP-stage3	layer_input	inter_layer_activation	SRAM	inter_layer_sram	COMPUTE	compute_fabric	65536	0.062500	Layer input read from inter-layer SRAM
+LFP-stage3	layer_input	inter_layer_spill	DRAM	offchip_dram	COMPUTE	compute_fabric	65536	0.062500	Spill read when layer input exceeds inter-layer SRAM capacity
+LFP-stage3	layer_output	inter_layer_activation	COMPUTE	compute_fabric	SRAM	inter_layer_sram	2048	0.001953	Layer output write to inter-layer SRAM
+LFP-stage3	lfp_path	local_path_tensor	COMPUTE	compute_fabric	SRAM	state_sram_buffer	131072	0.125000	lfp local-path intermediate (stream_through)
+LFP-stage3	lfp_path	center_path_tensor	COMPUTE	compute_fabric	SRAM	state_sram_buffer	131072	0.125000	lfp center-path intermediate (stream_through)
+LFP-stage3	lfp_path	pooled_local_tensor	COMPUTE	compute_fabric	SRAM	state_sram_buffer	2048	0.001953	lfp pooled tensor (stream_through)
+LFP-stage3	conv1d	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_conv_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage3	conv1d	partial_sums	COMPUTE	rram_cim_conv_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+LFP-stage3	conv1d	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+LFP-stage3	bn	input_activation	SRAM	feature_sram_buffer	COMPUTE	bn_engine	2048	0.001953	Normalization input activations
+LFP-stage3	bn	norm_parameters	DRAM	offchip_dram	SRAM	bn_param_sram	8192	0.007812	BN affine/stat parameter staging
+LFP-stage3	bn	norm_parameters_staged	SRAM	bn_param_sram	COMPUTE	bn_engine	8192	0.007812	Normalization parameters streamed from local SRAM
+LFP-stage3	bn	reduction_state	COMPUTE	bn_engine	SRAM	state_sram_buffer	4096	0.003906	Mean/variance or affine reduction state in small local SRAM
+LFP-stage3	bn	output_activation	COMPUTE	bn_engine	SRAM	feature_sram_buffer	2048	0.001953	Normalized activations written back to persistent feature SRAM
+LFP-stage3	relu	input_activation	SRAM	feature_sram_buffer	COMPUTE	relu_engine	2048	0.001953	Streaming activation read for ReLU
+LFP-stage3	relu	activation_lane	COMPUTE	relu_engine	SRAM	state_sram_buffer	2048	0.001953	Per-lane compare/max state in local SRAM
+LFP-stage3	relu	output_activation	COMPUTE	relu_engine	SRAM	feature_sram_buffer	2048	0.001953	ReLU output written back to feature SRAM
+LFP-stage3	layernorm	input_activation	SRAM	feature_sram_buffer	COMPUTE	layernorm_engine	131072	0.125000	Normalization input activations
+LFP-stage3	layernorm	norm_parameters	DRAM	offchip_dram	SRAM	layernorm_param_sram	4096	0.003906	LayerNorm gamma/beta staging
+LFP-stage3	layernorm	norm_parameters_staged	SRAM	layernorm_param_sram	COMPUTE	layernorm_engine	4096	0.003906	Normalization parameters streamed from local SRAM
+LFP-stage3	layernorm	reduction_state	COMPUTE	layernorm_engine	SRAM	state_sram_buffer	4096	0.003906	Mean/variance or affine reduction state in small local SRAM
+LFP-stage3	layernorm	output_activation	COMPUTE	layernorm_engine	SRAM	feature_sram_buffer	131072	0.125000	Normalized activations written back to persistent feature SRAM
+LFP-stage3	linear	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_linear_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage3	linear	partial_sums	COMPUTE	rram_cim_linear_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+LFP-stage3	linear	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+LFP-stage3	kan	input_activation	SRAM	feature_sram_buffer	COMPUTE	kan_engine	131072	0.125000	KAN/KAT input activations
+LFP-stage3	kan	activation_coefficients	DRAM	offchip_dram	SRAM	kan_param_sram	20480	0.019531	Rational activation coefficients staged on-chip
+LFP-stage3	kan	activation_coefficients_staged	SRAM	kan_param_sram	COMPUTE	kan_engine	20480	0.019531	KAN parameters streamed from local SRAM
+LFP-stage3	kan	kan_workspace	COMPUTE	kan_engine	SRAM	kan_workspace_sram	131072	0.125000	KAN nonlinear output workspace
+LFP-stage3	linear	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_linear_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage3	linear	partial_sums	COMPUTE	rram_cim_linear_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+LFP-stage3	linear	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+LFP-stage3	add	main_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add main input read (stream_through)
+LFP-stage3	add	residual_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add residual input read (residual=True, stream_through)
+LFP-stage3	add	add_output_write	COMPUTE	add_unit	SRAM	state_sram_buffer	131072	0.125000	add output write (stream_through)
+LFP-stage3	adaptive_max_pool1d	pool_input	SRAM	feature_sram_buffer	SRAM	adaptive_pool_workspace_sram	131072	0.125000	Pool input window materialized before reduction
+LFP-stage3	adaptive_max_pool1d	pool_workspace	SRAM	adaptive_pool_workspace_sram	COMPUTE	adaptive_pool_engine	131072	0.125000	Pool workspace streamed to reduction engine
+LFP-stage3	adaptive_max_pool1d	pool_reduce_state	COMPUTE	adaptive_pool_engine	SRAM	state_sram_buffer	2048	0.001953	Per-channel max/accumulator state in local SRAM
+LFP-stage3	adaptive_max_pool1d	pool_output	SRAM	state_sram_buffer	SRAM	adaptive_pool_workspace_sram	2048	0.001953	Pool result kept on-chip for downstream operator or layer output
+LFP-stage3	conv1d	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_conv_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage3	conv1d	partial_sums	COMPUTE	rram_cim_conv_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+LFP-stage3	conv1d	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+LFP-stage3	bn	input_activation	SRAM	feature_sram_buffer	COMPUTE	bn_engine	2048	0.001953	Normalization input activations
+LFP-stage3	bn	norm_parameters	DRAM	offchip_dram	SRAM	bn_param_sram	8192	0.007812	BN affine/stat parameter staging
+LFP-stage3	bn	norm_parameters_staged	SRAM	bn_param_sram	COMPUTE	bn_engine	8192	0.007812	Normalization parameters streamed from local SRAM
+LFP-stage3	bn	reduction_state	COMPUTE	bn_engine	SRAM	state_sram_buffer	4096	0.003906	Mean/variance or affine reduction state in small local SRAM
+LFP-stage3	bn	output_activation	COMPUTE	bn_engine	SRAM	feature_sram_buffer	2048	0.001953	Normalized activations written back to persistent feature SRAM
+LFP-stage3	relu	input_activation	SRAM	feature_sram_buffer	COMPUTE	relu_engine	2048	0.001953	Streaming activation read for ReLU
+LFP-stage3	relu	activation_lane	COMPUTE	relu_engine	SRAM	state_sram_buffer	2048	0.001953	Per-lane compare/max state in local SRAM
+LFP-stage3	relu	output_activation	COMPUTE	relu_engine	SRAM	feature_sram_buffer	2048	0.001953	ReLU output written back to feature SRAM
+LFP-stage3	layernorm	input_activation	SRAM	feature_sram_buffer	COMPUTE	layernorm_engine	131072	0.125000	Normalization input activations
+LFP-stage3	layernorm	norm_parameters	DRAM	offchip_dram	SRAM	layernorm_param_sram	4096	0.003906	LayerNorm gamma/beta staging
+LFP-stage3	layernorm	norm_parameters_staged	SRAM	layernorm_param_sram	COMPUTE	layernorm_engine	4096	0.003906	Normalization parameters streamed from local SRAM
+LFP-stage3	layernorm	reduction_state	COMPUTE	layernorm_engine	SRAM	state_sram_buffer	4096	0.003906	Mean/variance or affine reduction state in small local SRAM
+LFP-stage3	layernorm	output_activation	COMPUTE	layernorm_engine	SRAM	feature_sram_buffer	131072	0.125000	Normalized activations written back to persistent feature SRAM
+LFP-stage3	linear	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_linear_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage3	linear	partial_sums	COMPUTE	rram_cim_linear_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+LFP-stage3	linear	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+LFP-stage3	kan	input_activation	SRAM	feature_sram_buffer	COMPUTE	kan_engine	131072	0.125000	KAN/KAT input activations
+LFP-stage3	kan	activation_coefficients	DRAM	offchip_dram	SRAM	kan_param_sram	20480	0.019531	Rational activation coefficients staged on-chip
+LFP-stage3	kan	activation_coefficients_staged	SRAM	kan_param_sram	COMPUTE	kan_engine	20480	0.019531	KAN parameters streamed from local SRAM
+LFP-stage3	kan	kan_workspace	COMPUTE	kan_engine	SRAM	kan_workspace_sram	131072	0.125000	KAN nonlinear output workspace
+LFP-stage3	linear	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_linear_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+LFP-stage3	linear	partial_sums	COMPUTE	rram_cim_linear_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+LFP-stage3	linear	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+LFP-stage3	add	main_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add main input read (stream_through)
+LFP-stage3	add	residual_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add residual input read (residual=True, stream_through)
+LFP-stage3	add	add_output_write	COMPUTE	add_unit	SRAM	state_sram_buffer	131072	0.125000	add output write (stream_through)
+LFP-stage3	add	main_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add main input read (stream_through)
+LFP-stage3	add	residual_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add residual input read (residual=False, stream_through)
+LFP-stage3	add	add_output_write	COMPUTE	add_unit	SRAM	state_sram_buffer	131072	0.125000	add output write (stream_through)
+stage-3	layer_input	inter_layer_activation	SRAM	inter_layer_sram	COMPUTE	compute_fabric	2048	0.001953	Layer input read from inter-layer SRAM
+stage-3	layer_output	inter_layer_activation	COMPUTE	compute_fabric	SRAM	inter_layer_sram	65536	0.062500	Layer output write to inter-layer SRAM
+stage-3	layer_output	inter_layer_spill	COMPUTE	compute_fabric	DRAM	offchip_dram	65536	0.062500	Spill write when layer output exceeds inter-layer SRAM capacity
+stage-3	stage_path	local_path_tensor	COMPUTE	compute_fabric	SRAM	state_sram_buffer	2048	0.001953	stage local-path intermediate (stream_through)
+stage-3	stage_path	center_path_tensor	COMPUTE	compute_fabric	SRAM	state_sram_buffer	2048	0.001953	stage center-path intermediate (stream_through)
+stage-3	stage_path	pooled_local_tensor	COMPUTE	compute_fabric	SRAM	state_sram_buffer	2048	0.001953	stage pooled tensor (stream_through)
+stage-3	conv1d	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_conv_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+stage-3	conv1d	partial_sums	COMPUTE	rram_cim_conv_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+stage-3	conv1d	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+stage-3	bn	input_activation	SRAM	feature_sram_buffer	COMPUTE	bn_engine	131072	0.125000	Normalization input activations
+stage-3	bn	norm_parameters	DRAM	offchip_dram	SRAM	bn_param_sram	8192	0.007812	BN affine/stat parameter staging
+stage-3	bn	norm_parameters_staged	SRAM	bn_param_sram	COMPUTE	bn_engine	8192	0.007812	Normalization parameters streamed from local SRAM
+stage-3	bn	reduction_state	COMPUTE	bn_engine	SRAM	state_sram_buffer	4096	0.003906	Mean/variance or affine reduction state in small local SRAM
+stage-3	bn	output_activation	COMPUTE	bn_engine	SRAM	feature_sram_buffer	131072	0.125000	Normalized activations written back to persistent feature SRAM
+stage-3	relu	input_activation	SRAM	feature_sram_buffer	COMPUTE	relu_engine	131072	0.125000	Streaming activation read for ReLU
+stage-3	relu	activation_lane	COMPUTE	relu_engine	SRAM	state_sram_buffer	2048	0.001953	Per-lane compare/max state in local SRAM
+stage-3	relu	output_activation	COMPUTE	relu_engine	SRAM	feature_sram_buffer	131072	0.125000	ReLU output written back to feature SRAM
+stage-3	conv1d	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_conv_engine	131072	0.125000	Feature activations consumed from persistent feature SRAM or prior refill
+stage-3	conv1d	partial_sums	COMPUTE	rram_cim_conv_engine	SRAM	state_sram_buffer	131072	0.125000	Partial sums accumulated in local state SRAM before output commit
+stage-3	conv1d	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	131072	0.125000	Operator output committed back to persistent feature SRAM
+stage-3	bn	input_activation	SRAM	feature_sram_buffer	COMPUTE	bn_engine	131072	0.125000	Normalization input activations
+stage-3	bn	norm_parameters	DRAM	offchip_dram	SRAM	bn_param_sram	8192	0.007812	BN affine/stat parameter staging
+stage-3	bn	norm_parameters_staged	SRAM	bn_param_sram	COMPUTE	bn_engine	8192	0.007812	Normalization parameters streamed from local SRAM
+stage-3	bn	reduction_state	COMPUTE	bn_engine	SRAM	state_sram_buffer	4096	0.003906	Mean/variance or affine reduction state in small local SRAM
+stage-3	bn	output_activation	COMPUTE	bn_engine	SRAM	feature_sram_buffer	131072	0.125000	Normalized activations written back to persistent feature SRAM
+stage-3	add	main_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add main input read (stream_through)
+stage-3	add	residual_tensor_read	SRAM	state_sram_buffer	COMPUTE	add_unit	131072	0.125000	add residual input read (residual=True, stream_through)
+stage-3	add	add_output_write	COMPUTE	add_unit	SRAM	state_sram_buffer	131072	0.125000	add output write (stream_through)
+stage-3	relu	input_activation	SRAM	feature_sram_buffer	COMPUTE	relu_engine	131072	0.125000	Streaming activation read for ReLU
+stage-3	relu	activation_lane	COMPUTE	relu_engine	SRAM	state_sram_buffer	2048	0.001953	Per-lane compare/max state in local SRAM
+stage-3	relu	output_activation	COMPUTE	relu_engine	SRAM	feature_sram_buffer	131072	0.125000	ReLU output written back to feature SRAM
+global_maxpool	layer_input	inter_layer_activation	SRAM	inter_layer_sram	COMPUTE	compute_fabric	65536	0.062500	Layer input read from inter-layer SRAM
+global_maxpool	layer_input	inter_layer_spill	DRAM	offchip_dram	COMPUTE	compute_fabric	65536	0.062500	Spill read when layer input exceeds inter-layer SRAM capacity
+global_maxpool	layer_output	inter_layer_activation	COMPUTE	compute_fabric	SRAM	inter_layer_sram	2048	0.001953	Layer output write to inter-layer SRAM
+global_maxpool	adaptive_max_pool1d	pool_input	SRAM	feature_sram_buffer	SRAM	adaptive_pool_workspace_sram	131072	0.125000	Pool input window materialized before reduction
+global_maxpool	adaptive_max_pool1d	pool_workspace	SRAM	adaptive_pool_workspace_sram	COMPUTE	adaptive_pool_engine	131072	0.125000	Pool workspace streamed to reduction engine
+global_maxpool	adaptive_max_pool1d	pool_reduce_state	COMPUTE	adaptive_pool_engine	SRAM	state_sram_buffer	2048	0.001953	Per-channel max/accumulator state in local SRAM
+global_maxpool	adaptive_max_pool1d	pool_output	SRAM	state_sram_buffer	SRAM	adaptive_pool_workspace_sram	2048	0.001953	Pool result kept on-chip for downstream operator or layer output
+classifier	layer_input	inter_layer_activation	SRAM	inter_layer_sram	COMPUTE	compute_fabric	2048	0.001953	Layer input read from inter-layer SRAM
+classifier	linear	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_linear_engine	2048	0.001953	Feature activations consumed from persistent feature SRAM or prior refill
+classifier	linear	partial_sums	COMPUTE	rram_cim_linear_engine	SRAM	state_sram_buffer	2048	0.001953	Partial sums accumulated in local state SRAM before output commit
+classifier	linear	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	2048	0.001953	Operator output committed back to persistent feature SRAM
+classifier	batchnorm1d	input_activation	SRAM	feature_sram_buffer	COMPUTE	bn_engine	2048	0.001953	Normalization input activations
+classifier	batchnorm1d	norm_parameters	DRAM	offchip_dram	SRAM	bn_param_sram	8192	0.007812	BN affine/stat parameter staging
+classifier	batchnorm1d	norm_parameters_staged	SRAM	bn_param_sram	COMPUTE	bn_engine	8192	0.007812	Normalization parameters streamed from local SRAM
+classifier	batchnorm1d	reduction_state	COMPUTE	bn_engine	SRAM	state_sram_buffer	4096	0.003906	Mean/variance or affine reduction state in small local SRAM
+classifier	batchnorm1d	output_activation	COMPUTE	bn_engine	SRAM	feature_sram_buffer	2048	0.001953	Normalized activations written back to persistent feature SRAM
+classifier	relu	input_activation	SRAM	feature_sram_buffer	COMPUTE	relu_engine	2048	0.001953	Streaming activation read for ReLU
+classifier	relu	activation_lane	COMPUTE	relu_engine	SRAM	state_sram_buffer	2048	0.001953	Per-lane compare/max state in local SRAM
+classifier	relu	output_activation	COMPUTE	relu_engine	SRAM	feature_sram_buffer	2048	0.001953	ReLU output written back to feature SRAM
+classifier	linear	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_linear_engine	2048	0.001953	Feature activations consumed from persistent feature SRAM or prior refill
+classifier	linear	partial_sums	COMPUTE	rram_cim_linear_engine	SRAM	state_sram_buffer	1024	0.000977	Partial sums accumulated in local state SRAM before output commit
+classifier	linear	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	1024	0.000977	Operator output committed back to persistent feature SRAM
+classifier	batchnorm1d	input_activation	SRAM	feature_sram_buffer	COMPUTE	bn_engine	1024	0.000977	Normalization input activations
+classifier	batchnorm1d	norm_parameters	DRAM	offchip_dram	SRAM	bn_param_sram	4096	0.003906	BN affine/stat parameter staging
+classifier	batchnorm1d	norm_parameters_staged	SRAM	bn_param_sram	COMPUTE	bn_engine	4096	0.003906	Normalization parameters streamed from local SRAM
+classifier	batchnorm1d	reduction_state	COMPUTE	bn_engine	SRAM	state_sram_buffer	2048	0.001953	Mean/variance or affine reduction state in small local SRAM
+classifier	batchnorm1d	output_activation	COMPUTE	bn_engine	SRAM	feature_sram_buffer	1024	0.000977	Normalized activations written back to persistent feature SRAM
+classifier	relu	input_activation	SRAM	feature_sram_buffer	COMPUTE	relu_engine	1024	0.000977	Streaming activation read for ReLU
+classifier	relu	activation_lane	COMPUTE	relu_engine	SRAM	state_sram_buffer	1024	0.000977	Per-lane compare/max state in local SRAM
+classifier	relu	output_activation	COMPUTE	relu_engine	SRAM	feature_sram_buffer	1024	0.000977	ReLU output written back to feature SRAM
+classifier	linear	input_activation	SRAM	feature_sram_buffer	COMPUTE	rram_cim_linear_engine	1024	0.000977	Feature activations consumed from persistent feature SRAM or prior refill
+classifier	linear	partial_sums	COMPUTE	rram_cim_linear_engine	SRAM	state_sram_buffer	160	0.000153	Partial sums accumulated in local state SRAM before output commit
+classifier	linear	output_activation	SRAM	state_sram_buffer	SRAM	feature_sram_buffer	160	0.000153	Operator output committed back to persistent feature SRAM

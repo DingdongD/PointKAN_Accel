@@ -1,0 +1,21 @@
+[2026-03-17 14:00:49] INFO     | Logger initialized: pointcloud_ppa_sim
+[2026-03-17 14:00:49] INFO     | Log level: INFO
+[2026-03-17 14:00:49] INFO     | Log file: sim_log/simulation_20260317_140049.log
+[2026-03-17 14:00:49] INFO     | ============================================================
+[2026-03-17 14:00:49] INFO     |  真实数据评估：ModelNet40 样本 + checkpoint 权重 + MNSIM 对应层 PPA
+[2026-03-17 14:00:49] INFO     | ============================================================
+[2026-03-17 14:00:49] INFO     | Checkpoint: /workspace/PointKAN-pytorch/PointKAN-elite/classification_ModelNet40/checkpoints/pointKANElite-pointkan_elite_exp-42
+[2026-03-17 14:00:49] INFO     | num_points=1024, num_classes=40, batch_size=1
+[2026-03-17 14:00:54] INFO     | 脉动阵列/局部SRAM已按参数设置: rows=64 cols=64 sram_size_bytes=32768 sram_block_bytes=64 sram_num_banks=1 sram_bus_width_bits=128 sram_freq_hz=None
+[2026-03-17 14:00:54] INFO     | 加速器: baseline (BASELINE)
+[2026-03-17 14:00:54] INFO     | CIM 并行度: 128
+[2026-03-17 14:00:54] INFO     | Bit-serial 周期: 6
+[2026-03-17 14:00:54] INFO     | 层间 buffer: size=65536 B, bandwidth=256 B/cycle, spill_to_dram=True, pipeline_mode=without_pipeline, double_buffering=False, buffer_slots=0
+[2026-03-17 14:00:54] INFO     | DRAM: bandwidth=32 B/cycle, channels_override=None
+[2026-03-17 14:00:54] INFO     | 层间量化/反量化: 未启用 (默认，假定 W8A8 已就绪)
+[2026-03-17 14:00:54] INFO     | BN 融合: 启用 (BN 不单独计入)
+[2026-03-17 14:00:54] INFO     | SCALE-Sim 脉动 Conv/Linear: 启用（周期与 MAC/访问由 SCALE-Sim 统计，能耗仍用本工程内存建模）
+[2026-03-17 14:00:54] INFO     | 脉动阵列尺寸: 64×64 (ArrayHeight×ArrayWidth)
+[2026-03-17 14:00:54] INFO     | 数字逻辑时钟: 1.0000 ns (1000.00 MHz) (由 --logic_clk_freq 设置)
+[2026-03-17 14:00:54] INFO     | Memory Config Summary:
+[2026-03-17 14:00:54] INFO     |   DRAM: ini=/workspace/PointKAN-pytorch/hw_sim/cycle_simulator/DRAMsim3/configs/LPDDR4_8Gb_x16_2400.ini, bw=32 B/cycle, block=64 B, channels_override=None

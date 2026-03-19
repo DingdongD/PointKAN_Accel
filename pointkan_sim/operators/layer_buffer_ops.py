@@ -21,6 +21,17 @@ if TYPE_CHECKING:
     from ..configs.hw_config import HardwareConfig
 
 
+def _split_bytes(total_bytes: int, chunk_bytes: int) -> List[int]:
+    total = max(0, int(total_bytes))
+    chunk = max(1, int(chunk_bytes))
+    out: List[int] = []
+    while total > 0:
+        take = min(total, chunk)
+        out.append(take)
+        total -= take
+    return out
+
+
 def _event(
     event_id: int,
     cycle: int,
@@ -80,20 +91,23 @@ def gen_layer_buffer_read_events(
 
     read_from_buf = min(input_bytes, size)
     if read_from_buf > 0:
-        if memory_context is not None:
-            stat = memory_context.sram_read(read_from_buf, cycle)
-            dur, energy_nj = stat.service_cycles, stat.dynamic_energy_nj
-        else:
-            dur, energy_nj = query_sram_cycles_energy(read_from_buf, is_read=True, hw_config=hw_config, clock_period_ns=clk)
-        events.append(_event(
-            event_id, cycle,
-            "LayerBuffer", "buffer_io", "buffer_read",
-            "inter_layer_buffer", "buffer_read",
-            dur, energy_nj, clk,
-            {**meta_base, "bytes": read_from_buf, "source": "buffer"},
-        ))
-        event_id += 1
-        cycle += dur
+        sram_chunks = _split_bytes(read_from_buf, size)
+        total_chunks = len(sram_chunks)
+        for chunk_idx, chunk_bytes in enumerate(sram_chunks):
+            if memory_context is not None:
+                stat = memory_context.sram_read(chunk_bytes, cycle)
+                dur, energy_nj = stat.service_cycles, stat.dynamic_energy_nj
+            else:
+                dur, energy_nj = query_sram_cycles_energy(chunk_bytes, is_read=True, hw_config=hw_config, clock_period_ns=clk)
+            events.append(_event(
+                event_id, cycle,
+                "LayerBuffer", "buffer_io", "buffer_read",
+                "inter_layer_buffer", "buffer_read",
+                dur, energy_nj, clk,
+                {**meta_base, "bytes": chunk_bytes, "source": "buffer", "chunk_idx": chunk_idx, "chunk_count": total_chunks},
+            ))
+            event_id += 1
+            cycle += dur
 
     spill_bytes = input_bytes - read_from_buf
     if spill_bytes > 0 and getattr(buf, "spill_to_dram", False):
@@ -148,20 +162,23 @@ def gen_layer_buffer_write_events(
 
     write_to_buf = min(output_bytes, size)
     if write_to_buf > 0:
-        if memory_context is not None:
-            stat = memory_context.sram_write(write_to_buf, cycle)
-            dur, energy_nj = stat.service_cycles, stat.dynamic_energy_nj
-        else:
-            dur, energy_nj = query_sram_cycles_energy(write_to_buf, is_read=False, hw_config=hw_config, clock_period_ns=clk)
-        events.append(_event(
-            event_id, cycle,
-            "LayerBuffer", "buffer_io", "buffer_write",
-            "inter_layer_buffer", "buffer_write",
-            dur, energy_nj, clk,
-            {**meta_base, "bytes": write_to_buf, "target": "buffer"},
-        ))
-        event_id += 1
-        cycle += dur
+        sram_chunks = _split_bytes(write_to_buf, size)
+        total_chunks = len(sram_chunks)
+        for chunk_idx, chunk_bytes in enumerate(sram_chunks):
+            if memory_context is not None:
+                stat = memory_context.sram_write(chunk_bytes, cycle)
+                dur, energy_nj = stat.service_cycles, stat.dynamic_energy_nj
+            else:
+                dur, energy_nj = query_sram_cycles_energy(chunk_bytes, is_read=False, hw_config=hw_config, clock_period_ns=clk)
+            events.append(_event(
+                event_id, cycle,
+                "LayerBuffer", "buffer_io", "buffer_write",
+                "inter_layer_buffer", "buffer_write",
+                dur, energy_nj, clk,
+                {**meta_base, "bytes": chunk_bytes, "target": "buffer", "chunk_idx": chunk_idx, "chunk_count": total_chunks},
+            ))
+            event_id += 1
+            cycle += dur
 
     spill_bytes = output_bytes - write_to_buf
     if spill_bytes > 0 and getattr(buf, "spill_to_dram", False):

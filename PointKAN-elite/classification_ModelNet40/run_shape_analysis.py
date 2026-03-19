@@ -14,6 +14,7 @@
 
 import argparse
 import csv
+import math
 import os
 import sys
 from datetime import datetime
@@ -103,6 +104,129 @@ def _write_csv(rows, csv_file, include_weights):
             writer.writerow(["Layer", "Input Shape(s)", "Output Shape(s)"])
             for name, inp, out, _w in rows:
                 writer.writerow([name, inp, out])
+
+
+def _shape_of_tensor(x):
+    if isinstance(x, torch.Tensor):
+        return tuple(int(v) for v in x.shape)
+    return None
+
+
+def _numel_from_shape(shape):
+    if not shape:
+        return 0
+    out = 1
+    for v in shape:
+        out *= int(v)
+    return out
+
+
+def _conv1d_macs_from_shapes(module, inp_shape, out_shape):
+    if not inp_shape or not out_shape or len(inp_shape) != 3 or len(out_shape) != 3:
+        return 0
+    batch, cin, _nin = inp_shape
+    _bout, cout, nout = out_shape
+    k = int(module.kernel_size[0]) if isinstance(module.kernel_size, tuple) else int(module.kernel_size)
+    groups = int(getattr(module, 'groups', 1) or 1)
+    return int(batch) * int(nout) * int(cout) * (int(cin) // groups) * int(k)
+
+
+def _linear_macs_from_shapes(module, inp_shape, out_shape):
+    if not inp_shape or not out_shape or len(inp_shape) < 2:
+        return 0
+    in_features = int(module.in_features)
+    out_features = int(module.out_features)
+    tokens = _numel_from_shape(inp_shape[:-1])
+    return int(tokens) * in_features * out_features
+
+
+def collect_conv_linear_theoretical_stats(net, device, data_loader, num_batches=1, csv_file=None, mac_energy_pj=7.144):
+    records = []
+    hooks = []
+
+    def _register(name, module):
+        def hook(mod, inp, out):
+            inp_t = None
+            if isinstance(inp, (list, tuple)) and inp:
+                inp_t = inp[0] if isinstance(inp[0], torch.Tensor) else None
+            elif isinstance(inp, torch.Tensor):
+                inp_t = inp
+            out_t = out if isinstance(out, torch.Tensor) else None
+            inp_shape = _shape_of_tensor(inp_t)
+            out_shape = _shape_of_tensor(out_t)
+            if isinstance(mod, torch.nn.Conv1d):
+                macs = _conv1d_macs_from_shapes(mod, inp_shape, out_shape)
+                operator = 'Conv1d'
+                kernel_size = int(mod.kernel_size[0]) if isinstance(mod.kernel_size, tuple) else int(mod.kernel_size)
+                tokens = ''
+                num_points = out_shape[-1] if out_shape and len(out_shape) == 3 else ''
+                in_channels = mod.in_channels
+                out_channels = mod.out_channels
+                in_features = ''
+                out_features = ''
+            elif isinstance(mod, torch.nn.Linear):
+                macs = _linear_macs_from_shapes(mod, inp_shape, out_shape)
+                operator = 'Linear'
+                kernel_size = ''
+                tokens = _numel_from_shape(inp_shape[:-1]) if inp_shape and len(inp_shape) >= 2 else ''
+                num_points = ''
+                in_channels = ''
+                out_channels = ''
+                in_features = mod.in_features
+                out_features = mod.out_features
+            else:
+                return
+            records.append({
+                'module_name': name,
+                'operator': operator,
+                'input_shape': str(inp_shape) if inp_shape else '—',
+                'output_shape': str(out_shape) if out_shape else '—',
+                'macs': int(macs),
+                'theoretical_mac_energy_nj': float(macs) * float(mac_energy_pj) / 1000.0,
+                'num_points': num_points,
+                'tokens': tokens,
+                'in_channels': in_channels,
+                'out_channels': out_channels,
+                'in_features': in_features,
+                'out_features': out_features,
+                'kernel_size': kernel_size,
+            })
+        hooks.append(module.register_forward_hook(hook))
+
+    for name, module in net.named_modules():
+        if isinstance(module, (torch.nn.Conv1d, torch.nn.Linear)):
+            _register(name, module)
+
+    net.eval()
+    batch_count = 0
+    with torch.no_grad():
+        for data, _ in data_loader:
+            if batch_count >= num_batches:
+                break
+            data = data.to(device)
+            if data.dim() == 3 and data.size(1) != 3:
+                data = data.permute(0, 2, 1)
+            _ = net(data)
+            batch_count += 1
+
+    for h in hooks:
+        h.remove()
+
+    if csv_file:
+        with open(csv_file, 'w', encoding='utf-8', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                'module_name', 'operator', 'input_shape', 'output_shape', 'macs', 'theoretical_mac_energy_nj',
+                'num_points', 'tokens', 'in_channels', 'out_channels', 'in_features', 'out_features', 'kernel_size'
+            ])
+            for row in records:
+                writer.writerow([
+                    row['module_name'], row['operator'], row['input_shape'], row['output_shape'], row['macs'],
+                    f"{row['theoretical_mac_energy_nj']:.6f}", row['num_points'], row['tokens'],
+                    row['in_channels'], row['out_channels'], row['in_features'], row['out_features'], row['kernel_size']
+                ])
+
+    return records
 
 
 def collect_layer_shapes(
@@ -251,10 +375,19 @@ def main():
                         help="若指定，则在日志中额外输出各层块的参数(权重)shape")
     parser.add_argument("--max_weight_items", type=int, default=0,
                         help="限制每个层块输出的权重条目数（0 表示不限制；用于避免日志过大）")
+    parser.add_argument("--conv_linear_csv", type=str, default=None,
+                        help="若指定，则额外输出逐个 Conv/Linear 子模块的理论 MACs 与 MAC 能耗 CSV")
+    parser.add_argument("--mac_energy_pj", type=float, default=7.144,
+                        help="单次 MAC 理论能耗（pJ），默认 7.144 pJ")
     args = parser.parse_args()
 
     if args.log is None:
         args.log = os.path.join(SCRIPT_DIR, f"shape_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
+    if args.csv is None:
+        args.csv = os.path.join(SCRIPT_DIR, 'shape_analysis.csv')
+    if args.conv_linear_csv is None:
+        stem = os.path.splitext(os.path.basename(args.csv))[0]
+        args.conv_linear_csv = os.path.join(os.path.dirname(args.csv), f"{stem}_conv_linear_theoretical.csv")
 
     torch.manual_seed(args.seed)
     device = torch.device(args.device)
@@ -281,6 +414,14 @@ def main():
         include_weights=args.include_weights,
         max_weight_items=args.max_weight_items,
     )
+    conv_linear_rows = collect_conv_linear_theoretical_stats(
+        net,
+        device,
+        loader,
+        num_batches=args.num_batches,
+        csv_file=args.conv_linear_csv,
+        mac_energy_pj=args.mac_energy_pj,
+    )
 
     # 同时打印到 stdout
     print("\nPointKAN-Elite 每层 Shape 分析 (ModelNet40, partition={}, batch_size={}, num_points={})\n".format(
@@ -293,6 +434,12 @@ def main():
         print("\nLog 已保存: {}".format(os.path.abspath(args.log)))
     if args.csv:
         print("CSV 已保存: {}".format(os.path.abspath(args.csv)))
+    if args.conv_linear_csv:
+        total_macs = sum(int(r["macs"]) for r in conv_linear_rows)
+        total_energy_nj = sum(float(r["theoretical_mac_energy_nj"]) for r in conv_linear_rows)
+        print("Conv/Linear 理论 MAC 统计已保存: {}".format(os.path.abspath(args.conv_linear_csv)))
+        print("Conv/Linear 理论总 MACs: {}".format(total_macs))
+        print("Conv/Linear 理论总 MAC 能耗: {:.6f} nJ @ {} pJ/MAC".format(total_energy_nj, args.mac_energy_pj))
 
 
 if __name__ == "__main__":

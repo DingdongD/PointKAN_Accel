@@ -22,6 +22,7 @@ from __future__ import annotations
 import os
 import sys
 from dataclasses import dataclass, field
+import math
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -58,7 +59,10 @@ class ConvLinearLayerInfo:
     # fc (Linear)
     in_features: int = 0
     out_features: int = 0
-    tokens: int = 0  # Linear 输入的「位置数」：LFP 中为当前点数（如 512/256/128/64），Classifier 为 1
+    tokens: int = 0  # Linear 输入的有效位置数；高维输入按除 batch/feature 外维度乘积展开
+    # 真实激活 shape（便于 baseline/Scale-Sim 对齐）
+    input_shape: Tuple[int, ...] = field(default_factory=tuple)
+    output_shape: Tuple[int, ...] = field(default_factory=tuple)
     # 真实数据量（字节），用于 MNSIM 按层 indata/rdata 适配
     indata_bytes: float = 0.0
     rdata_bytes: float = 0.0
@@ -166,6 +170,19 @@ def collect_conv_linear_from_forward(
     inv_bit = 1.0 / 8.0 * input_bit
     wv_bit = 1.0 / 8.0 * weight_bit
 
+    def _linear_tokens(x) -> int:
+        if x is None:
+            return 1
+        if x.dim() <= 2:
+            return 1
+        tokens = 1
+        for dim in x.shape[1:-1]:
+            tokens *= int(dim)
+        return max(1, int(tokens))
+
+    def _shape_tuple(t) -> Tuple[int, ...]:
+        return tuple(int(v) for v in t.shape) if t is not None else tuple()
+
     def _conv_hook(name: str):
         def hook(module, inp, out):
             x = inp[0]
@@ -184,20 +201,18 @@ def collect_conv_linear_from_forward(
                 order.append(ConvLinearLayerInfo(
                     name=name, layer_type="conv",
                     in_channels=c_in, out_channels=c_out, kernel_size=k, length=length,
+                    input_shape=_shape_tuple(x), output_shape=_shape_tuple(out.detach() if out is not None else None),
                     indata_bytes=indata_bytes, rdata_bytes=rdata_bytes,
                 ))
-            # Linear: x [B, in_f] or [B, T, in_f]; w [out_f, in_f]
+            # Linear: 允许 [B, in_f] / [B, T, in_f] / [B, ..., in_f]，tokens 取除 batch/feature 外维度乘积
             elif w.dim() == 2:
                 in_f = w.shape[1]
                 out_f = w.shape[0]
-                tokens = 1
-                if x.dim() == 3:
-                    tokens = x.shape[1]
-                elif x.dim() == 2:
-                    tokens = x.shape[0]  # batch as tokens for classifier
+                tokens = _linear_tokens(x)
                 order.append(ConvLinearLayerInfo(
                     name=name, layer_type="fc",
                     in_features=in_f, out_features=out_f, tokens=tokens,
+                    input_shape=_shape_tuple(x), output_shape=_shape_tuple(out.detach() if out is not None else None),
                     indata_bytes=indata_bytes, rdata_bytes=rdata_bytes,
                 ))
         return hook
@@ -374,6 +389,17 @@ def collect_conv_linear_tensors_from_forward(
     inv_bit = 1.0 / 8.0 * input_bit
     wv_bit = 1.0 / 8.0 * weight_bit
 
+    def _linear_tokens(x) -> int:
+        if x is None or x.dim() <= 2:
+            return 1
+        tokens = 1
+        for dim in x.shape[1:-1]:
+            tokens *= int(dim)
+        return max(1, int(tokens))
+
+    def _shape_tuple(t) -> Tuple[int, ...]:
+        return tuple(int(v) for v in t.shape) if t is not None else tuple()
+
     def _hook(name: str):
         def hook(module: nn.Module, inp: Any, out: Any) -> None:
             x = inp[0]
@@ -391,20 +417,18 @@ def collect_conv_linear_tensors_from_forward(
                 info = ConvLinearLayerInfo(
                     name=name, layer_type="conv",
                     in_channels=c_in, out_channels=c_out, kernel_size=k, length=length,
+                    input_shape=_shape_tuple(x), output_shape=_shape_tuple(out.detach() if out is not None else None),
                     indata_bytes=indata_bytes, rdata_bytes=rdata_bytes,
                 )
                 order.append((info, x, w))
             elif w.dim() == 2:
                 in_f = w.shape[1]
                 out_f = w.shape[0]
-                tokens = 1
-                if x.dim() == 3:
-                    tokens = x.shape[1]
-                elif x.dim() == 2:
-                    tokens = x.shape[0]
+                tokens = _linear_tokens(x)
                 info = ConvLinearLayerInfo(
                     name=name, layer_type="fc",
                     in_features=in_f, out_features=out_f, tokens=tokens,
+                    input_shape=_shape_tuple(x), output_shape=_shape_tuple(out.detach() if out is not None else None),
                     indata_bytes=indata_bytes, rdata_bytes=rdata_bytes,
                 )
                 order.append((info, x, w))
@@ -428,14 +452,15 @@ def collect_conv_linear_tensors_from_forward(
 
 def format_activation_weight_shapes(info: "ConvLinearLayerInfo") -> Tuple[str, str]:
     """返回 (activation_shape_str, weight_shape_str) 便于日志/报告对照。"""
-    if info.layer_type == "conv":
+    if info.input_shape:
+        act = "[" + ", ".join(str(v) for v in info.input_shape) + "]"
+    elif info.layer_type == "conv":
         act = f"[B, {info.in_channels}, {info.length}]"
+    else:
+        act = f"[B, {info.tokens}, {info.in_features}]" if info.tokens > 1 else f"[B, {info.in_features}]"
+    if info.layer_type == "conv":
         w = f"[{info.out_channels}, {info.in_channels}, {info.kernel_size}]"
     else:
-        if info.tokens > 1:
-            act = f"[B, {info.tokens}, {info.in_features}]"
-        else:
-            act = f"[B, {info.in_features}]"
         w = f"[{info.out_features}, {info.in_features}]"
     return act, w
 

@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -55,8 +56,13 @@ def _collect_runtime_memory_rows(sim_once: dict):
         "feature_sram_buffer",
         "systolic_feature_sram_buffer",
         "weight_sram_buffer",
+        "query_xyz_sram_buffer",
+        "key_xyz_sram_buffer",
+        "self_distance_sram_buffer",
         "dist_sram_buffer",
         "fps_min_distance_table_sram",
+        "temp_max_distance_sram",
+        "topk_sram_buffer",
         "sort_cache_sram",
     }
 
@@ -115,11 +121,13 @@ def _collect_runtime_memory_rows(sim_once: dict):
                 event_bytes = int(meta.get("bytes", 0) or 0)
             elif buffer_name == "fps_min_distance_table_sram":
                 event_bytes = int(meta.get("bytes", 0) or 0)
+        is_dram_event = op == "DRAM"
+        is_sram_event = (op == "LayerBuffer") or (is_tracked_sram and not is_dram_event)
         rows.append({
             "event_id": getattr(e, "event_id", 0),
             "owner_operator": str(meta.get("owner_operator", op) or op),
-            "operator": "SRAM" if (op == "LayerBuffer" or is_tracked_sram) else op,
-            "memory_tier": "SRAM" if (op == "LayerBuffer" or is_tracked_sram) else op,
+            "operator": "DRAM" if is_dram_event else ("SRAM" if is_sram_event else op),
+            "memory_tier": "DRAM" if is_dram_event else ("SRAM" if is_sram_event else op),
             "cycle": int(getattr(e, "cycle", 0) or 0),
             "end_cycle": int(getattr(e, "end_cycle", 0) or 0),
             "duration": int(getattr(e, "duration", 0) or 0),
@@ -194,8 +202,18 @@ def _build_scheduler_buffer_constraints(mem_contract, accelerator: str):
         overlap = "conditional"
         if rel.buffer_name == "feature_sram_buffer":
             overlap = "disallowed" if pipeline_mode != "pipeline" else ("allowed_via_double_buffering" if double_buffering else "limited_same_slot")
-        elif rel.buffer_name in ("dist_sram_buffer", "fps_min_distance_table_sram", "sort_cache_sram", "weight_sram_buffer", "systolic_feature_sram_buffer"):
+        elif rel.buffer_name == "query_xyz_sram_buffer":
+            overlap = "query_resident_reuse"
+        elif rel.buffer_name == "key_xyz_sram_buffer":
+            overlap = "ping_pong_tile_refill" if (pipeline_mode == "pipeline" and double_buffering) else "serialized_tile_refill"
+        elif rel.buffer_name == "nonlinear_workspace_sram":
+            overlap = "chunkable_with_feature_pipeline" if pipeline_mode == "pipeline" else "serialized_per_operator_window"
+        elif rel.buffer_name == "nonlinear_param_sram":
+            overlap = "resident_param_reuse"
+        elif rel.buffer_name in ("dist_sram_buffer", "fps_min_distance_table_sram", "sort_cache_sram", "systolic_feature_sram_buffer"):
             overlap = "serialized_on_same_resource"
+        elif rel.buffer_name == "weight_sram_buffer":
+            overlap = "not_applicable_in_acc" if mode == "acc" else "serialized_on_same_resource"
         rows.append({
             "accelerator_mode": mode,
             "buffer_name": rel.buffer_name,
@@ -208,7 +226,7 @@ def _build_scheduler_buffer_constraints(mem_contract, accelerator: str):
             "double_buffering": bool(double_buffering),
             "buffer_slots": int(slots),
             "overlap_policy": overlap,
-            "current_model_support": "implemented_runtime" if rel.buffer_name in ("feature_sram_buffer", "weight_sram_buffer", "dist_sram_buffer", "fps_min_distance_table_sram", "sort_cache_sram") else "implemented_contract",
+            "current_model_support": "implemented_runtime" if rel.buffer_name in ("feature_sram_buffer", "query_xyz_sram_buffer", "key_xyz_sram_buffer", "dist_sram_buffer", "fps_min_distance_table_sram", "sort_cache_sram") or (rel.buffer_name == "weight_sram_buffer" and mode != "acc") else "implemented_contract",
             "note": rel.note,
         })
     return rows
@@ -236,6 +254,8 @@ def _build_scheduler_timing_constraints(mem_contract, accelerator: str):
         })
 
     add("feature_layer_order", "cross_layer", "layer_n.output_write", "layer_n+1.input_read", "feature_sram_buffer", "data_dependency", "Consumer layer cannot read activation before producer layer commits it to feature SRAM or DRAM spill path.", "implemented_runtime", "Current runtime uses feature residency plan and slot tagging.")
+    add("query_xyz_residency", "GAM", "query_xyz_refill", "distance_query_consume", "query_xyz_sram_buffer", "data_dependency", "Current FPS/KNN query xyz block must be loaded into query SRAM before repeated reads by dist2engine; once loaded it can be reused across key-tile scans.", "implemented_contract", "Runtime export support added; full event generation pending.")
+    add("key_xyz_tile_refill", "GAM", "DRAM->key_xyz_sram(tile_k)", "distance_compute(tile_k)", "key_xyz_sram_buffer", "data_dependency", "Each key xyz tile must be refilled from DRAM into key SRAM before the corresponding dist2engine scan can start.", "implemented_contract", "Covers src-read plus tgt-write semantics for each key tile.")
     add("feature_slot_mutex", "cross_layer", "feature_slot_i.write", "feature_slot_i.read/write", "feature_sram_buffer", "resource_mutex", "Same feature SRAM slot is exclusive; without pipeline a single slot is reused serially.", "implemented_runtime", "resource_id=feature_sram_slot_<n>.")
     if pipeline_mode == "pipeline" and double_buffering:
         add("feature_double_buffer", "cross_layer", "feature_slot_i.write", "feature_slot_j.read", "feature_sram_buffer", "overlap_rule", "Adjacent layers may overlap only when using different slots under double buffering.", "implemented_runtime", "Current runtime has slot tags; fine-grain overlap still conservative.")
@@ -250,11 +270,26 @@ def _build_scheduler_timing_constraints(mem_contract, accelerator: str):
         add("knn_base_v2_stream", "GAM", "dist_sram_write(batch64)", "knn_merge_sort_batch", "sort_cache_sram", "data_dependency", "Each 64-distance KNN batch writes dist SRAM, reloads cached top-k, performs merge-sort, then writes updated cache.", "implemented_runtime", "sort_cache_sram read/sort_read/write visible in runtime table.")
         add("sort_cache_mutex", "GAM", "fps_or_knn_sort_cache_access", "fps_or_knn_sort_cache_access", "sort_cache_sram", "resource_mutex", "sort_cache_sram is shared over time between FPS and KNN; accesses serialize on sort_cache_shared/merge_sort_shared resources.", "implemented_runtime", "base_v2 streaming sorter cache.")
     else:
-        add("acc_placeholder", "global", "feature_sram_buffer", "rram_cim_compute", "feature_sram_buffer", "design_note", "ACC constraints deferred: weights fixed in RRAM-CIM, focus on feature movement and lighter FPS/KNN interaction.", "planned", "To refine with user-provided acc details.")
+        add("acc_feature_backbone", "cross_layer", "feature_sram_buffer", "rram_cim_compute", "feature_sram_buffer", "data_dependency", "ACC keeps the same feature-SRAM-first policy as baseline, but removes repeated weight refill because weights stay resident in RRAM-CIM.", "implemented_contract", "Feature movement, not weight staging, is the dominant cross-layer memory path.")
+        add("acc_fps_warmup_full_sort", "GAM", "distance_batch128 + min_update", "fps_full_sort_warmup", "fps_min_distance_table_sram", "data_dependency", "For the first 10% FPS points, ACC still follows full-sort FPS: each 128-distance block updates the min-distance table and updates the running max candidate before the predictor is ready.", "implemented_contract", "No coarse/fine speculative thresholding is used during the warmup prefix.")
+        add("acc_speculative_overlap", "GAM", "exact_radii_prefix>=2", "resampler_downsample", "temp_max_distance_sram", "overlap_rule", "After at least two exact FPS radii points exist, downsampling/resampler work may overlap the main full-sort FPS loop while the warmup prefix continues growing.", "implemented_contract", "The same temp_max_distance_sram is time-multiplexed for max candidates and speculative radii staging.")
+        add("acc_predictor_gate", "GAM", "exact_radii_prefix==10%", "spec_efficient_kan + resampler_upsample", "temp_max_distance_sram", "data_dependency", "Coarse/fine FPS can start only after the first 10% exact FPS points are complete, the predictor emits the 64-point radii curve, and upsampling reconstructs the full radii schedule.", "implemented_contract", "Until then, FPS remains in full-sort mode.")
+        add("acc_post_predict_coarse_fine", "GAM", "predicted_whole_radii_ready", "coarse_filter/fine_filter", "temp_max_distance_sram", "data_dependency", "Once the whole predicted radii curve is ready, ACC switches FPS from full-sort to coarse/fine filtering using the predicted threshold schedule.", "implemented_contract", "KNN is unaffected and stays in dynamic-threshold mode throughout.")
+        add("acc_knn_dynamic_threshold", "GAM", "distance_batch128", "coarse_filter/topk_refine", "topk_sram_buffer", "data_dependency", "ACC KNN keeps dynamic-threshold filtering for all blocks; candidate writes to topk SRAM and threshold-refinement rereads continue until fine-filter bandwidth is satisfied.", "implemented_contract", "Independent from the FPS speculative-radii path.")
 
-    add("weight_tile_refill", "conv_linear", "DRAM weight_read(tile)", "weight_sram_buffer -> Conv/Linear", "weight_sram_buffer", "data_dependency", "Weight tile must be refilled into weight_sram_buffer before corresponding Conv/Linear compute tile consumes it.", "implemented_runtime", "32KB weight SRAM causes repeated tiled refills in baseline/base_v2.")
-    add("weight_sram_mutex", "conv_linear", "conv_or_linear.weight_stage", "conv_or_linear.weight_stage", "weight_sram_buffer", "resource_mutex", "weight_sram_buffer is shared across Conv/Linear ops and is exclusive within each active staging window.", "implemented_runtime", "resource_id=weight_sram_shared.")
+    if mode != "acc":
+        add("weight_tile_refill", "conv_linear", "DRAM weight_read(tile)", "weight_sram_buffer -> Conv/Linear", "weight_sram_buffer", "data_dependency", "Weight tile must be refilled into weight_sram_buffer before corresponding Conv/Linear compute tile consumes it.", "implemented_runtime", "32KB weight SRAM causes repeated tiled refills in baseline/base_v2.")
+    add("nonlinear_input_ready", "nonlinear", "feature_sram_buffer chunk ready", "nonlinear_engine consume", "nonlinear_workspace_sram", "data_dependency", "AffineNorm/SPool/KAT/ReLU/Add/LayerNorm may start on a chunk only after the corresponding feature chunk is visible in feature SRAM.", "implemented_contract", "Matches chunked feature pipeline semantics; runtime still coarse for most nonlinear ops.")
+    add("nonlinear_workspace_mutex", "nonlinear", "nonlinear_op.workspace_use", "nonlinear_op.workspace_use", "nonlinear_workspace_sram", "resource_mutex", "Nonlinear workspace SRAM is shared across AffineNorm/SPool/KAT/Pool-like operators and is exclusive within each active operator window.", "implemented_contract", "Future runtime path should map individual ops to this shared workspace resource.")
+    add("nonlinear_param_fetch", "nonlinear", "nonlinear_param_sram", "nonlinear_engine", "nonlinear_param_sram", "data_dependency", "AffineNorm/LayerNorm/KAT parameter or LUT SRAM must be resident before the corresponding nonlinear engine evaluates the chunk.", "implemented_contract", "Small-parameter SRAM is expected to stay resident across many chunks/operators.")
+    add("add_residual_read", "nonlinear", "main/residual tensors ready", "add_unit", "feature_sram_buffer", "data_dependency", "ADD waits for both main tensor and residual tensor to be available; residual may come from feature SRAM or DRAM refill in conservative mode.", "implemented_contract", "Residual path can be forced to DRAM in the current conservative baseline assumption.")
+    if mode != "acc":
+        add("weight_sram_mutex", "conv_linear", "conv_or_linear.weight_stage", "conv_or_linear.weight_stage", "weight_sram_buffer", "resource_mutex", "weight_sram_buffer is shared across Conv/Linear ops and is exclusive within each active staging window.", "implemented_runtime", "resource_id=weight_sram_shared.")
     add("local_feature_mutex", "conv_linear", "conv_or_linear.compute_local", "conv_or_linear.compute_local", "systolic_feature_sram_buffer", "resource_mutex", "Operator-local systolic feature SRAM is serialized on the shared local buffer resource.", "implemented_runtime", "resource_id=systolic_feature_sram_shared.")
+    if pipeline_mode == "pipeline" and double_buffering:
+        add("key_xyz_ping_pong", "GAM", "key_xyz_slot_a.refill", "key_xyz_slot_b.consume", "key_xyz_sram_buffer", "overlap_rule", "With double buffering, key xyz tile refill for tile k+1 may overlap distance compute consuming tile k from the companion slot.", "implemented_contract", "Ping-pong key SRAM is the intended baseline/base_v2 distance frontend model.")
+    else:
+        add("key_xyz_no_ping_pong", "GAM", "key_xyz_tile_refill", "key_xyz_tile_consume", "key_xyz_sram_buffer", "overlap_rule", "Without pipeline or without double buffering, key xyz tile refill and key consumption serialize on the same SRAM buffer.", "implemented_contract", "Matches conservative non-pipelined distance frontend.")
     add("dist_buffer_mutex", "GAM", "knn_or_fps_distance_write", "sorter_read_same_bank", "dist_sram_buffer", "resource_mutex", "Distance SRAM write and sorter read must serialize when they target the same shared dist SRAM resource/bank.", "implemented_runtime", "Current runtime models shared resource IDs; bank-level refinement can be added later.")
     add("fps_min_table_mutex", "GAM", "fps_min_update", "fps_sort_read", "fps_min_distance_table_sram", "resource_mutex", "FPS min-distance table update and sorter read are mutually exclusive on the same logical table region.", "implemented_runtime", "resource_id=fps_min_table_shared.")
     return rows
@@ -281,6 +316,31 @@ def get_sim_mode_results_dir(args: argparse.Namespace) -> str:
     if getattr(args, "qd_en", 0):
         parts.append("pipeline")
     return "sim_results_" + "_".join(parts)
+
+
+def _normalize_and_validate_acc_backend(args: argparse.Namespace) -> argparse.Namespace:
+    acc = str(getattr(args, "accelerator", "") or "").strip().lower()
+    if acc != "acc":
+        return args
+
+    if not bool(getattr(args, "use_real_data", False)):
+        raise ValueError("ACC mode currently supports only the real-data flow because full NeuroSim/MNSIM backend selection needs forward-collected Conv/Linear shapes.")
+
+    cim_backend = getattr(args, "cim_backend", None)
+    if cim_backend:
+        raise ValueError("ACC mode no longer supports per-layer cim_backend fallback. Please use --neurosim_full or --mnsim_full; default ACC path is NeuroSim full-network.")
+
+    if bool(getattr(args, "use_scalesim_systolic", False)):
+        raise ValueError("ACC mode does not support SCALE-Sim systolic execution. Use baseline/base_v2 for SCALE-Sim, or ACC with NeuroSim/MNSIM full-network backend.")
+
+    if bool(getattr(args, "neurosim_full", False)) and bool(getattr(args, "mnsim_full", False)):
+        args.mnsim_full = False
+        return args
+
+    if not bool(getattr(args, "neurosim_full", False)) and not bool(getattr(args, "mnsim_full", False)):
+        args.neurosim_full = True
+
+    return args
 
 
 def _parse_args() -> argparse.Namespace:
@@ -572,6 +632,13 @@ def _parse_args() -> argparse.Namespace:
         help="层间 feature SRAM 并发槽数；不设则由 pipeline_mode/double_buffering 自动推导",
     )
     parser.add_argument(
+        "--knn_dynamic_threshold_rounds_mean",
+        type=int,
+        default=None,
+        metavar="N",
+        help="acc KNN 动态阈值平均额外收敛轮数；0=首轮 block 粗筛后直接 fine，1=再做 1 轮 threshold refine，依此类推",
+    )
+    parser.add_argument(
         "--export_memory_contract",
         action="store_true",
         help="导出逐层/逐算子内存契约分析（memory_contract.txt + memory_contract.csv）",
@@ -603,6 +670,33 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         metavar="N",
         help="逻辑电路量化/反量化并行度（≥1）",
+    )
+    parser.add_argument(
+        "--network",
+        type=str,
+        default="pointkan-elite",
+        choices=[
+            "pointkan",
+            "pointkan-elite",
+            "pointnet2-cls-ssg",
+            "pointnet2-partseg-ssg",
+            "pointnet2-sem-ssg",
+        ],
+        help=(
+            "仿真目标网络: pointkan | pointkan-elite | "
+            "pointnet2-cls-ssg | pointnet2-partseg-ssg | pointnet2-sem-ssg; "
+            "默认 pointkan-elite"
+        ),
+    )
+    parser.add_argument(
+        "--input_channels",
+        type=int,
+        default=None,
+        metavar="C",
+        help=(
+            "每点输入特征维度；仅 pointnet2-sem-ssg 需要指定（默认 12=xyz+rgb+norm_xyz）; "
+            "其他网络忽略此参数"
+        ),
     )
     return parser.parse_args()
 
@@ -672,6 +766,7 @@ def resolve_checkpoint_path(checkpoint_arg: Optional[str]) -> str:
 
 def main() -> int:
     args = _parse_args()
+    args = _normalize_and_validate_acc_backend(args)
 
     sim_log_path = _ensure_sim_log(args.sim_log_dir)
     checkpoint_path = resolve_checkpoint_path(args.checkpoint)
@@ -694,6 +789,7 @@ def main() -> int:
         log_separator,
     )
     from pointkan_sim.memory.transactions import extract_memory_transactions, summarize_memory_transactions
+    from pointkan_sim.memory.feature_residency import get_effective_feature_buffer_bytes
     from pointkan_sim.memory.memory_contract import (
         analyze_memory_contract,
         format_memory_contract_report,
@@ -733,6 +829,14 @@ def main() -> int:
         import math
 
         log_section("真实数据评估：ModelNet40 样本 + checkpoint 权重 + MNSIM 对应层 PPA")
+        if args.accelerator == "acc":
+            if args.neurosim_full and args.mnsim_full:
+                log_info("ACC backend selection: both neurosim_full and mnsim_full were requested; defaulting to NeuroSim full-network.")
+            elif args.neurosim_full:
+                log_info("ACC backend selection: using NeuroSim full-network path (default/supported).")
+            elif args.mnsim_full:
+                log_info("ACC backend selection: using MNSIM full-network path.")
+
         log_info(f"Checkpoint: {checkpoint_path}")
         log_info(f"num_points={args.num_points}, num_classes={args.num_classes}, batch_size={args.batch_size}")
 
@@ -810,6 +914,8 @@ def main() -> int:
                 hw_config.inter_layer_buffer.dram_bandwidth_bytes_per_cycle = max(1, int(args.dram_bw_bytes_per_cycle))
         if getattr(args, "dram_channels", None) is not None and getattr(hw_config, "dram", None) is not None:
             hw_config.dram.dramsim3_channels_override = max(1, int(args.dram_channels))
+        if getattr(args, "knn_dynamic_threshold_rounds_mean", None) is not None:
+            hw_config.knn_dynamic_threshold_rounds_mean = max(0, int(args.knn_dynamic_threshold_rounds_mean))
         if getattr(hw_config, "inter_layer_buffer", None) is not None:
             if getattr(args, "feature_buffer_pipeline_mode", None):
                 hw_config.inter_layer_buffer.pipeline_mode = str(args.feature_buffer_pipeline_mode)
@@ -825,7 +931,11 @@ def main() -> int:
             spool=getattr(args, "logic_par_spool", None),
             quant_dequant=getattr(args, "logic_par_quant_dequant", None),
         )
-        layers = load_network("pointkan-elite", args.num_points, args.num_classes)
+        _net_name = getattr(args, "network", "pointkan-elite")
+        _net_kwargs = {}
+        if _net_name == "pointnet2-sem-ssg" and getattr(args, "input_channels", None):
+            _net_kwargs["input_channels"] = int(args.input_channels)
+        layers = load_network(_net_name, args.num_points, args.num_classes, **_net_kwargs)
 
         # 打印加速器与层间 buffer/量化配置（与 main.run_network_simulation 一致，便于对照）
         at = getattr(hw_config, "accelerator_type", None)
@@ -844,6 +954,8 @@ def main() -> int:
             )
             if getattr(hw_config, "dram", None) is not None:
                 log_info(f"DRAM: bandwidth={hw_config.dram.bandwidth_bytes_per_cycle} B/cycle, channels_override={getattr(hw_config.dram, 'dramsim3_channels_override', None)}")
+            if getattr(hw_config, 'is_acc', False):
+                log_info(f"ACC KNN dynamic threshold rounds(mean extra refine): {getattr(hw_config, 'knn_dynamic_threshold_rounds_mean', 0)}")
         else:
             log_info("层间 buffer: 未配置（inter_layer_buffer 为空）")
         qd = getattr(hw_config, "enable_w8a8_quant_dequant", False)
@@ -855,6 +967,75 @@ def main() -> int:
             if getattr(hw_config, "systolic_array", None) is not None:
                 log_info(f"脉动阵列尺寸: {hw_config.systolic_array.rows}×{hw_config.systolic_array.cols} (ArrayHeight×ArrayWidth)")
         log_info(f"数字逻辑时钟: {hw_config.clock_period:.4f} ns ({1000.0 / hw_config.clock_period:.2f} MHz){' (由 --logic_clk_freq 设置)' if logic_freq is not None and logic_freq > 0 else ' (默认 1 GHz)'}")
+
+        try:
+            contract_policy = MemoryContractPolicy()
+        except Exception:
+            contract_policy = None
+        log_info("Memory Config Summary:")
+        dram_cfg = getattr(hw_config, "dram", None)
+        if dram_cfg is not None:
+            log_info(
+                f"  DRAM: ini={getattr(dram_cfg, 'dramsim3_config_ini', None)}, "                f"bw={getattr(dram_cfg, 'bandwidth_bytes_per_cycle', 'N/A')} B/cycle, "                f"block={getattr(dram_cfg, 'block_size_bytes', 'N/A')} B, "                f"channels_override={getattr(dram_cfg, 'dramsim3_channels_override', None)}"
+            )
+        if buf is not None:
+            log_info(
+                f"  feature_sram_buffer: size={getattr(buf, 'size_bytes', 'N/A')} B, "                f"effective_per_slot={get_effective_feature_buffer_bytes(hw_config)} B, "                f"block={getattr(buf, 'block_size_bytes', 'N/A')} B, "                f"bw={getattr(buf, 'bandwidth_bytes_per_cycle', 'N/A')} B/cycle"
+            )
+        sa_cfg = getattr(hw_config, "systolic_array", None)
+        if sa_cfg is not None:
+            if args.accelerator == "acc":
+                log_info(
+                    f"  acc_local_compute: rram_cim(weight_resident)=True, local_state_sram={getattr(sa_cfg, 'sram_size_bytes', 'N/A')} B, "
+                    f"block={getattr(sa_cfg, 'sram_block_bytes', 'N/A')} B, banks={getattr(sa_cfg, 'sram_num_banks', 'N/A')}, "
+                    f"bus={getattr(sa_cfg, 'sram_bus_width_bits', 'N/A')} bit"
+                )
+            else:
+                log_info(
+                    f"  systolic_local_sram: unified={getattr(sa_cfg, 'sram_size_bytes', 'N/A')} B, "                f"ifmap={getattr(sa_cfg, 'ifmap_sram_size_bytes', None) or getattr(sa_cfg, 'sram_size_bytes', 'N/A')} B, "                f"filter={getattr(sa_cfg, 'filter_sram_size_bytes', None) or getattr(sa_cfg, 'sram_size_bytes', 'N/A')} B, "                f"ofmap={getattr(sa_cfg, 'ofmap_sram_size_bytes', None) or getattr(sa_cfg, 'sram_size_bytes', 'N/A')} B, "                f"block={getattr(sa_cfg, 'sram_block_bytes', 'N/A')} B, banks={getattr(sa_cfg, 'sram_num_banks', 'N/A')}, "                f"bus={getattr(sa_cfg, 'sram_bus_width_bits', 'N/A')} bit"
+                )
+        if contract_policy is not None:
+            if args.accelerator == "acc":
+                log_info(
+                    f"  acc_distance_buffers: query_xyz=dynamic, key_xyz_tile={contract_policy.key_xyz_tile_bytes} B, self_distance={contract_policy.self_distance_sram_bytes} B, "
+                    f"dist={contract_policy.dist_sram_bytes} B, fps_min_table={contract_policy.fps_min_distance_table_sram_bytes} B"
+                )
+                log_info(
+                    f"  acc_streaming_buffers: temp_max/spec_radii={contract_policy.temp_max_distance_sram_bytes} B, topk={contract_policy.topk_sram_bytes} B, sort_cache={contract_policy.sort_cache_sram_bytes} B"
+                )
+                log_info(
+                    f"  acc_nonlinear_buffers: workspace(gam/lfp/gfp/kan)=({contract_policy.gam_workspace_sram_bytes}/{contract_policy.lfp_workspace_sram_bytes}/{contract_policy.gfp_workspace_sram_bytes}/{contract_policy.kan_workspace_sram_bytes}) B, "
+                    f"point_xyz_bytes={contract_policy.point_xyz_bytes}, distance_bytes={contract_policy.distance_bytes}, index_bytes={contract_policy.index_bytes}"
+                )
+                log_info(
+                    "  acc_speculative_path: temp_max_distance_sram is time-multiplexed across warmup running-max, predictor staging, and post-predict coarse/fine FPS"
+                )
+            else:
+                log_info(
+                    f"  distance/nonlinear contract buffers: query_xyz≈dynamic, key_xyz≈dynamic_tile, dist={contract_policy.dist_sram_bytes} B, "                f"fps_min_table={contract_policy.fps_min_distance_table_sram_bytes} B, sort_cache={contract_policy.sort_cache_sram_bytes} B, "                f"gam_ws={contract_policy.gam_workspace_sram_bytes} B, lfp_ws={contract_policy.lfp_workspace_sram_bytes} B, gfp_ws={contract_policy.gfp_workspace_sram_bytes} B"
+                )
+                log_info(
+                    "  query_xyz_sram_buffer: dynamic/query-resident, sized by active query block "
+                    "(e.g. full 1024 xyz FP32 ~= 12 KB when fully resident)"
+                )
+                log_info(
+                    "  key_xyz_sram_buffer: dynamic/key-tile, sized by tile policy "
+                    "(e.g. 256 xyz FP32 ~= 3 KB per tile before ping-pong duplication)"
+                )
+                log_info(
+                    f"  dist_sram_buffer: {contract_policy.dist_sram_bytes} B, "
+                    f"fps_min_distance_table_sram: {contract_policy.fps_min_distance_table_sram_bytes} B, "
+                    f"sort_cache_sram: {contract_policy.sort_cache_sram_bytes} B"
+                )
+                log_info(
+                    f"  nonlinear_workspace_sram: gam={contract_policy.gam_workspace_sram_bytes} B, "
+                    f"lfp={contract_policy.lfp_workspace_sram_bytes} B, gfp={contract_policy.gfp_workspace_sram_bytes} B, "
+                    f"kan={contract_policy.kan_workspace_sram_bytes} B"
+                )
+                log_info(
+                    "  nonlinear_param_sram: small resident SRAM/LUT for AffineNorm/LayerNorm/KAT-GRF params "
+                    "(modeled as resident; negligible capacity pressure in current baseline contract)"
+                )
         if any(
             getattr(args, k, None) is not None
             for k in ("logic_par_layernorm", "logic_par_relu", "logic_par_spool", "logic_par_quant_dequant")
@@ -1367,6 +1548,42 @@ def main() -> int:
         scalesim_layer_details = sim_once.get("scalesim_layer_details") or []
         if scalesim_layer_details:
             import csv as _csv
+
+            trace_output_root = sim_results_dir / "scalesim_traces"
+            trace_output_root.mkdir(parents=True, exist_ok=True)
+
+            def _localize_trace_dirs(raw_value: Any) -> str:
+                if not raw_value:
+                    return ""
+                localized_paths = []
+                seen: set[str] = set()
+                for piece in str(raw_value).split(";"):
+                    src = piece.strip()
+                    if not src:
+                        continue
+                    src_path = Path(src)
+                    if not src_path.exists() or not src_path.is_dir():
+                        localized_paths.append(src)
+                        continue
+                    key = str(src_path.resolve())
+                    dst_path = trace_output_root / src_path.name
+                    if key not in seen:
+                        if dst_path.exists():
+                            shutil.rmtree(dst_path)
+                        shutil.copytree(src_path, dst_path)
+                        seen.add(key)
+                    localized_paths.append(str(dst_path))
+                return ";".join(localized_paths)
+
+            localized_scalesim_rows = []
+            for row in scalesim_layer_details:
+                localized_row = dict(row)
+                localized_row["dram_trace_dir"] = _localize_trace_dirs(row.get("dram_trace_dir", ""))
+                localized_row["feature_input_dram_trace_dir"] = _localize_trace_dirs(row.get("feature_input_dram_trace_dir", ""))
+                localized_row["weight_dram_trace_dir"] = _localize_trace_dirs(row.get("weight_dram_trace_dir", ""))
+                localized_row["feature_output_dram_trace_dir"] = _localize_trace_dirs(row.get("feature_output_dram_trace_dir", ""))
+                localized_scalesim_rows.append(localized_row)
+
             scalesim_csv_path = sim_results_dir / "scalesim_conv_linear_layers.csv"
             with open(scalesim_csv_path, "w", newline="", encoding="utf-8") as f:
                 w = _csv.writer(f)
@@ -1384,7 +1601,7 @@ def main() -> int:
                     "num_points", "in_channels", "out_channels", "kernel_size",
                     "tokens", "in_features", "out_features",
                 ])
-                for row in scalesim_layer_details:
+                for row in localized_scalesim_rows:
                     w.writerow([
                         row.get("layer_name", ""),
                         row.get("operator", ""),
@@ -1432,6 +1649,33 @@ def main() -> int:
                         row.get("out_features", ""),
                     ])
             log_info(f"SCALE-Sim 逐层 Conv/Linear（周期、利用率、能耗、每层激活 shape）已写入: {scalesim_csv_path}（共 {len(scalesim_layer_details)} 层）")
+
+            shapes_csv_path = sim_results_dir / "scalesim_layer_shapes.csv"
+            with open(shapes_csv_path, "w", newline="", encoding="utf-8") as f:
+                w = _csv.writer(f)
+                w.writerow([
+                    "layer_name", "operator", "activation_input_shape", "activation_output_shape",
+                    "num_points", "tokens", "in_channels", "out_channels",
+                    "in_features", "out_features", "kernel_size",
+                    "systolic_array_rows", "systolic_array_cols",
+                ])
+                for row in localized_scalesim_rows:
+                    w.writerow([
+                        row.get("layer_name", ""),
+                        row.get("operator", ""),
+                        row.get("activation_input_shape", ""),
+                        row.get("activation_output_shape", ""),
+                        row.get("num_points", ""),
+                        row.get("tokens", ""),
+                        row.get("in_channels", ""),
+                        row.get("out_channels", ""),
+                        row.get("in_features", ""),
+                        row.get("out_features", ""),
+                        row.get("kernel_size", ""),
+                        row.get("systolic_array_rows", ""),
+                        row.get("systolic_array_cols", ""),
+                    ])
+            log_info(f"SCALE-Sim 每层输入输出 shape 汇总已写入: {shapes_csv_path}")
 
         # 可选：导出内存交互事务（统一接口 src/dst/kind），并写聚合统计
         if args.export_memory_transactions and operator_sequence:
@@ -1595,12 +1839,14 @@ def main() -> int:
     from pointkan_sim.main import run_network_simulation
 
     class SimArgs:
-        network = "pointkan-elite"
+        network = getattr(args, "network", "pointkan-elite")
         accelerator = args.accelerator
         input_points = args.num_points
         num_classes = args.num_classes
+        input_channels = getattr(args, "input_channels", None)
         show_layers = True
         mnsim_full = args.mnsim_full
+        neurosim_full = args.neurosim_full
         no_mnsim_full = False
         no_layer_buffer = False
         show_shapes = False
@@ -1616,6 +1862,7 @@ def main() -> int:
         timeline_stride = 500
 
     sim_args = SimArgs()
+    sim_args.real_conv_linear_list = locals().get("conv_linear_list", None)
     log_section("PPA 仿真（与 checkpoint/ModelNet40 配置一致）")
     log_info(f"Checkpoint: {checkpoint_path}")
     log_info(f"num_points={args.num_points}, num_classes={args.num_classes}")
