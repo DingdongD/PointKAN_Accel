@@ -7,7 +7,7 @@
 | 模块名称 (Module) | 功能描述 | 周期数公式 (Cycles) | 频率 (Freq) | 功耗 (Power,mw) | 面积 (Area,um2) | 备注/优化点 |
 | :--- | :--- | :--- | :---: | :---: | :---: | :--- |
 | **op_relu** | FP32 ReLU | `T = N_elements` | 1 GHz | `0.45` | `222` | 可并行 M 个 op_relu 电路，周期缩减为 `N_elements / M`，功耗和面积对应倍增 M |
-| **op_spool** | FP32 S-Pool | `T = 56 + (N - 1) × 47` | 1 GHz | `26.82` | `54926` | N = B × N_points × N_channels |
+| **op_spool** | FP32 S-Pool | `T = 27 + (N - 1) × 16` | 1 GHz | `65.26` | `138452` | N = B × N_points × N_channels |
 | **op_layer_norm** | FP32 LayerNorm | `T = N x (3D/8 + 17)` | 1 GHz | `56` | `139582` | 移除内部寄存器组，由外部片上缓存输入数据，并且将原本寄存器的面积替换为更多的ALU单元，增加了模块内并行度，周期缩减 |
 | **op_adaptive_max_pool1d** | FP32 全并行MaxPool (output_size=1) | `T = N_fibers` | 1 GHz | `13.2` | `18406` | MAX_DIM=64；N_fibers=池化输出元素总数（池化维≤64）。举例：K近邻池化 [N_points, D, K]→[N_points, D] 时 N_fibers=N_points×D；全局池化 [D, N_points]→[D] 时 N_fibers=D |
 | **fp32_mul** | FP32 乘法器 | `1` (单次延迟) | 1 GHz | `2.5` | `2024` | 寄存器1拍输出 |
