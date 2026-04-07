@@ -24,7 +24,6 @@
 | **fp32_resampler(上采样，每次单点插值)** | FP32 上采样 | `T = 3` | 1 GHz | `3.95` | `4719` | N=输出元素数，3cycles延迟；上采样：64点插值到512点, 根据讨论每次进行单点插值，和距离计算并行（淹没时间）| 
 | **fp32_resampler_up_mem(下采样lut)** | 下采样ram | `T = 1` | 1 GHz | `0.094` | `13485` | 用于保存下采样所需的数据，需要51+32个周期（无阶段依赖，上电即可执行，故只需统计能耗） | 
 | **fp32_resampler_up_mem(上采样lut)** | 上采样ram | `T = 1` | 1 GHz | `0.094` | `85331` | 用于保存上采样所需的数据，需要64+512个周期（无阶段依赖，上电即可执行，故只需统计能耗） | 
-| **Coarse_filter_fps128in_knn512in** | FPS/KNN可重构粗筛电路 | `T_fps_mode1 = 1; T_fps_mode0 = 3; T_knn_mode = 4`| 1GHz | fps_mode0: 190; fps_mode1: 210; knn_mode: 200 | 644686 | fps_mode1对于前10%的采样点，每阶段针对sram-cim array输出的128个距离值进行max排序，每次开销1个cycle，持续工作8个阶段，最终得到1024个距离值中的max值，无需使用细筛电路；fps_mode0对于后90%的采样点，每个阶段对于128个距离值进行基于预测距离的粗筛，每次开销3个cycles(被隐藏在sram-cim array距离计算的6cycles周期中)，等8个粗筛周期后输出最多32个max候选距离值至细筛电路；knn_mode，在8组128个距离计算完，且最后一组FPS排序完成后，复用1024个距离值进行KNN粗筛，由于根据动态阈值进行调整，最多6次迭代周期，KNN粗筛开销4个周期+1个output周期，示例：KNN第1次阈值即满足要求，开销4+1=5cycles；第6次阈值满足要求，开销4*6+1=25cycles(也是最大开销)。最终将N个min值输出至细筛电路(32≥N≥24) |
 | **fine_filter** | FPS/KNN可重构细筛电路 | `T = 2` | 1GHz | 38 | 53261 | FPS和KNN细筛均2cycles |
 | **dist2_update_table** | 最小距离更新表 | `T = 1` | 1GHz | 30 | 26610 | FPS每阶段采样后更新最小距离表 |
 | **SRAM_CIM_array** | sram-cim_array 距离计算宏 | `T = (num_input_points / num_array_parrallelism) * (num_xyz_quant_bit / num_bit_slice)` | 1GHz | 6+1.3*128 | / | num_bit_slice=2; num_array_parralleism = 128; 每次计算128个距离值，开销(num_xyz_quant_bit / num_bit_slice)个周期；1.3为Local Computing Unit中的移位加法器，128个LCU，用于每个bit_slice计算时进行移位累加 |
@@ -36,6 +35,7 @@
 | **dist2_engine_fp32 + top3_select** | 脉动距离阵列 fp32版本 | `T = 64-1+7(64个距离计算+流式归并)` | 1GHz | 119 | 242750 | 1024点需16批 |
 | **interpolation** | 权重归一化+加权插值 | `T = 22+4*D/16(权重归一化(22cycles)，加权插值每次处理16个通道(4cycles))` | 1GHz | 68 | 240294 | 权重归一化固定22个cycles，根据插值特征通道数D，按照每次加权插值并行度16（单次处理4个cycles），串行分组处理。 |
 | **op_maxpool** | FP32 maxpool 32输入 | `T = 1(针对32个K的输入，1cycles处理完成)` | 1 GHz | `8.2` | `11509` | 针对K维度进行展开，每次处理32个K；针对输入张量， [B, C, K, npoint]，考虑完整计算周期时：T_maxpool = B × C × npoint × ceil(K / 32) ，其中32为电路op_maxpool的输入|
+| **Ball_query** | Ball_query电路（可复用粗筛电路） | `T = 1`| 1GHz | 81.12 | 94204 | 将半径输入作为阈值，和距离值进行比较，进行筛选 |
 
 ### 备注：sort_64in_batch32min / final_merge
 由于上游dist2_engine每次只能输出64个数据给排序电路，一共1024个数据，需要分16个阶段输出。
