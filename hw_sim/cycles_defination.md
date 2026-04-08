@@ -37,6 +37,13 @@
 | **op_maxpool** | FP32 maxpool 32输入 | `T = 1(针对32个K的输入，1cycles处理完成)` | 1 GHz | `8.2` | `11509` | 针对K维度进行展开，每次处理32个K；针对输入张量， [B, C, K, npoint]，考虑完整计算周期时：T_maxpool = B × C × npoint × ceil(K / 32) ，其中32为电路op_maxpool的输入|
 | **Ball_query** | Ball_query电路（可复用粗筛电路） | `T = 1`| 1GHz | 81.12 | 94204 | 将半径输入作为阈值，和距离值进行比较，进行筛选 |
 
+
+Merge-tree for FPS-KNN
+| **Merge-1** | PointCIM FPS 多轮轮询点云的max | `T = 1`| 1GHz | 1.510 | 1227.240024 | FPS 轮询 |
+  | **Merge-32** | PointCIM FPS 多轮轮询点云的max | `T = 1`| 1GHz | 89.9882 | 464780.893846 | BALL QUERY 轮询 |
+| **FPS-MAX-1** | PointCIM FPS 多轮轮询点云的max | `T = 1`| 1GHz | 1059.4 | 2726159.095948 | 将半径输入作为阈值，和距离值进行比较，进行筛选 |
+
+
 ### 备注：sort_64in_batch32min / final_merge
 由于上游dist2_engine每次只能输出64个数据给排序电路，一共1024个数据，需要分16个阶段输出。
 sort_64in_batch32min模块，每次处理64个输入输出局部32min，分时复用16个阶段，第2个阶段仍然用sort_64in_batch32min进行处理。反复16个阶段后，得到16个32min，接下来采用final_merge模块，得到最终topk32。思想即冒泡排序+merge
@@ -55,3 +62,7 @@ sort_64in_batch32min模块，每次处理64个输入输出局部32min，分时�
 ### 更新日志：3-25
 1、新增'dist2_engine_fp32 + top3_select'
 2、新增'interpolation'
+
+### 更新日志： 4-8
+1、基于merge-tree架构的ball query/fps max/knn3实现
+
