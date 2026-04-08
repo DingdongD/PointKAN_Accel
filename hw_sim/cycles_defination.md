@@ -36,11 +36,8 @@
 | **interpolation** | 权重归一化+加权插值 | `T = 22+4*D/16(权重归一化(22cycles)，加权插值每次处理16个通道(4cycles))` | 1GHz | 68 | 240294 | 权重归一化固定22个cycles，根据插值特征通道数D，按照每次加权插值并行度16（单次处理4个cycles），串行分组处理。 |
 | **op_maxpool** | FP32 maxpool 32输入 | `T = 1(针对32个K的输入，1cycles处理完成)` | 1 GHz | `8.2` | `11509` | 针对K维度进行展开，每次处理32个K；针对输入张量， [B, C, K, npoint]，考虑完整计算周期时：T_maxpool = B × C × npoint × ceil(K / 32) ，其中32为电路op_maxpool的输入|
 | **Ball_query** | Ball_query电路（可复用粗筛电路） | `T = 1`| 1GHz | 81.12 | 94204 | 将半径输入作为阈值，和距离值进行比较，进行筛选 |
-
-
-Merge-tree for FPS-KNN
 | **Merge-1** | PointCIM FPS 多轮轮询点云的max | `T = 1`| 1GHz | 1.510 | 1227.240024 | FPS 轮询 |
-  | **Merge-32** | PointCIM FPS 多轮轮询点云的max | `T = 1`| 1GHz | 89.9882 | 464780.893846 | BALL QUERY 轮询 |
+| **Merge-32** | PointCIM FPS 多轮轮询点云的max | `T = 1`| 1GHz | 89.9882 | 464780.893846 | BALL QUERY 轮询 |
 | **FPS-MAX-1** | PointCIM FPS 多轮轮询点云的max | `T = 1`| 1GHz | 1059.4 | 2726159.095948 | 将半径输入作为阈值，和距离值进行比较，进行筛选 |
 
 
