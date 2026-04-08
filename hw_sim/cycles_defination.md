@@ -27,6 +27,7 @@
 | **fine_filter** | FPS/KNN可重构细筛电路 | `T = 2` | 1GHz | 38 | 53261 | FPS和KNN细筛均2cycles |
 | **dist2_update_table_128** | 最小距离更新表，128输入 | `T = 1` | 1GHz | 30 | 26610 | FPS每阶段采样后更新最小距离表 |
 | **dist2_update_table_64** | 最小距离更新表，64输入 | `T = 1` | 1GHz | 4.3 | 10839 | FPS每阶段采样后更新最小距离表 |
+| **dist2_update_table_1024** | 最小距离更新表，1024输入 | `T = 1` | 1GHz | 2786.4 | 749295.012826 | FPS每阶段采样后更新最小距离表 |
 | **SRAM_CIM_array** | sram-cim_array 距离计算宏 | `T = (num_input_points / num_array_parrallelism) * (num_xyz_quant_bit / num_bit_slice)` | 1GHz | 6+1.3*128 | / | num_bit_slice=2; num_array_parralleism = 128; 每次计算128个距离值，开销(num_xyz_quant_bit / num_bit_slice)个周期；1.3为Local Computing Unit中的移位加法器，128个LCU，用于每个bit_slice计算时进行移位累加 |
 | **dist2_merge_adder** | 将距离值的交叉项和自平方项聚合 | `T = 1` | 1GHz | 1.3 | 2179 | 在sram_cim_array距离计算后，执行1个周期；共128个 |
 | **dist2_engine** | 脉动距离阵列 | `T = 131(64个距离计算)` | 1GHz | 94 | 89884 | 131cycles完成64个距离计算；1024点需16批 |
