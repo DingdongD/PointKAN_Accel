@@ -38,7 +38,7 @@
 | **Ball_query** | Ball_query电路（可复用粗筛电路） | `T = 1`| 1GHz | 81.12 | 94204 | 将半径输入作为阈值，和距离值进行比较，进行筛选 |
 | **Merge-1** | PointCIM FPS 多轮轮询点云的max | `T = 1`| 1GHz | 1.510 | 1227.240024 | FPS 轮询 |
 | **Merge-32** | PointCIM FPS 多轮轮询点云的max | `T = 1`| 1GHz | 89.9882 | 464780.893846 | BALL QUERY 轮询 |
-| **FPS-MAX-1** | PointCIM FPS 多轮轮询点云的max | `T = 1`| 1GHz | 1059.4 | 2726159.095948 | 将半径输入作为阈值，和距离值进行比较，进行筛选 |
+| **FPS-MAX-1** | PointCIM FPS 多轮轮询点云的max | `T = 11`| 1GHz | 1059.4 | 2726159.095948 | 将半径输入作为阈值，和距离值进行比较，进行筛选 |
 
 
 ### 备注：sort_64in_batch32min / final_merge
