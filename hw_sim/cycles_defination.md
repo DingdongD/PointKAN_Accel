@@ -45,7 +45,7 @@
 | **bq_64_top32** | batch_size=64，支持bq/knn/fps-max1 | `T = 22`| 1GHz | 133 | 210082 | 一组输入64个数据，输出32个有序的最小值/最大值；K=3时，取输出前三个即可 |
 | **merge_batch_64** | 用于batch_size=64的两轮batch之间的merge | `T = 2`| 1GHz | 175 | 145643 | 输入2组每组64个数据，输出64个有序的最小值/最大值；K=3时，取输出前三个即可 |
 | **merge_batch_32** | 用于batch_size=32的两轮batch之间的merge | `T = 2`| 1GHz | 87 | 66668 | 输入2组每组32个数据，输出32个有序的最小值/最大值；K=3时，取输出前三个即可 |
-
+| **merge_batch_1** | 用于batch_size=32的两轮batch之间的merge | `T = 2`| 1GHz | 1.2388 | 627.48 | 输入2组每组32个数据，输出1个有序的最小值/最大值|
 
 
 ### 备注：sort_64in_batch32min / final_merge
