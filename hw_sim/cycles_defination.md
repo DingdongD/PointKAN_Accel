@@ -37,15 +37,11 @@
 | **dist2_engine_fp32 + top3_select** | 脉动距离阵列 fp32版本 | `T = 64-1+7(64个距离计算+流式归并)` | 1GHz | 119 | 242750 | 1024点需16批 |
 | **interpolation** | 权重归一化+加权插值 | `T = 22+4*D/16(权重归一化(22cycles)，加权插值每次处理16个通道(4cycles))` | 1GHz | 68 | 240294 | 权重归一化固定22个cycles，根据插值特征通道数D，按照每次加权插值并行度16（单次处理4个cycles），串行分组处理。 |
 | **op_maxpool** | FP32 maxpool 32输入 | `T = 1(针对32个K的输入，1cycles处理完成)` | 1 GHz | `8.2` | `11509` | 针对K维度进行展开，每次处理32个K；针对输入张量， [B, C, K, npoint]，考虑完整计算周期时：T_maxpool = B × C × npoint × ceil(K / 32) ，其中32为电路op_maxpool的输入|
-| **Ball_query** | Ball_query电路（可复用粗筛电路） | `T = 1`| 1GHz | 81.12 | 94204 | 将半径输入作为阈值，和距离值进行比较，进行筛选 |
-| **Merge-1** | PointCIM FPS 多轮轮询点云的max | `T = 1`| 1GHz | 1.510 | 1227.240024 | FPS 轮询 |
-| **Merge-32** | PointCIM FPS 多轮轮询点云的max | `T = 1`| 1GHz | 89.9882 | 464780.893846 | BALL QUERY 轮询 |
-| **FPS-MAX-1** | PointCIM FPS 多轮轮询点云的max | `T = 12`| 1GHz | 1059.4 | 2726159.095948 | 将半径输入作为阈值，和距离值进行比较，进行筛选 |
 | **bq_128_top64** | batch_size=128，支持bq/knn/fps-max1 | `T = 24`| 1GHz | 370 | 565983 | 一组输入128个数据，输出64个有序的最小值/最大值；K=3时，取输出前三个即可 |
 | **bq_64_top32** | batch_size=64，支持bq/knn/fps-max1 | `T = 22`| 1GHz | 133 | 210082 | 一组输入64个数据，输出32个有序的最小值/最大值；K=3时，取输出前三个即可 |
 | **merge_batch_64** | 用于batch_size=64的两轮batch之间的merge | `T = 2`| 1GHz | 175 | 145643 | 输入2组每组64个数据，输出64个有序的最小值/最大值；K=3时，取输出前三个即可 |
 | **merge_batch_32** | 用于batch_size=32的两轮batch之间的merge | `T = 2`| 1GHz | 87 | 66668 | 输入2组每组32个数据，输出32个有序的最小值/最大值；K=3时，取输出前三个即可 |
-
+| **merge_batch_1** | 用于batch_size=32的两轮batch之间的merge | `T = 2`| 1GHz | 1.2388 | 627.48 | 输入2组每组32个数据，输出1个有序的最小值/最大值|
 
 
 ### 备注：sort_64in_batch32min / final_merge
