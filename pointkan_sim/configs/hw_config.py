@@ -20,7 +20,7 @@
   - 数字逻辑时钟（SPool/LayerNorm/ReLU/FPS/KNN 等）：由 HardwareConfig.clock_period 表示（单位 ns）。
     接口：脚本通过 --logic_clk_freq / 环境变量 LOGIC_CLK_FREQ 传入频率(Hz)，不传则默认 1 GHz（1 ns）。
   - NeuroSim 时钟（Conv/Linear 的 CIM 仿真）：由脚本 NEUROSIM_CLK_FREQ 传入(Hz)，可变，不限于 100 MHz；
-    不传时 NeuroSim 使用自身关键路径频率。Conv/Linear 事件单独带 mnsim_clock_period_ns，不改写 clock_period。
+    不传时 NeuroSim 使用自身关键路径频率。Conv/Linear 事件单独带 cim_clock_period_ns，不改写 clock_period。
 
 使用：get_accelerator_config("baseline") / get_accelerator_config("acc")
 """
@@ -230,6 +230,17 @@ class RRAMLutConfig:
     post_mac_power: float = 0.0                 # TODO: mW, LUT后乘加模式占位
     post_mac_area: float = 0.0                  # TODO: mm²
     post_mac_cycles: int = 0                    # TODO: execution cycles
+    default_mode: str = "rram_pwl"              # acc 默认 KAT 模式
+    pwl_power: float = 0.0759164                # mW
+    pwl_area: float = 235.199                   # um^2
+    pwl_parallelism: int = 1
+    pwl_overhead_cycles: int = 1
+    rram_word_width_bits: int = 128
+    rram_read_parallelism: int = 1
+    rram_capacity_kb: int = 4
+    rram_optimization_target: str = "ReadEDP"
+    rram_read_latency_ns: Optional[float] = None
+    rram_read_energy_pj: Optional[float] = None
 
 
 @dataclass
@@ -262,23 +273,89 @@ class RRAMCimMacroConfig:
 
 
 # =============================================================================
+# 3.5 PointCIM 专用：RRAM 距离计算阵列配置
+# =============================================================================
+
+@dataclass
+class RRAMDistArrayConfig:
+    """
+    PointCIM 模式：RRAM VMM 实现点云距离计算。
+
+    计算流程：
+      ||qi - pj||² = qi² + pj² - 2(qi · pj)
+      - pj² (k²)：self-mode VMM，one-time per SA layer，结果缓存到 SRAM
+      - -2qi·pj：cross-mode VMM，per query
+      - qi² (q²)：数字逻辑，per query，3 次 multiply-add
+      以上均由 MICSim（内部调用 NeuroSim .so）建模，与
+      hw_sim/cycle_simulator/destiny_3d_cache/matrix_power_estimator.py --distance_backend micsim 结果保持一致。
+
+    MICSim 调用口径：
+      self-mode (k²):   _run_micsim_single_fc(cin=M, cout=1, ...)  × self_rounds
+      cross-mode (-2qk): _run_micsim_single_fc(cin=M, cout=N, ...)
+    """
+    # RRAM array 物理参数
+    array_rows: int = 128            # RRAM array 行数
+    array_cols: int = 128            # RRAM array 列数
+    coord_dims: int = 3              # 坐标维度 M（x/y/z=3）
+    coord_bits: int = 12             # 坐标量化位宽（权重位宽）
+    input_bits: int = 12             # 输入向量位宽（查询坐标位宽）
+    mapping_mode: str = "diagonal"   # 映射模式：diagonal（对角 block）/ shared_rows
+    word_width: int = 128            # DESTINY word width (bit)，用于写入操作次数估算
+
+    # RRAM 写入原语（DESTINY/静态参数，NeuroSim 不覆盖编程路径）
+    write_energy_pj_per_op: float = 0.0    # pJ / write op（一次行写入）
+    write_latency_ns_per_op: float = 0.0   # ns / write op
+    power_write_mw: float = 0.0    # RRAM 编程期间功耗 (mW)
+    area_mm2: float = 0.0          # 总阵列面积 (mm²)，待 VLSI 校准
+
+    # 后处理数字逻辑开销（q² = x²+y²+z² 与 d² 累加）
+    self_term_power_mw: float = 0.0   # q² 数字计算功耗 (mW)
+    self_term_cycles: int = 3         # q² 计算周期数（每 query，默认 3 次 multiply-add）
+    sum_power_mw: float = 0.0         # d² 最终加法功耗 (mW)
+    sum_cycles: int = 1               # d² 加法周期数（每 query）
+
+    # ── neurosim_dist pybind .so（MICSim 不可用时的备用路径）──
+    # 若为空字符串，则自动尝试 pointkan_sim 包目录下的 neurosim_dist*.so
+    neurosim_dist_so_dir: str = ""
+
+    # ── MICSim 参数（与 matrix_power_estimator.py --distance_backend micsim 口径一致）──
+    micsim_root: str = "/workspace/MICSim_V1.0"
+    micsim_clk_freq_hz: float = 1e9          # 数字外围时钟（Hz）
+    micsim_adc_clk_freq_hz: float = 2e8      # SAR ADC 专用时钟（Hz）
+    micsim_sar_column_power_uw: float = 128.0  # 单列 SAR ADC 功耗（μW）
+    micsim_level_output: int = 64            # ADC 量化级数（64 = 6-bit）
+    micsim_static_mem_type: str = "rram"     # 静态阵列器件类型：rram / fefet
+    micsim_static_ron_ohm: float = 240000.0  # R_on (Ω)
+    micsim_static_roff_ohm: float = 24000000.0  # R_off (Ω)
+    micsim_static_cell_bit: int = 1          # 每 cell 位数
+    micsim_avg_activity: float = 0.5         # average_activityRowRead
+    micsim_avg_conductance: float = 1e-6     # average_Condutance
+    micsim_num_col_muxed: int = 0            # 列复用比，0=自动跟随 coord_bits
+    micsim_saradc: int = 1                   # SARADC 开关
+    micsim_current_mode: int = 1             # 电流模式
+    micsim_adc_mode: int = 0                 # ADCmode
+
+
+# =============================================================================
 # 4. 排序电路
 # =============================================================================
 
 @dataclass
 class BaselineDist2EngineConfig:
     """
-    Baseline 距离计算引擎（3×64 脉动阵列），与 bitonic max/min 配合完成 FPS/KNN。
+    Baseline 距离计算引擎（1×64 FP32 PE），与 bitonic / merge_sort 配合完成 FPS/KNN。
 
-    T = M + R + C - 2（M=批内点数，R=3，C=64）；64 点批 129 cycle，1024 点 1089 cycle。
-    功耗 94 mW，面积 89884 um^2。仅 baseline 使用；acc 用 SRAM-CIM 阵列。
+    每个 PE 完成一次距离计算需要 per_distance_cycles 周期，64 个 PE 形成波前，
+    单批 64 点周期 = (pe_count - 1) + per_distance_cycles。
+    当前默认：64 PE、7 cycle/距离，因此单批固定 70 cycle。
+    功耗 95 mW，面积 242750 um^2。仅 baseline 使用；acc 用 SRAM-CIM 阵列。
     """
-    power: float = 94.0                          # mW
-    area: float = 89884.0                        # um^2
-    cycles: int = 0                              # 0 表示按公式 T=M+R+C-2 计算
-    m_dim: int = 0                               # 公式用 M（批内点数），0=运行时传入
-    r_dim: int = 3
-    c_dim: int = 64
+    power: float = 95.0                          # mW
+    area: float = 242750.0                       # um^2
+    cycles: int = 0                              # 0 表示按波前公式计算
+    pe_count: int = 64
+    per_distance_cycles: int = 7
+    c_dim: int = 64                              # 兼容旧逻辑：等于 pe_count
 
 
 @dataclass
@@ -293,6 +370,7 @@ class BitonicSortConfig:
     power_max_mw: float = 1570                 # mW，MAX 模式（FPS）
     power_min_mw: float = 1540                 # mW，MIN 模式（KNN）
     area: float = 2157561.0                      # um^2（两种模式共用）
+    sorter_depth: int = 1024                     # 单 pass 最大排序元素数；超出则多 pass + merge
 
 
 @dataclass
@@ -325,6 +403,7 @@ class MergeSortConfig:
     area: float = 180441.0                      # um^2
     cycles_max: int = 22                        # FPS 每批局部 max 周期
     cycles_top32: int = 22                       # KNN 每批 top32 周期
+    sorter_depth: int = 64                       # 单 pass 最大排序元素数（base_v2 默认 64）
     reg_file: Optional[MergeSortRegFileConfig] = None  # 寄存器组：FPS 1 写/迭代，KNN 32 写/query
 
 
@@ -371,6 +450,128 @@ class ThresholdGenConfig:
 
 
 @dataclass
+class BallQueryConfig:
+    """
+    BallQuery 硬件单元（距离过滤 + 半径筛选）。
+
+    - baseline 模式：依托 bitonic 架构实现，每周期处理 1024 个距离（cycles_per_1024=1）。
+    - acc 模式：复用 coarse/fine filter 路径（占位）。
+    功耗与面积待 VLSI 校准，当前均为占位 0.0。
+    """
+    power_baseline_mw: float = 0.0   # mW（占位，待 VLSI 校准）
+    area_baseline: float = 0.0       # um^2（占位，待 VLSI 校准）
+    cycles_per_1024: int = 1         # baseline：每 1024 个距离 1 周期
+    power_acc_mw: float = 0.0        # mW（占位，待 VLSI 校准）
+    area_acc: float = 0.0            # um^2（占位，待 VLSI 校准）
+
+
+# ---------------------------------------------------------------------------
+# BQ 叶+merge 引擎配置（对应 docs/ball_query_engind.md）
+# ---------------------------------------------------------------------------
+
+@dataclass
+class BQLeafEngineConfig:
+    """
+    BQ 叶引擎（Producer）参数。
+
+    每次消费 block_n 条距离，在块内完成筛选与排序，输出 output_k 条已排序槽。
+    对应 RTL：rq_*_block64_*_wrap / ball_query_128_tm_top64 等。
+    数值与 bq_engine_catalog.py 一致，真值以 DC + PTPX 为准。
+    """
+    key: str = "bq64_top32"
+    block_n: int = 64
+    output_k: int = 32
+    latency_cycles: int = 22
+    power_mw: float = 133.0
+    area_um2: float = 0.0
+
+
+@dataclass
+class BQMergeEngineConfig:
+    """
+    BQ 层间 merge 引擎（Consumer + Producer）。
+
+    二叉树节点：消费两路 K 槽已排序结果，输出一路 K 槽全局序（或 max/top-3）。
+    latency_cycles 为单次 merge 操作延迟（所有 merge 类型均为 2 cyc）。
+    """
+    key: str = "merge32"
+    k: int = 32
+    latency_cycles: int = 2
+    power_mw: float = 87.0
+    area_um2: float = 0.0
+
+
+@dataclass
+class BQEngineConfig:
+    """
+    BallQuery 引擎完整配置：叶引擎 + 层间 merge 引擎 + 调度策略。
+
+    wall-clock 公式（N_b = ceil(N / block_n), d = ceil(log₂(N_b))）:
+      TDM + tree_parallel: N_b × L_leaf + d × L_merge
+      TDM + chain_serial:  N_b × L_leaf + (N_b - 1) × L_merge
+      parallel + tree:     L_leaf + d × L_merge
+      parallel + chain:    L_leaf + (N_b - 1) × L_merge
+    """
+    leaf: BQLeafEngineConfig = field(default_factory=BQLeafEngineConfig)
+    merge: BQMergeEngineConfig = field(default_factory=BQMergeEngineConfig)
+    leaf_schedule: str = "tdm"             # tdm | parallel
+    merge_schedule: str = "tree_parallel"  # tree_parallel | chain_serial
+
+
+_BQ_ENGINE_CATALOG = {
+    "bq": {
+        32:  ("bq64_top32",  64, 32, 22, 133.0, "merge32", 32, 87.0),
+        64:  ("bq128_top64", 128, 64, 24, 370.0, "merge64", 64, 175.0),
+    },
+    "fps": {
+        1: ("bq64_max1", 64, 1, 22, 133.0, "merge1", 1, 1.2388),
+    },
+    "knn": {
+        3:  ("bq64_knn3",  64,  3, 22, 133.0, "merge3",   3,  8.0),
+        24: ("bq64_knn24", 64, 24, 22, 133.0, "merge24", 24, 72.0),
+        32: ("bq64_knn32", 64, 32, 22, 133.0, "merge32", 32, 87.0),
+    },
+}
+
+
+def select_bq_engine_pair(
+    k: int,
+    mode: str = "bq",
+) -> BQEngineConfig:
+    """
+    根据 k 值和模式从 catalog 选择匹配的叶+merge 引擎对。
+
+    Args:
+        k: 目标 top-k 值（BQ 的 nsample，FPS 为 1，KNN 为 3）。
+        mode: "bq" | "fps" | "knn"
+
+    Returns:
+        BQEngineConfig 配置实例。
+
+    Raises:
+        ValueError: 当 catalog 中无匹配项时。
+    """
+    mode = str(mode).strip().lower()
+    catalog = _BQ_ENGINE_CATALOG.get(mode, {})
+    if k in catalog:
+        entry = catalog[k]
+    elif catalog:
+        nearest_k = min(catalog.keys(), key=lambda ck: (abs(ck - k), ck))
+        entry = catalog[nearest_k]
+    else:
+        raise ValueError(
+            f"No BQ engine catalog for mode={mode!r}. "
+            f"Available modes: {list(_BQ_ENGINE_CATALOG.keys())}"
+        )
+    lk, lb, lo, ll, lp, mk, mki, mp = entry
+    return BQEngineConfig(
+        leaf=BQLeafEngineConfig(key=lk, block_n=lb, output_k=lo,
+                                latency_cycles=ll, power_mw=lp),
+        merge=BQMergeEngineConfig(key=mk, k=mki, latency_cycles=2, power_mw=mp),
+    )
+
+
+@dataclass
 class SortingCircuitConfig:
     """
     Sorting circuit module：仅包含 FPS/KNN 的排序与 FPS 最小距离表，与距离计算无关。
@@ -390,6 +591,8 @@ class SortingCircuitConfig:
     coarse_filter: Optional[CoarseFilterConfig] = None
     fine_filter: Optional[FineFilterConfig] = None
     threshold_gen: Optional[ThresholdGenConfig] = None
+    ball_query: Optional[BallQueryConfig] = None
+    bq_engine: Optional[BQEngineConfig] = None     # BQ 叶+merge 引擎（PointCIM/ACC）
 
 
 # =============================================================================
@@ -399,12 +602,30 @@ class SortingCircuitConfig:
 @dataclass
 class Im2ColConfig:
     """
-    Conv 的 im2col 阶段（baseline 仅 base_v1/base_v2 使用）。
-    将卷积展成矩阵乘前的数据重排与搬移，功耗与周期可标定。
+    Conv 的 im2col 前处理引擎（baseline 仅 base_v1/base_v2 使用）。
+    当前按显式数据流建模：地址生成 -> 源数据读入 -> pack/reorder -> patch 写入 im2col buffer ->
+    systolic 读取 im2col buffer 的矩阵。
     """
-    power: float = 15.0                          # mW
+    power: float = 15.0                          # 兼容旧字段：默认 pack/reorder 功耗 (mW)
     area: float = 0.0                            # um^2，可选
-    cycles_per_output: int = 1                   # 每输出点的等效周期（0=按公式）
+    cycles_per_output: int = 1                   # 兼容旧字段：每输出点等效周期（旧模型）
+
+    mode: str = "explicit"
+    addr_gen_per_cycle: int = 16                 # 每周期可生成的 patch element 地址数
+    pack_elems_per_cycle: int = 16               # 每周期可重排的 patch element 数
+    overlap_addr_and_read: bool = True           # 地址生成与源读取是否重叠
+    overlap_pack_with_write: bool = False        # pack/reorder 与 patch 写 buffer 是否重叠
+
+    addr_gen_power_mw: float = 1.5               # 地址生成控制功耗
+    input_read_ctrl_power_mw: float = 2.0        # 输入读取/调度控制功耗（不含存储访问能耗）
+    pack_reorder_power_mw: float = 15.0          # pack/reorder 核心功耗
+    col_write_ctrl_power_mw: float = 2.0         # patch 写入 col buffer 的控制功耗
+    col_read_ctrl_power_mw: float = 2.0          # col buffer 供给 systolic 的读取控制功耗
+
+    input_bus_bits: int = 256                    # 输入侧片上总线位宽
+    col_bus_bits: int = 256                      # im2col buffer 总线位宽
+    input_from_dram: bool = False                # 输入是否需要先从 DRAM refill 到片上输入 buffer
+    dram_burst_bytes: int = 64                   # DRAM burst 大小（用于等待周期/字节估计）
 
 
 @dataclass
@@ -441,12 +662,12 @@ class SystolicArrayConfig:
 @dataclass
 class BatchNorm1dConfig:
     """BatchNorm1d hardware unit."""
-    power: float = 3.1718                          # TODO: mW
-    cycles: int = 0                             # TODO: execution cycles
-    
-    area: float = 3228.0                        # um^2
+    power: float = 3.1718                          # mW @ parallelism=1
+    cycles: int = 0                                # shape-driven, 运行时按公式估算
 
-    parallelism: int = 1                        # 设计空间探索参数
+    area: float = 3228.0                           # um^2
+
+    parallelism: int = 1                           # 设计空间探索参数
 
 
 @dataclass
@@ -477,22 +698,38 @@ class ReLUConfig:
 @dataclass
 class SPoolConfig:
     """SPool (spatial pooling) hardware unit."""
-    power: float = 65.26 #26.82                         # mW @ parallelism=1
+    power: float = 62.26                         # mW @ parallelism=1
 
-    area: float = 54926.0                       # um^2 @ parallelism=1
+    area: float = 54926.0                        # um^2 @ parallelism=1
 
-    cycles: int = 0                             # shape-driven, 0 表示运行时按公式估算
-    
-    parallelism: int = 1                        # 设计空间探索参数
+    cycles: int = 0                              # shape-driven, 0 表示运行时按公式估算
+
+    parallelism: int = 1                         # 设计空间探索参数
 
 
 @dataclass
 class AdaptiveMaxPoolConfig:
     """AdaptiveMaxPool1d / MaxPool 硬件单元（与 SPool 独立）。"""
-    power: float = 13.2                         # mW @ parallelism=1
-    area: float = 18406                           # TODO: um^2
-    cycles: int = 0                             # shape-driven, 运行时按 B×C×L/par 估算
-    parallelism: int = 1                        # 设计空间探索参数
+    power: float = 13.2                          # mW @ parallelism=1
+    area: float = 18406.0                        # um^2
+    cycles: int = 0                              # shape-driven, 运行时按 B×C×L/par 估算
+    parallelism: int = 1                         # 设计空间探索参数
+
+
+@dataclass
+class SAMaxPoolConfig:
+    """
+    PointNet++ SA MaxPool 专用硬件单元：对 [B, C, nsample, nq] 沿 nsample 维度取 max。
+
+    规格（已验证）：
+      - 功耗 8.2 mW，面积 11509 um^2
+      - 每 parallelism=32 个邻居消耗 1 个周期
+      - 完整层周期 = B × C × nq × ceil(nsample / parallelism)
+    """
+    power: float = 8.2                           # mW
+    area: float = 11509.0                        # um^2
+    cycles: int = 0                              # shape-driven
+    parallelism: int = 32                        # 每周期处理的邻居数（K维并行度）
 
 
 @dataclass
@@ -550,6 +787,24 @@ class FP32DivConfig:
 
 
 @dataclass
+class InterpN3EngineConfig:
+    """
+    InterpN3Engine：FP decoder 中 3-NN 插值的专用流水引擎。
+
+    对每个输出点/query：
+    - 距离倒数 + 归一化权重生成固定 22 cycles
+    - 加权插值阶段按 ceil(4 * D2 / parallelism) cycles 建模
+
+    其中 parallelism 表示 D2 维度并行度，默认 16。
+    """
+    power: float = 68.0                         # mW，整条引擎忙时总功耗
+    area: float = 240294.0                      # um^2
+    cycles_per_query_weight: int = 22           # dist_recip / norm / weight 固定周期
+    feature_parallelism: int = 16               # D2 维度并行度
+    weighted_cycles_numerator: int = 4          # 加权插值阶段 = ceil(4 * D2 / feature_parallelism)
+
+
+@dataclass
 class ResamplerConfig:
     """
     Resampler（acc only）：FPS radii 推测采样的线性插值，分下采样/上采样两种模式。
@@ -576,18 +831,18 @@ class ResamplerConfig:
 @dataclass
 class GRFBaseEngineConfig:
     """
-    GRFBaseEngine：baseline（base mode）下 Efficient_KAN 的 KAT 因果多项式计算（数字实现）。
+    GRFBaseEngine：Efficient_KAN 的 KAT 因果多项式计算（数字实现）。
 
-    - 仅 baseline 使用；实现因果有理多项式，与 RRAM-LUT 无关。
-    - acc 模式下 KAT 由 RRAM-LUT Macro 的 rram_lut 实现，不用本配置。
-    需求（数字 GRF）：约 19 cycle/数据，23.7833 mW，47877 um^2，并行度 P。
+    - baseline 与 PointCIM 使用；实现因果有理多项式，与 RRAM-LUT 无关。
+    - acc 纯模式下 KAT 由 RRAM-LUT Macro 的 rram_lut 实现，不用本配置。
+    规格（数字 GRF，已验证）：约 19 cycle/数据，23.7833 mW，47877 um^2，并行度 P。
     """
-    power: float = 23.783                          # TODO: mW（需求约 23.7833）
-    area: float = 47887.0                           # TODO: um^2（需求约 47877）
-    
-    cycles: int = 0                             # 每数据周期，需求约 19；0 表示按公式
-    
-    parallelism: int = 1                        # 可绑定 KAT_Group 分组并行
+    power: float = 23.7833                         # mW @ parallelism=1（已验证）
+    area: float = 47877.0                          # um^2（已验证）
+
+    cycles: int = 0                                # 每数据周期约 19；0 表示按公式估算
+
+    parallelism: int = 1                           # 可绑定 KAT_Group 分组并行
 
 
 @dataclass
@@ -595,11 +850,12 @@ class LogicCircuitConfig:
     """
     Logic circuit module.
 
-    Shared ops: batchnorm1d, layernorm, relu, spool, adaptive_max_pool,
+    Shared ops: batchnorm1d, layernorm, relu, spool, adaptive_max_pool, sa_maxpool,
                quant_pipeline_8bit, quant_pipeline_12bit, dequant_pipeline（三条量化/反量化流水线），
-               fp32_add, fp32_mul, fp32_div（FP32 加减乘除统一配置）。
-    baseline: 另有 grf_base_engine（Efficient_KAN 的 KAT 因果多项式，数字）。
-    acc:      另有 resampler（FPS radii 上下采样）；KAT 由 rram_lut_macro.rram_lut 实现。
+               fp32_add, fp32_mul, fp32_div（FP32 加减乘除统一配置），
+               interp_n3_engine（FP decoder 的 3-NN 插值专用引擎）。
+    baseline / PointCIM: grf_base_engine（Efficient_KAN 的 KAT 因果多项式，数字 GRF）。
+    acc (纯模式):        KAT 由 rram_lut_macro.rram_lut 实现；另有 resampler（FPS radii 上下采样）。
 
     脚本中设置各模块并行度（设计空间探索）:
       - 直接赋值: hw_config.logic_circuit.layernorm.parallelism = 4
@@ -617,7 +873,10 @@ class LogicCircuitConfig:
     fp32_add: FP32AddConfig = field(default_factory=FP32AddConfig)
     fp32_mul: FP32MulConfig = field(default_factory=FP32MulConfig)
     fp32_div: FP32DivConfig = field(default_factory=FP32DivConfig)
-    # baseline only: KAT 因果多项式（数字），acc 下 KAT 用 rram_lut_macro.rram_lut
+    interp_n3_engine: InterpN3EngineConfig = field(default_factory=InterpN3EngineConfig)
+    sa_maxpool: SAMaxPoolConfig = field(default_factory=SAMaxPoolConfig)
+    # KAT 因果多项式（数字 GRF）：baseline 与 PointCIM 使用；
+    # acc 纯模式 (grf_base_engine=None) 下 KAT 走 rram_lut_macro.rram_lut。
     grf_base_engine: Optional[GRFBaseEngineConfig] = None
     # acc only: FPS radii 上下采样（lin_resample_1d 硬件）
     resampler: Optional[ResamplerConfig] = None
@@ -631,18 +890,26 @@ class LogicCircuitConfig:
 class DRAMConfig:
     """
     外部 DRAM：点云加载、查询点读取、结果写回等。
-    Roofline: cycles = bytes / bandwidth_bytes_per_cycle；能耗 = cycles * clock * power_mw。
+    严格模型下，周期与能耗均来自 DRAMSim3 trace 回放。
+    bandwidth_bytes_per_cycle 仅保留给旧接口/日志兼容，不再作为严格 DRAM latency 的主来源。
     功耗建议由 DRAMSim3 查表得到（见 hw_sim/cycle_simulator/memory_model）；未回填时使用固定 read_power_mw/write_power_mw。
     SCALE-Sim 脉动：可选两种方式——
     (1) 按访问次数×单次能耗：read_energy_nj_per_access / write_energy_nj_per_access（DRAMSim3 回填）；
     (2) 由 SCALE-Sim 生成 trace，转为 DRAMSim3 格式后跑仿真得能耗（见 demo_with_accelergy.py），需设置 dramsim3_bin 与 dramsim3_config_ini。
     """
-    bandwidth_bytes_per_cycle: int = 32
+    bandwidth_bytes_per_cycle: int = 32           # legacy hint for compatibility/logging; strict latency uses DRAMSim3
     read_power_mw: float = 50.0                  # 固定 fallback；可由 DRAMSim3 回填
     write_power_mw: float = 50.0                 # 固定 fallback；可由 DRAMSim3 回填
     read_energy_nj_per_access: Optional[float] = None   # DRAMSim3 回填：单次读能耗 (nJ)，SCALE-Sim 按访问计能耗
     write_energy_nj_per_access: Optional[float] = None   # DRAMSim3 回填：单次写能耗 (nJ)
     block_size_bytes: int = 64                          # 访问粒度，用于 num_accesses = ceil(bytes/block_size_bytes)
+    issue_gap: int = 1                                   # 流水线化：连续 DRAM 请求之间最小间隔（周期），与 DRAMSim3 trace 的 issue_gap 对齐
+    # Row buffer 参数（用于精细跨步访存建模，对应 DDR4 .ini timing section）
+    row_size_bytes: int = 2048                           # DRAM page size = columns * device_width / 8
+    tRCD_cycles: int = 17                                # Row activate latency（row buffer miss 时需要）
+    tRP_cycles: int = 17                                 # Precharge latency（切换 row 时需要）
+    tCAS_cycles: int = 17                                # CAS latency (CL)，row buffer hit/miss 均需
+    burst_cycles: int = 4                                # 单次 burst 传输占用周期（BL/2 for DDR）
     dramsim3_bin: Optional[str] = None                  # 可选：trace→DRAMSim3 流程的可执行文件路径
     dramsim3_config_ini: Optional[str] = None            # 可选：DRAMSim3 .ini 配置路径，与 dramsim3_bin 同时设置时用 trace 跑仿真得 DRAM 能耗
 
@@ -698,6 +965,7 @@ class InterLayerBufferConfig:
     read_energy_nj_per_access: Optional[float] = None   # CACTI 回填：单次读能耗 (nJ)
     write_energy_nj_per_access: Optional[float] = None  # CACTI 回填：单次写能耗 (nJ)
     access_time_ns: Optional[float] = None             # CACTI 回填：单次访问延迟 (ns)，统一接口用
+    area: float = 0.0                                 # CACTI 回填：物理面积（mm^2；报告时会统一换算为 um^2）
     block_size_bytes: int = 64                         # 访问粒度，用于 num_accesses = ceil(bytes/block_size_bytes)
     spill_to_dram: bool = True
     dram_bandwidth_bytes_per_cycle: int = 32
@@ -706,6 +974,27 @@ class InterLayerBufferConfig:
     pipeline_mode: str = "without_pipeline"      # feature SRAM 调度模式: without_pipeline / pipeline
     double_buffering: bool = False             # pipeline 模式下是否为层间 feature SRAM 预留双缓冲
     buffer_slots: int = 0                      # 0=自动推导；>0 时按槽数切分 size_bytes 得到每个 in-flight tensor 的可用容量
+
+
+# =============================================================================
+# Feature Computing Engine（FusionArch-inspired multi-slice/core）
+# =============================================================================
+
+@dataclass
+class FeatureComputingConfig:
+    """
+    Multi-slice/core feature computing engine config (inspired by FusionArch).
+
+    When num_slices > 1, KNN→Conv pipeline distributes query groups across
+    parallel slices; each slice processes its assigned queries sequentially
+    using cores_per_slice cores.  coalescing_factor models LHT-based DRAM
+    traffic reduction from shared neighbor features within a slice.
+    """
+    num_slices: int = 1                    # Parallel slices (1 = single-block, multi-slice disabled)
+    cores_per_slice: int = 16              # Cores per slice; each core handles one centroid's K neighbors
+    muls_per_core: int = 1024              # Multipliers (MAC units) per core
+    coalescing_factor: float = 0.0         # DRAM read savings from LHT coalescing (0 = none, 0.7 = 70 % saved)
+    normact_cycles_per_neighbor: int = 10  # BN + ReLU latency per neighbor per MLP sub-layer
 
 
 # =============================================================================
@@ -736,7 +1025,7 @@ class HardwareConfig:
     accelerator_type: AcceleratorType = AcceleratorType.BASELINE
     accelerator_name: str = "baseline"
 
-    # Global timing（数字逻辑时钟，Conv/Linear 若用 NeuroSim 则另有 mnsim_clock_period_ns）
+    # Global timing（数字逻辑时钟，Conv/Linear 若用 NeuroSim 全网络注入则另有 cim_clock_period_ns）
     clock_period: float = 1.0                   # ns，默认 1 GHz；脚本可设 --logic_clk_freq 覆盖
 
     # Five macro-level modules
@@ -763,11 +1052,32 @@ class HardwareConfig:
     inter_layer_buffer: InterLayerBufferConfig = field(
         default_factory=InterLayerBufferConfig
     )
+    # Dedicated SRAM buffers (CACTI-backed) for distance/FPS/KNN paths.
+    xyz_sram_buffer: Optional[InterLayerBufferConfig] = None
+    query_xyz_sram_buffer: Optional[InterLayerBufferConfig] = None
+    dist_sram_buffer: Optional[InterLayerBufferConfig] = None
+    self_distance_sram_buffer: Optional[InterLayerBufferConfig] = None
+    fps_min_distance_table_sram: Optional[InterLayerBufferConfig] = None
+    residual_sram_buffer: Optional[InterLayerBufferConfig] = None
+    state_sram_buffer: Optional[InterLayerBufferConfig] = None
+    nonlinear_workspace_sram: Optional[InterLayerBufferConfig] = None
+    nonlinear_param_sram: Optional[InterLayerBufferConfig] = None
+    temp_max_distance_sram: Optional[InterLayerBufferConfig] = None
+    topk_sram_buffer: Optional[InterLayerBufferConfig] = None
+    fps_index_sram_buffer: Optional[InterLayerBufferConfig] = None
+    sort_cache_sram: Optional[InterLayerBufferConfig] = None
+    im2col_buffer: Optional[InterLayerBufferConfig] = None
+    # Feature Computing multi-slice/core engine (FusionArch-inspired)
+    feature_computing: Optional[FeatureComputingConfig] = None
     # DRAM：点云/激活加载与写回，roofline + 功耗（可接 CACTI）
     dram: Optional[DRAMConfig] = None
     # SRAM-II：距离计算专用，128 行激活、2bit 距离
     sram_ii: Optional[SRAM_IIConfig] = None
+    # PointCIM 专用：RRAM VMM 距离计算阵列（与 sram_cim_macro 距离路径互斥）
+    rram_dist: Optional[RRAMDistArrayConfig] = None
     # 架构开关
+    # use_rram_dist=True：距离计算由 RRAM VMM 实现（PointCIM 模式），否则使用 SRAM-CIM
+    use_rram_dist: bool = False
     # distance_in_phase2=True：FPS/KNN 的距离计算(stage1-4)归入 Phase2，引擎只做 bitonic/排序
     distance_in_phase2: bool = True
     # distance_include_query_dram_read=True：Phase2 距离前，建模 query 点从 DRAM 读入
@@ -776,22 +1086,63 @@ class HardwareConfig:
     fps_engine_mode: str = "baseline"
     # KNN 引擎模式：baseline/fuse（fuse 使用 coarse+fine 两级筛选事件模型）
     knn_engine_mode: str = "baseline"
+    # BQ merge adder 并行度：PointCIM 模式下 merge adder 每批产出距离数，
+    # 对齐 BQ 叶引擎 block_n 实现流式 producer-consumer（默认 64 对齐 bq64_top32）
+    bq_merge_adder_parallelism: int = 0  # 0 = 使用 cim_parallelism fallback
     # acc KNN 动态阈值：用硬件友好的平均收敛轮数代替软件 while-loop
     # 含义：完成一次 block 粗筛并写入 topk SRAM 后，平均还需要多少轮 threshold refine。
     # 1 表示只做首轮粗筛后直接细筛；2 表示再做 1 轮 refine；依此类推。
     knn_dynamic_threshold_rounds_mean: int = 1
     # bn_fuse_with_conv_linear=True：推理时 BN 紧跟 Conv/Linear 则融合，不计 BN cycle/能耗
     bn_fuse_with_conv_linear: bool = True
+    # pointcim_sa_conv_pipeline=True：PointCIM 模式下，每个 query 的 BallQuery 完成后
+    # 立即将其 K 个邻居的特征送入后续 Conv2d(kernel_size=1)-BN-ReLU 流水线，
+    # 与下一个 query 的 FPS+BQ 并行执行，实现 SA sample_and_group ↔ MLP 流水线。
+    # 仅在 use_rram_dist=True 且 is_acc=True（PointCIM 模式）时生效。
+    pointcim_sa_conv_pipeline: bool = False
     # W8A8：Conv/Linear 前插入量化(FP32→INT8)、后插入反量化(INT8→FP32)，供 BN/ReLU 等浮点非线性使用
     enable_w8a8_quant_dequant: bool = False
-    # CIM 后端：mnsim（PE 级/全 NetStruct）、neurosim（DNN_NeuroSim main）、fallback（解析回退）
-    cim_backend: str = "mnsim"
-    # NeuroSim 根目录（Inference_pytorch），用于 cim_backend=neurosim 时调用 NeuroSIM/main
+    # CIM 后端：neurosim（DNN_NeuroSim）、fallback（保留枚举；PE 级仍走 NeuroSim 适配器内置回退）
+    cim_backend: str = "neurosim"
+    # NeuroSim 根目录（Inference_pytorch），用于调用 NeuroSIM/main
     neurosim_root: str = "/workspace/DNN_NeuroSim_V1.4/Inference_pytorch"
+    # NeuroSim 单层/全网络运行频率（Hz）；None 表示未显式指定
+    neurosim_clk_freq_hz: Optional[float] = None
+    # NeuroSim 时钟模式：
+    # - capped（默认）：使用 max(关键路径 clkPeriod, 用户 NEUROSIM_CLK_FREQ 对应周期) 作为工作周期（保守，用户可降频）。
+    # - critical：忽略用户频率上限，仅按关键路径 clkPeriod 估算（用于“按最坏关键路径频率”对比）。
+    neurosim_clk_mode: str = "capped"
+    # NeuroSim ADC column mux（numColMuxed）：多少列共享 1 个 ADC / SenseAmp。
+    # None/<=0：使用 NeuroSim 默认（通常为 8），保持旧行为；
+    # 典型对齐策略：numColMuxed = numColPerSynapse = ceil(wl_weight / cellBit)，例如 W4A4 时取 4。
+    neurosim_num_col_muxed: Optional[int] = None
+    # NeuroSim iso-hardware overrides（Conventional Mapping / CM）
+    neurosim_force_tile_size_cm: Optional[int] = None
+    neurosim_force_pe_size_cm: Optional[int] = None
+    neurosim_force_num_tiles_cm: Optional[int] = None
+    # NeuroSim 激活相关（仅 subprocess NeuroSIM/main argv 生效；与 _run_neurosim_main 固定 15 项尾部对齐）
+    # neurosim_relu_mode: 1=ReLU，0=Sigmoid，None=保持 NeuroSim 默认
+    neurosim_relu_mode: Optional[int] = None
+    # neurosim_chip_activation_mode: 1=chip-level activation，0=tile-level activation，None=保持默认
+    neurosim_chip_activation_mode: Optional[int] = None
+    # neurosim_enable_activation: 1=计入片上激活路径，0=关闭，None=保持默认
+    neurosim_enable_activation: Optional[int] = None
+    # True: Conv/Linear 单层 NeuroSim 优先走 pybind（失败时再回退 subprocess）
+    neurosim_pybind: bool = False
     # Baseline 脉动阵列：是否用 SCALE-Sim 统计周期与 MAC/访问（能耗仍用本工程内存建模）
     use_scalesim_for_systolic: bool = False
     scalesim_root: str = ""           # 空则用环境变量 SCALE_SIM_ROOT 或默认 /workspace/SCALE-Sim
     scalesim_config_path: str = ""    # 空则用 scalesim_root/configs/demo_64x64_32kb_ws.cfg
+    # base_v3 距离矩阵复用：第一层 SA/GAM 存全局距离矩阵到 DRAM，后续 SA/FP 层读子矩阵
+    distance_matrix_reuse: bool = False
+    # 转置存储：将距离矩阵按 dist_T[N, Q]（列主序）写入 DRAM，
+    # 使 FP 层（上采样方向）读取变为连续行读，代价是写入变为跨步写、SA 层读取变为跨步读。
+    # FP 大矩阵转置读是主要瓶颈，此选项以 overlapped 写开销换取关键路径读延迟缩减。
+    distance_matrix_transpose_store: bool = False
+    # NS 引擎仿真模式："event"=事件驱动估算（默认），"cycle_accurate"=逐周期仿真（FusionArch 风格）
+    ns_simulation_mode: str = "event"
+    # 兼容旧模型保留；新 InterpN3Engine 默认读取 logic_circuit.interp_n3_engine.feature_parallelism。
+    interp_engine_parallelism: int = 128
 
     # =========================================================================
     # Derived convenience properties
@@ -816,9 +1167,19 @@ class HardwareConfig:
         return self.accelerator_type == AcceleratorType.ACC
 
     @property
+    def is_pointcim(self) -> bool:
+        """True 表示 PointCIM 模式：acc 架构 + RRAM VMM 距离计算（use_rram_dist=True）。"""
+        return self.accelerator_type == AcceleratorType.ACC and self.use_rram_dist
+
+    @property
     def is_baseline_v2(self) -> bool:
         """True 表示 baseline_v2（merge_sort 流式 FPS/KNN），False 表示 baseline_v1（bitonic）或 acc。"""
         return getattr(self, "accelerator_name", "") == "base_v2"
+
+    @property
+    def is_base_v3(self) -> bool:
+        """True 表示 base_v3（距离矩阵复用，第一层存 DRAM 后续层读子矩阵）。"""
+        return getattr(self, "accelerator_name", "") == "base_v3"
 
     # =========================================================================
     # Utility methods
@@ -864,6 +1225,8 @@ class HardwareConfig:
             modules['fine_filter'] = self.sorting_circuit.fine_filter
         if self.sorting_circuit.threshold_gen is not None:
             modules['threshold_gen'] = self.sorting_circuit.threshold_gen
+        if self.sorting_circuit.ball_query is not None:
+            modules['ball_query'] = self.sorting_circuit.ball_query
         # Baseline 特征计算（仅 base_v1/base_v2）
         if self.systolic_array is not None:
             modules['systolic_array'] = self.systolic_array
@@ -882,6 +1245,8 @@ class HardwareConfig:
         modules['fp32_add'] = self.logic_circuit.fp32_add
         modules['fp32_mul'] = self.logic_circuit.fp32_mul
         modules['fp32_div'] = self.logic_circuit.fp32_div
+        modules['interp_n3_engine'] = self.logic_circuit.interp_n3_engine
+        modules['sa_maxpool'] = self.logic_circuit.sa_maxpool
         if self.logic_circuit.grf_base_engine is not None:
             modules['grf_base_engine'] = self.logic_circuit.grf_base_engine
         if self.logic_circuit.resampler is not None:
@@ -992,7 +1357,7 @@ def _build_baseline() -> HardwareConfig:
             enabled=False,
         ),
 
-        baseline_dist2_engine=BaselineDist2EngineConfig(),  # 94 mW, 89884 um^2
+        baseline_dist2_engine=BaselineDist2EngineConfig(),  # 95 mW, 242750 um^2
         sorting_circuit=SortingCircuitConfig(
             min_distance_table=MinDistanceTableConfig(
                 power=4.3,                      # mW (baseline min-distance update engine)
@@ -1002,6 +1367,7 @@ def _build_baseline() -> HardwareConfig:
             bitonic_sort=BitonicSortConfig(),   # 1570/1540 mW, 2157561 um^2
             coarse_filter=None,
             fine_filter=None,
+            ball_query=BallQueryConfig(),       # 占位，功耗面积待 VLSI 校准
         ),
         systolic_array=SystolicArrayConfig(),   # base_v1: 特征计算 N×N 脉动阵列
         im2col=Im2ColConfig(),                 # base_v1: Conv 的 im2col 阶段
@@ -1029,6 +1395,104 @@ def _build_baseline() -> HardwareConfig:
             dram_read_power_mw=50.0,
             dram_write_power_mw=50.0,
         ),
+        xyz_sram_buffer=InterLayerBufferConfig(
+            size_bytes=5 * 1024,
+            bandwidth_bytes_per_cycle=64,
+            read_power_mw=2.0,
+            write_power_mw=2.0,
+            spill_to_dram=True,
+        ),
+        query_xyz_sram_buffer=InterLayerBufferConfig(
+            size_bytes=1 * 1024,
+            bandwidth_bytes_per_cycle=64,
+            read_power_mw=2.0,
+            write_power_mw=2.0,
+            spill_to_dram=True,
+            block_size_bytes=16,
+        ),
+        dist_sram_buffer=InterLayerBufferConfig(
+            size_bytes=4 * 1024,
+            bandwidth_bytes_per_cycle=64,
+            read_power_mw=2.0,
+            write_power_mw=2.0,
+            spill_to_dram=True,
+        ),
+        self_distance_sram_buffer=InterLayerBufferConfig(
+            size_bytes=4 * 1024,
+            bandwidth_bytes_per_cycle=64,
+            read_power_mw=2.0,
+            write_power_mw=2.0,
+            spill_to_dram=True,
+        ),
+        fps_min_distance_table_sram=InterLayerBufferConfig(
+            size_bytes=4 * 1024,
+            bandwidth_bytes_per_cycle=64,
+            read_power_mw=2.0,
+            write_power_mw=2.0,
+            spill_to_dram=True,
+        ),
+        residual_sram_buffer=InterLayerBufferConfig(
+            size_bytes=128 * 1024,
+            bandwidth_bytes_per_cycle=256,
+            read_power_mw=2.0,
+            write_power_mw=2.0,
+            spill_to_dram=True,
+        ),
+        state_sram_buffer=InterLayerBufferConfig(
+            size_bytes=8 * 1024,
+            bandwidth_bytes_per_cycle=64,
+            read_power_mw=2.0,
+            write_power_mw=2.0,
+            spill_to_dram=True,
+            block_size_bytes=16,
+        ),
+        nonlinear_workspace_sram=InterLayerBufferConfig(
+            size_bytes=32 * 1024,
+            bandwidth_bytes_per_cycle=256,
+            read_power_mw=2.0,
+            write_power_mw=2.0,
+            spill_to_dram=True,
+        ),
+        nonlinear_param_sram=InterLayerBufferConfig(
+            size_bytes=4 * 1024,
+            bandwidth_bytes_per_cycle=64,
+            read_power_mw=2.0,
+            write_power_mw=2.0,
+            spill_to_dram=True,
+            block_size_bytes=16,
+        ),
+        temp_max_distance_sram=InterLayerBufferConfig(
+            size_bytes=128 * 1024,
+            bandwidth_bytes_per_cycle=32,
+            read_power_mw=2.0,
+            write_power_mw=2.0,
+            spill_to_dram=True,
+            block_size_bytes=16,
+        ),
+        topk_sram_buffer=InterLayerBufferConfig(
+            size_bytes=2 * 1024,
+            bandwidth_bytes_per_cycle=64,
+            read_power_mw=2.0,
+            write_power_mw=2.0,
+            spill_to_dram=True,
+            block_size_bytes=16,
+        ),
+        fps_index_sram_buffer=InterLayerBufferConfig(
+            size_bytes=2 * 1024,
+            bandwidth_bytes_per_cycle=64,
+            read_power_mw=2.0,
+            write_power_mw=2.0,
+            spill_to_dram=True,
+            block_size_bytes=16,
+        ),
+        sort_cache_sram=InterLayerBufferConfig(
+            size_bytes=2 * 1024,
+            bandwidth_bytes_per_cycle=64,
+            read_power_mw=2.0,
+            write_power_mw=2.0,
+            spill_to_dram=True,
+            block_size_bytes=16,
+        ),
         dram=DRAMConfig(
             bandwidth_bytes_per_cycle=32,
             read_power_mw=50.0,
@@ -1047,7 +1511,7 @@ def _build_baseline() -> HardwareConfig:
 
 def _build_base_v2() -> HardwareConfig:
     """
-    Build **base_v2** accelerator：与 baseline（base_v1）同构，但排序电路为 MergeSort，
+    Build base_v2 accelerator：与 baseline（base_v1）同构，但排序电路为 MergeSort，
     配合 dist2_engine 64 点带宽做流式 FPS/KNN（FPS 每批 64 局部 max 22cy/310mW，KNN 每批 top32 22cy/312mW）。
     """
     cfg = _build_baseline()
@@ -1061,6 +1525,22 @@ def _build_base_v2() -> HardwareConfig:
         coarse_filter=None,
         fine_filter=None,
     )
+    return cfg
+
+
+def _build_base_v3() -> HardwareConfig:
+    """
+    Build base_v3 accelerator：与 baseline（base_v1）同硬件，但启用距离矩阵复用。
+
+    第一层 SA/GAM KNN 计算完距离后流式写入 DRAM，后续 SA/GAM 层和所有 FP 层
+    跳过距离计算，改为从 DRAM 读取已存储距离矩阵的子集。
+    距离矩阵按转置布局 dist_T[N, Q] 存储，使 FP 层大矩阵读取为连续访问，
+    代价是第一层流式写变为跨步写（overlapped，不影响关键路径）。
+    """
+    cfg = _build_baseline()
+    cfg.accelerator_name = "base_v3"
+    cfg.distance_matrix_reuse = True
+    cfg.distance_matrix_transpose_store = True
     return cfg
 
 
@@ -1124,11 +1604,21 @@ def _build_acc() -> HardwareConfig:
                 power=5.0,                       # mW，标称；可由 LUT 工具标定
                 area=0.0,
                 cycles=1,
+                default_mode="rram_pwl",
+                pwl_power=0.5655,
+                pwl_area=882.0,
+                pwl_parallelism=1,
+                pwl_overhead_cycles=1,
             ),
             rram_lut_speculative=RRAMLutConfig(  # for speculative sampling
                 power=5.0,                       # mW，标称
                 area=0.0,
                 cycles=1,
+                default_mode="rram_pwl",
+                pwl_power=0.5655,
+                pwl_area=882.0,
+                pwl_parallelism=1,
+                pwl_overhead_cycles=1,
             ),
         ),
 
@@ -1162,6 +1652,7 @@ def _build_acc() -> HardwareConfig:
                 area=3297.0,                    # um^2 = 2024 + 1273
                 cycles=1,
             ),
+            ball_query=BallQueryConfig(),       # 占位，功耗面积待 VLSI 校准
         ),
 
         logic_circuit=LogicCircuitConfig(
@@ -1186,6 +1677,104 @@ def _build_acc() -> HardwareConfig:
             dram_read_power_mw=50.0,
             dram_write_power_mw=50.0,
         ),
+        xyz_sram_buffer=InterLayerBufferConfig(
+            size_bytes=5 * 1024,
+            bandwidth_bytes_per_cycle=64,
+            read_power_mw=2.0,
+            write_power_mw=2.0,
+            spill_to_dram=True,
+        ),
+        query_xyz_sram_buffer=InterLayerBufferConfig(
+            size_bytes=1 * 1024,
+            bandwidth_bytes_per_cycle=64,
+            read_power_mw=2.0,
+            write_power_mw=2.0,
+            spill_to_dram=True,
+            block_size_bytes=16,
+        ),
+        dist_sram_buffer=InterLayerBufferConfig(
+            size_bytes=4 * 1024,
+            bandwidth_bytes_per_cycle=64,
+            read_power_mw=2.0,
+            write_power_mw=2.0,
+            spill_to_dram=True,
+        ),
+        self_distance_sram_buffer=InterLayerBufferConfig(
+            size_bytes=4 * 1024,
+            bandwidth_bytes_per_cycle=64,
+            read_power_mw=2.0,
+            write_power_mw=2.0,
+            spill_to_dram=True,
+        ),
+        fps_min_distance_table_sram=InterLayerBufferConfig(
+            size_bytes=4 * 1024,
+            bandwidth_bytes_per_cycle=64,
+            read_power_mw=2.0,
+            write_power_mw=2.0,
+            spill_to_dram=True,
+        ),
+        residual_sram_buffer=InterLayerBufferConfig(
+            size_bytes=128 * 1024,
+            bandwidth_bytes_per_cycle=256,
+            read_power_mw=2.0,
+            write_power_mw=2.0,
+            spill_to_dram=True,
+        ),
+        state_sram_buffer=InterLayerBufferConfig(
+            size_bytes=8 * 1024,
+            bandwidth_bytes_per_cycle=64,
+            read_power_mw=2.0,
+            write_power_mw=2.0,
+            spill_to_dram=True,
+            block_size_bytes=16,
+        ),
+        nonlinear_workspace_sram=InterLayerBufferConfig(
+            size_bytes=32 * 1024,
+            bandwidth_bytes_per_cycle=256,
+            read_power_mw=2.0,
+            write_power_mw=2.0,
+            spill_to_dram=True,
+        ),
+        nonlinear_param_sram=InterLayerBufferConfig(
+            size_bytes=4 * 1024,
+            bandwidth_bytes_per_cycle=64,
+            read_power_mw=2.0,
+            write_power_mw=2.0,
+            spill_to_dram=True,
+            block_size_bytes=16,
+        ),
+        temp_max_distance_sram=InterLayerBufferConfig(
+            size_bytes=128 * 1024,
+            bandwidth_bytes_per_cycle=32,
+            read_power_mw=2.0,
+            write_power_mw=2.0,
+            spill_to_dram=True,
+            block_size_bytes=16,
+        ),
+        topk_sram_buffer=InterLayerBufferConfig(
+            size_bytes=2 * 1024,
+            bandwidth_bytes_per_cycle=64,
+            read_power_mw=2.0,
+            write_power_mw=2.0,
+            spill_to_dram=True,
+            block_size_bytes=16,
+        ),
+        fps_index_sram_buffer=InterLayerBufferConfig(
+            size_bytes=2 * 1024,
+            bandwidth_bytes_per_cycle=64,
+            read_power_mw=2.0,
+            write_power_mw=2.0,
+            spill_to_dram=True,
+            block_size_bytes=16,
+        ),
+        sort_cache_sram=InterLayerBufferConfig(
+            size_bytes=2 * 1024,
+            bandwidth_bytes_per_cycle=64,
+            read_power_mw=2.0,
+            write_power_mw=2.0,
+            spill_to_dram=True,
+            block_size_bytes=16,
+        ),
         dram=DRAMConfig(bandwidth_bytes_per_cycle=32, read_power_mw=50.0, write_power_mw=50.0),
         sram_ii=SRAM_IIConfig(active_rows=128, bits_per_axis=12, bit_slice=2, power_mw=0.0),
         distance_in_phase2=True,
@@ -1195,6 +1784,68 @@ def _build_acc() -> HardwareConfig:
     ))
 
 
+def _build_pointcim() -> HardwareConfig:
+    """
+    Build **PointCIM** accelerator configuration.
+
+    PointCIM = acc 架构（coarse+fine filter、resampler、GRFEngine KAN）
+             + RRAM VMM 距离计算（替代 SRAM-CIM 路径）。
+
+    距离计算流程（per SA layer）：
+      1. RRAM 写入（one-time）：将 N 个点的 xyz 坐标编程到 RRAM 阵列
+      2. RRAM VMM（per query）：cross-mode 广播查询点，一次读出 N 个距离的 cross-term
+      3. 数字后处理：q² + rram_output + k² → 最终 d²
+    FPS/KNN 排序、MLP 特征提取与 acc 模式完全相同。
+
+    RRAMDistArrayConfig 中的能耗/延迟原语默认为 0.0（占位），
+    需在使用前通过以下命令从 DESTINY/MICSim 提取并填充：
+      python hw_sim/cycle_simulator/destiny_3d_cache/matrix_power_estimator.py \\
+             --M 3 --K 1024 --bits 12 ...
+    """
+    cfg = _build_acc()
+    cfg.accelerator_name = "pointcim"
+    # PointCIM 的 Conv/Linear 单层估算走 NeuroSim。
+    cfg.cim_backend = "neurosim"
+    cfg.use_rram_dist = True
+    # PointCIM 的 KAN/KAT 使用 GRFEngine（数字因果有理多项式），不用 RRAM-LUT。
+    cfg.logic_circuit.grf_base_engine = GRFBaseEngineConfig()
+    # BQ 叶+merge 引擎（默认 bq64_top32，merge adder 并行度=64 对齐叶引擎 block_n）
+    bq_cfg = select_bq_engine_pair(k=32, mode="bq")
+    cfg.sorting_circuit.bq_engine = bq_cfg
+    cfg.bq_merge_adder_parallelism = bq_cfg.leaf.block_n  # 64
+    cfg.rram_dist = RRAMDistArrayConfig(
+        # RRAM 物理参数
+        array_rows=128,
+        array_cols=128,
+        coord_dims=3,
+        coord_bits=12,
+        input_bits=12,
+        mapping_mode="diagonal",
+        word_width=128,
+        # RRAM 写入原语（占位 0.0，可由 DESTINY 填充）
+        write_energy_pj_per_op=0.0,
+        write_latency_ns_per_op=0.0,
+        power_write_mw=0.0,
+        area_mm2=0.0,
+        # 数字后处理
+        self_term_power_mw=0.0,
+        self_term_cycles=3,
+        sum_power_mw=0.0,
+        sum_cycles=1,
+        # MICSim 参数（与 matrix_power_estimator.py --distance_backend micsim 口径一致）
+        micsim_root="/workspace/MICSim_V1.0",
+        micsim_clk_freq_hz=1e9,
+        micsim_adc_clk_freq_hz=2e8,
+        micsim_sar_column_power_uw=128.0,
+        micsim_level_output=64,
+        micsim_static_mem_type="rram",
+        micsim_static_ron_ohm=240000.0,
+        micsim_static_roff_ohm=24000000.0,
+        micsim_static_cell_bit=1,
+    )
+    return cfg
+
+
 # =============================================================================
 # Accelerator Registry
 # =============================================================================
@@ -1202,7 +1853,9 @@ def _build_acc() -> HardwareConfig:
 _ACCELERATOR_REGISTRY: Dict[str, Callable[[], HardwareConfig]] = {
     'baseline': _build_baseline,   # base_v1: bitonic sort
     'base_v2': _build_base_v2,     # MergeSort 流式 FPS/KNN，配合 dist2_engine 64 带宽
+    'base_v3': _build_base_v3,     # base_v1 硬件 + 距离矩阵复用（第一层存 DRAM，后续层读子矩阵）
     'acc': _build_acc,
+    'pointcim': _build_pointcim,   # acc 架构 + RRAM VMM 距离 + GRFEngine KAN（PointCIM 模式）
 }
 
 
@@ -1213,10 +1866,12 @@ def get_accelerator_config(name: str) -> HardwareConfig:
     Available:
       - 'baseline': base_v1，bitonic sort，single rram-lut，grf_base_engine，no resampler
       - 'base_v2':  MergeSort 流式 FPS/KNN，配合 dist2_engine 64 带宽（FPS 局部 max 22cy，KNN top32 22cy）
+      - 'base_v3':  base_v1 硬件 + 距离矩阵复用（第一层存 DRAM，后续层读子矩阵，FP 转置跨步读）
       - 'acc':      two-stage comparator，dual rram-lut，resampler
+      - 'pointcim': acc 架构 + RRAM VMM 距离 + GRFEngine KAN（SRAM-CIM 距离路径由 RRAM 替代，KAN 走数字 GRF）
 
     Args:
-        name: Accelerator name ('baseline', 'base_v2', or 'acc').
+        name: Accelerator name ('baseline', 'base_v2', 'base_v3', 'acc', or 'pointcim').
 
     Returns:
         HardwareConfig instance.
