@@ -24,11 +24,15 @@ import math
 import os
 import sys
 import tempfile
+import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..configs.hw_config import HardwareConfig
+
+from .dramsim_utils import parse_dramsim3_burst_bytes as _parse_dramsim3_burst_bytes
+from .dramsim_utils import read_dramsim3_ini as _read_dramsim3_ini
 
 # 默认 SCALE-Sim 根目录（可被环境变量覆盖）
 DEFAULT_SCALE_SIM_ROOT = os.environ.get("SCALE_SIM_ROOT", "/workspace/SCALE-Sim")
@@ -48,6 +52,48 @@ def _log_scalesim_array_size_once(rows: int, cols: int, op_kind: str, layer_name
         log_info(f"SCALE-Sim 阵列尺寸: {rows}×{cols}（{op_kind} 首层 {layer_name}，后续层同）")
     except Exception:
         pass
+
+
+def _build_scalesim_progress_prefix(
+    op_kind: str,
+    layer_name: str,
+    *,
+    progress_index: Optional[int] = None,
+    progress_total: Optional[int] = None,
+) -> str:
+    op_label = str(op_kind or "layer").strip() or "layer"
+    layer_label = str(layer_name or "").strip() or "unnamed"
+    if progress_index is not None and progress_total is not None:
+        return f"SCALE-Sim progress [{op_label} {int(progress_index)}/{int(progress_total)} {layer_label}]"
+    return f"SCALE-Sim progress [{op_label} {layer_label}]"
+
+
+def _log_scalesim_progress(
+    op_kind: str,
+    layer_name: str,
+    message: str,
+    *,
+    progress_index: Optional[int] = None,
+    progress_total: Optional[int] = None,
+) -> None:
+    try:
+        from ..utils.logger import log_info
+
+        prefix = _build_scalesim_progress_prefix(
+            op_kind,
+            layer_name,
+            progress_index=progress_index,
+            progress_total=progress_total,
+        )
+        log_info(f"{prefix} {message}")
+    except Exception:
+        pass
+
+
+def _format_elapsed_seconds(elapsed_s: float) -> str:
+    if elapsed_s < 1.0:
+        return f"{elapsed_s:.2f}s"
+    return f"{elapsed_s:.1f}s"
 
 
 def _strip_keys(d: dict) -> dict:
@@ -341,23 +387,6 @@ def _estimate_scalesim_filter_bytes(op_kind: str, *, in_channels: int = 0, out_c
     return max(1, in_features) * max(1, out_features) * max(1, bytes_per_access)
 
 
-def _read_dramsim3_ini(config_path: str) -> Optional[configparser.ConfigParser]:
-    parser = configparser.ConfigParser(inline_comment_prefixes=("#", ";"))
-    parser.optionxform = str
-    try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            content = f.read()
-    except OSError:
-        return None
-
-    ini_text = content if content.lstrip().startswith("[") else "[system]\n" + content
-    try:
-        parser.read_string(ini_text)
-    except configparser.Error:
-        return None
-    return parser
-
-
 def _parse_dramsim3_tck_ns(config_path: str) -> float:
     parser = _read_dramsim3_ini(config_path)
     if parser is None:
@@ -369,21 +398,6 @@ def _parse_dramsim3_tck_ns(config_path: str) -> float:
             except ValueError:
                 return 1.0
     return 1.0
-
-
-def _parse_dramsim3_burst_bytes(config_path: str) -> int:
-    parser = _read_dramsim3_ini(config_path)
-    if parser is None:
-        return 64
-    try:
-        bus_width = int(parser.get("system", "bus_width", fallback="64"))
-    except Exception:
-        bus_width = 64
-    try:
-        burst_length = int(parser.get("dram_structure", "BL", fallback="8"))
-    except Exception:
-        burst_length = 8
-    return max(1, int((max(1, bus_width) * max(1, burst_length)) // 8))
 
 
 def _log_scalesim_memory_config_once(tag: str, info: Dict[str, Any]) -> None:
@@ -626,6 +640,15 @@ def _normalize_trace_cycle(cycle: int, min_cycle: int) -> int:
     return max(0, int(cycle - min_cycle))
 
 
+def _scan_min_cycle(trace_csvs: List[Tuple[str, bool]]) -> Optional[int]:
+    min_cycle: Optional[int] = None
+    for trace_path, _ in trace_csvs:
+        for cycle, _ in _iter_scalesim_trace_csv(trace_path):
+            if min_cycle is None or cycle < min_cycle:
+                min_cycle = cycle
+    return min_cycle
+
+
 def _run_dramsim3_for_trace_csvs(
     hw_config: Optional["HardwareConfig"],
     trace_csvs: List[Tuple[str, bool]],
@@ -656,43 +679,39 @@ def _run_dramsim3_for_trace_csvs(
     try:
         from memory_model.dramsim3_runner import DRAMSim3Runner
         from memory_model.memory_system import MemorySystem
-        from memory_model.dram_trace import DRAMTrace
     except Exception:
         return None
 
     bytes_per_access = _get_scalesim_data_bytes(hw_config)
     burst_bytes = _parse_dramsim3_burst_bytes(dramsim3_ini)
-    burst_events: Dict[Tuple[int, bool], set] = {}
-    for trace_path, is_write in trace_csvs:
-        for cycle, addrs in _iter_scalesim_trace_csv(trace_path):
-            bucket = burst_events.setdefault((cycle, is_write), set())
-            for addr in addrs:
-                byte_addr = int(addr) * max(1, bytes_per_access)
-                burst_addr = (byte_addr // burst_bytes) * burst_bytes
-                bucket.add(burst_addr)
-    if not burst_events:
+    min_cycle = _scan_min_cycle(trace_csvs)
+    if min_cycle is None:
         return None
-
-    raw_events: List[Tuple[int, int, bool]] = []
-    for (cycle, is_write), burst_addrs in burst_events.items():
-        for burst_addr in sorted(burst_addrs):
-            raw_events.append((cycle, burst_addr, is_write))
-
-    min_cycle = min(ev[0] for ev in raw_events)
-    trace = DRAMTrace()
-    for cycle, addr, is_write in sorted(raw_events, key=lambda x: (x[0], x[2], x[1])):
-        norm_cycle = _normalize_trace_cycle(cycle, min_cycle)
-        if is_write:
-            trace.add_write(int(addr), norm_cycle)
-        else:
-            trace.add_read(int(addr), norm_cycle)
 
     out_root = os.path.join(memory_model_repo, "outputs", "dramsim3", "scalesim_access")
     os.makedirs(out_root, exist_ok=True)
     safe_tag = str(access_tag or "scalesim_trace").replace("/", "_")
     trace_dir = tempfile.mkdtemp(prefix=f"{layer_name}_{safe_tag}_", dir=out_root)
     trace_path = os.path.join(trace_dir, f"{safe_tag}.trace")
-    trace.dump(trace_path)
+    max_cycle = 0
+    event_count = 0
+    with open(trace_path, "w", encoding="utf-8") as f:
+        for trace_path_csv, is_write in trace_csvs:
+            for cycle, addrs in _iter_scalesim_trace_csv(trace_path_csv):
+                norm_cycle = _normalize_trace_cycle(cycle, min_cycle)
+                if norm_cycle > max_cycle:
+                    max_cycle = norm_cycle
+                burst_addrs: set = set()
+                for addr in addrs:
+                    byte_addr = int(addr) * max(1, bytes_per_access)
+                    burst_addr = (byte_addr // burst_bytes) * burst_bytes
+                    burst_addrs.add(burst_addr)
+                if not burst_addrs:
+                    continue
+                op = "WRITE" if is_write else "READ"
+                for burst_addr in sorted(burst_addrs):
+                    f.write(f"0x{burst_addr:x} {op} {norm_cycle}\n")
+                    event_count += 1
 
     config_path = resolve_dramsim3_config_path(hw_config, trace_dir) or dramsim3_ini
     dram_clock_period_ns = _parse_dramsim3_tck_ns(config_path)
@@ -713,7 +732,6 @@ def _run_dramsim3_for_trace_csvs(
 
     runner = DRAMSim3Runner(dramsim3_bin=dramsim3_bin, work_root=os.path.join(cycle_sim_abs, "DRAMsim3"))
     memsys = MemorySystem({}, runner)
-    max_cycle = max(_normalize_trace_cycle(ev[0], min_cycle) for ev in raw_events)
     num_cycles = max(100000, max_cycle + 10000)
     result = memsys.run_dram_trace(config_path=config_path, trace_path=trace_path, num_cycles=num_cycles, output_dir=trace_dir)
     metrics = memsys._extract_dram_metrics(result)
@@ -725,7 +743,7 @@ def _run_dramsim3_for_trace_csvs(
     write_pj = float(js.get("write_energy") or 0.0)
     energy_nj = (read_pj + write_pj) / 1000.0
     done_cycle = memsys._estimate_refill_done_cycle(max_cycle, result)
-    bytes_total = len(raw_events) * burst_bytes
+    bytes_total = event_count * burst_bytes
 
     return {
         "energy_nj": float(energy_nj),
@@ -1076,6 +1094,8 @@ def run_scalesim_conv1d_layer(
     kernel_size: int,
     num_points: int,
     layer_name: str = "conv1d",
+    progress_index: Optional[int] = None,
+    progress_total: Optional[int] = None,
     scalesim_root: Optional[str] = None,
     config_path: Optional[str] = None,
     run_name: Optional[str] = None,
@@ -1105,6 +1125,14 @@ def run_scalesim_conv1d_layer(
     except ImportError:
         return ScalesimLayerResult(success=False, message="scalesim not importable (SCALE-Sim not installed)")
 
+    layer_t0 = time.perf_counter()
+    _log_scalesim_progress(
+        "conv1d",
+        layer_name,
+        f"start (in_ch={channels}, out_ch={num_filter}, kernel={filter_w}, points={ifmap_w})",
+        progress_index=progress_index,
+        progress_total=progress_total,
+    )
     with tempfile.TemporaryDirectory(prefix="pointkan_scalesim_") as tmp:
         # 阵列尺寸由 hw_config.systolic_array.rows/cols 传入 SCALE-Sim（ArrayHeight/ArrayWidth）
         rows, cols = 64, 64
@@ -1114,6 +1142,7 @@ def run_scalesim_conv1d_layer(
             cols = max(1, int(getattr(sa, "cols", 64) or 64))
         # 首次调用时打一条日志，便于确认阵列尺寸已传入（避免重复刷屏，仅用 layer_name 占位区分）
         _log_scalesim_array_size_once(rows, cols, "conv1d", layer_name)
+        prep_t0 = time.perf_counter()
         cfg_path = _scalesim_config_with_array_size(base_cfg, rows, cols, tmp, hw_config)
 
         topo_path = os.path.join(tmp, "topology.csv")
@@ -1125,6 +1154,13 @@ def run_scalesim_conv1d_layer(
             ifmap_h, ifmap_w, filter_h, filter_w, channels, num_filter, stride=1,
         )
         _write_layout_csv(layout_path, [layer_name])
+        _log_scalesim_progress(
+            "conv1d",
+            layer_name,
+            f"prepare done in {_format_elapsed_seconds(time.perf_counter() - prep_t0)}",
+            progress_index=progress_index,
+            progress_total=progress_total,
+        )
         use_dramsim3_trace = False
         if hw_config and getattr(hw_config, "dram", None):
             d = hw_config.dram
@@ -1139,7 +1175,22 @@ def run_scalesim_conv1d_layer(
             layout=layout_path,
             input_type_gemm=False,
         )
+        core_t0 = time.perf_counter()
+        _log_scalesim_progress(
+            "conv1d",
+            layer_name,
+            "run_scale start",
+            progress_index=progress_index,
+            progress_total=progress_total,
+        )
         s.run_scale(top_path=out_dir)
+        _log_scalesim_progress(
+            "conv1d",
+            layer_name,
+            f"run_scale done in {_format_elapsed_seconds(time.perf_counter() - core_t0)}",
+            progress_index=progress_index,
+            progress_total=progress_total,
+        )
         subdirs = [d for d in os.listdir(out_dir) if os.path.isdir(os.path.join(out_dir, d))]
         report_dir = os.path.join(out_dir, subdirs[0]) if subdirs else out_dir
         layer_trace_dir = os.path.join(report_dir, "layer0")
@@ -1330,12 +1381,34 @@ def run_scalesim_conv1d_layer(
                 hw_config.dram.dramsim3_bin, hw_config.dram.dramsim3_config_ini,
             )
 
+        memory_t0 = time.perf_counter()
         energy_parts = _energy_breakdown_from_hw_config(
             hw_config, macs, sram_i, sram_f, sram_o, dram_i, dram_f, dram_o,
             dram_nj_override=dram_nj_override,
             sram_nj_override=sram_nj_override,
         )
         energy_nj = energy_parts["total_energy_nj"]
+        _log_scalesim_progress(
+            "conv1d",
+            layer_name,
+            (
+                f"memory-model done in {_format_elapsed_seconds(time.perf_counter() - memory_t0)} "
+                f"(cycles={total_cycles}, energy={energy_nj:.2f} nJ)"
+            ),
+            progress_index=progress_index,
+            progress_total=progress_total,
+        )
+        _log_scalesim_progress(
+            "conv1d",
+            layer_name,
+            (
+                f"done in {_format_elapsed_seconds(time.perf_counter() - layer_t0)} "
+                f"(cycles={total_cycles}, sram={energy_parts['sram_energy_nj']:.2f} nJ, "
+                f"dram={energy_parts['dram_energy_nj']:.2f} nJ)"
+            ),
+            progress_index=progress_index,
+            progress_total=progress_total,
+        )
         return ScalesimLayerResult(
             total_cycles=total_cycles,
             stall_cycles=stall_cycles,
@@ -1395,6 +1468,8 @@ def run_scalesim_linear_layer(
     out_features: int,
     tokens: int,
     layer_name: str = "linear",
+    progress_index: Optional[int] = None,
+    progress_total: Optional[int] = None,
     scalesim_root: Optional[str] = None,
     config_path: Optional[str] = None,
     run_name: Optional[str] = None,
@@ -1426,12 +1501,22 @@ def run_scalesim_linear_layer(
     except ImportError:
         return ScalesimLayerResult(success=False, message="scalesim not importable", macs=macs)
 
+    layer_t0 = time.perf_counter()
+    _log_scalesim_progress(
+        "linear",
+        layer_name,
+        f"start (tokens={ifmap_h}, in_features={channels}, out_features={num_filter})",
+        progress_index=progress_index,
+        progress_total=progress_total,
+    )
     with tempfile.TemporaryDirectory(prefix="pointkan_scalesim_") as tmp:
         rows, cols = 64, 64
         if hw_config and getattr(hw_config, "systolic_array", None):
             sa = hw_config.systolic_array
             rows = max(1, int(getattr(sa, "rows", 64) or 64))
             cols = max(1, int(getattr(sa, "cols", 64) or 64))
+        _log_scalesim_array_size_once(rows, cols, "linear", layer_name)
+        prep_t0 = time.perf_counter()
         cfg_path = _scalesim_config_with_array_size(base_cfg, rows, cols, tmp, hw_config)
 
         topo_path = os.path.join(tmp, "topology.csv")
@@ -1443,6 +1528,13 @@ def run_scalesim_linear_layer(
             ifmap_h, ifmap_w, filter_h, filter_w, channels, num_filter, stride=1,
         )
         _write_layout_csv(layout_path, [layer_name])
+        _log_scalesim_progress(
+            "linear",
+            layer_name,
+            f"prepare done in {_format_elapsed_seconds(time.perf_counter() - prep_t0)}",
+            progress_index=progress_index,
+            progress_total=progress_total,
+        )
         use_dramsim3_trace = False
         if hw_config and getattr(hw_config, "dram", None):
             d = hw_config.dram
@@ -1457,7 +1549,22 @@ def run_scalesim_linear_layer(
             layout=layout_path,
             input_type_gemm=False,
         )
+        core_t0 = time.perf_counter()
+        _log_scalesim_progress(
+            "linear",
+            layer_name,
+            "run_scale start",
+            progress_index=progress_index,
+            progress_total=progress_total,
+        )
         s.run_scale(top_path=out_dir)
+        _log_scalesim_progress(
+            "linear",
+            layer_name,
+            f"run_scale done in {_format_elapsed_seconds(time.perf_counter() - core_t0)}",
+            progress_index=progress_index,
+            progress_total=progress_total,
+        )
         subdirs = [d for d in os.listdir(out_dir) if os.path.isdir(os.path.join(out_dir, d))]
         report_dir = os.path.join(out_dir, subdirs[0]) if subdirs else out_dir
         layer_trace_dir = os.path.join(report_dir, "layer0")
@@ -1647,12 +1754,34 @@ def run_scalesim_linear_layer(
                 hw_config.dram.dramsim3_bin, hw_config.dram.dramsim3_config_ini,
             )
 
+        memory_t0 = time.perf_counter()
         energy_parts = _energy_breakdown_from_hw_config(
             hw_config, macs, sram_i, sram_f, sram_o, dram_i, dram_f, dram_o,
             dram_nj_override=dram_nj_override,
             sram_nj_override=sram_nj_override,
         )
         energy_nj = energy_parts["total_energy_nj"]
+        _log_scalesim_progress(
+            "linear",
+            layer_name,
+            (
+                f"memory-model done in {_format_elapsed_seconds(time.perf_counter() - memory_t0)} "
+                f"(cycles={total_cycles}, energy={energy_nj:.2f} nJ)"
+            ),
+            progress_index=progress_index,
+            progress_total=progress_total,
+        )
+        _log_scalesim_progress(
+            "linear",
+            layer_name,
+            (
+                f"done in {_format_elapsed_seconds(time.perf_counter() - layer_t0)} "
+                f"(cycles={total_cycles}, sram={energy_parts['sram_energy_nj']:.2f} nJ, "
+                f"dram={energy_parts['dram_energy_nj']:.2f} nJ)"
+            ),
+            progress_index=progress_index,
+            progress_total=progress_total,
+        )
         return ScalesimLayerResult(
             total_cycles=total_cycles,
             stall_cycles=stall_cycles,

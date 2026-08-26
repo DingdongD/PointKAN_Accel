@@ -71,6 +71,7 @@ def fps_with_knn_coarse_fine_fused_blockwise_instrumented(
     init_threshold: float = 0.1,
     max_iter: int = 10,
     min_candidates_ratio: float = 1.2,
+    tol: float = 0.1,
     seed: str = "first",
     return_distances_matrix: bool = True,
     exclude_self: bool = False,
@@ -178,6 +179,7 @@ if fps_with_knn_coarse_fine_fused_blockwise is None:
         init_threshold: float = 0.1,
         max_iter: int = 10,
         min_candidates_ratio: float = 1.2,
+        tol: float = 0.1,
         seed: str = "first",
         return_distances_matrix: bool = True,
         exclude_self: bool = False,
@@ -196,6 +198,7 @@ if fps_with_knn_coarse_fine_fused_blockwise is None:
                 init_threshold=init_threshold,
                 max_iter=max_iter,
                 min_candidates_ratio=min_candidates_ratio,
+                tol=tol,
                 seed=seed,
                 return_distances_matrix=return_distances_matrix,
                 exclude_self=exclude_self,
@@ -342,6 +345,7 @@ def plot_iou_surface(
     zlabel="IoU",
     xlabel=None,
     ylabel=None,
+    title=None,
     cmap="viridis",
     elev=22,
     azim=-50,
@@ -353,15 +357,21 @@ def plot_iou_surface(
     cbar_pad=0.01,
     cbar_width=0.025,
     cbar_shrink=0.5,
+    show_title: bool = True,
+    show_axis_labels: bool = True,
+    show_tick_labels: bool = True,
+    dpi: int = 600,
 ):
     """
     论文风格 3D surface:
       - 白底黑字
       - 浅灰网格
-      - 无标题
-      - 规范轴标签
+      - 可选标题 title；x/y/z 轴标签由 xlabel/ylabel/zlabel 控制（None 则该轴标题为空）
+      - 默认显示 x/y/z 刻度数值
       - 底部 contour 投影
-      - 修复 matplotlib 弃用警告
+
+    ``show_title`` / ``show_axis_labels`` / ``show_tick_labels``：设为 False 可去掉标题、轴标题、刻度数字
+    （仍保留刻度线与网格，便于版式留白）。
     """
     if plt is None:
         raise ImportError("matplotlib 不可用，无法绘图；请先安装 matplotlib。")
@@ -399,13 +409,20 @@ def plot_iou_surface(
     norm = Normalize(vmin=np.nanmin(Z), vmax=np.nanmax(Z))
 
     ls = LightSource(azdeg=315, altdeg=42)
-    rgb = ls.shade(
-        Z,
-        cmap=cmap_obj,
-        norm=norm,
-        vert_exag=0.6,
-        blend_mode="soft",
-    )
+    # hillshade 内部 np.gradient 要求各维长度 ≥2；1×1 / 1×N 扫参会触发 ValueError
+    try:
+        rgb = ls.shade(
+            Z,
+            cmap=cmap_obj,
+            norm=norm,
+            vert_exag=0.6,
+            blend_mode="soft",
+        )
+    except ValueError:
+        rgba = np.asarray(cmap_obj(norm(Z)))
+        rgb = rgba[..., :3]
+
+    _grid_ok_for_contour = Z.shape[0] >= 2 and Z.shape[1] >= 2
 
     # -----------------------------
     # 主 surface
@@ -433,7 +450,7 @@ def plot_iou_surface(
 
     floor_offset = zmin - 0.12 * zrng
 
-    if contour_on_floor:
+    if contour_on_floor and _grid_ok_for_contour:
         ax.contourf(
             T, M, Z,
             zdir="z",
@@ -472,14 +489,29 @@ def plot_iou_surface(
     # cbar.outline.set_edgecolor("black")
     
     # -----------------------------
-    # 坐标轴标签：规范英文（可传入 xlabel/ylabel 如 tol / max_iter）
+    # 坐标轴标签与标题
     # -----------------------------
-    ax.set_xlabel("")
-    ax.set_ylabel("")
-    ax.set_zlabel("")
-
-    # 无标题
-    ax.set_title("")
+    xl = "" if xlabel is None else str(xlabel)
+    yl = "" if ylabel is None else str(ylabel)
+    zl = "" if zlabel is None else str(zlabel)
+    if show_axis_labels:
+        ax.set_xlabel(xl, fontsize=label_fontsize, color="black", labelpad=12)
+        ax.set_ylabel(yl, fontsize=label_fontsize, color="black", labelpad=12)
+        ax.set_zlabel(zl, fontsize=label_fontsize, color="black", labelpad=14)
+    else:
+        ax.set_xlabel("", fontsize=1, labelpad=0)
+        ax.set_ylabel("", fontsize=1, labelpad=0)
+        ax.set_zlabel("", fontsize=1, labelpad=0)
+        try:
+            ax.xaxis.label.set_visible(False)
+            ax.yaxis.label.set_visible(False)
+            ax.zaxis.label.set_visible(False)
+        except Exception:
+            pass
+    if show_title and title:
+        ax.set_title(str(title), fontsize=label_fontsize - 2, color="black", pad=10)
+    else:
+        ax.set_title("")
 
     # -----------------------------
     # 视角
@@ -490,6 +522,18 @@ def plot_iou_surface(
     # 轴范围
     # -----------------------------
     ax.set_zlim(floor_offset, zmax + 0.03 * zrng)
+    zticks = ax.get_zticks()
+    if show_tick_labels:
+        ztick_labels = []
+        for zt in zticks:
+            if not np.isfinite(zt):
+                ztick_labels.append("")
+            else:
+                ztick_labels.append(f"{float(zt):.3f}")
+    else:
+        ztick_labels = [""] * len(zticks)
+    ax.set_zticks(zticks)
+    ax.set_zticklabels(ztick_labels, fontsize=tick_fontsize)
 
     # for i in range(len(max_iter_list)):
     #     for j in range(len(threshold_list)):
@@ -511,16 +555,31 @@ def plot_iou_surface(
     ax.tick_params(axis="y", labelsize=tick_fontsize, colors="black", pad=2)
     ax.tick_params(axis="z", labelsize=tick_fontsize, colors="black", pad=6)
 
-    # x_ticks = threshold_list[::2]
-    # ax.set_xticks(x_ticks)
-    # ax.set_xticklabels([f"{x:.2f}" for x in x_ticks], fontsize=tick_fontsize)
     ax.set_xticks(threshold_list)
-    ax.set_xticklabels([""] * len(threshold_list))
+    if show_tick_labels:
+        ax.set_xticklabels(
+            [f"{float(x):g}" for x in threshold_list], fontsize=tick_fontsize
+        )
+    else:
+        ax.set_xticklabels([""] * len(threshold_list), fontsize=tick_fontsize)
     # 如果 max_iter 本身是整数，强制整数刻度更好看
     if np.allclose(max_iter_list, np.round(max_iter_list)):
-        ax.set_yticks(max_iter_list.astype(int))
-    ax.set_yticklabels([""] * len(max_iter_list))
-    ax.set_zticklabels([""] * len(ax.get_zticks()))
+        yticks = max_iter_list.astype(int)
+        ax.set_yticks(yticks)
+        if show_tick_labels:
+            ax.set_yticklabels([str(int(y)) for y in yticks], fontsize=tick_fontsize)
+        else:
+            ax.set_yticklabels([""] * len(yticks), fontsize=tick_fontsize)
+    else:
+        ax.set_yticks(max_iter_list)
+        if show_tick_labels:
+            ax.set_yticklabels(
+                [f"{float(y):g}" for y in max_iter_list], fontsize=tick_fontsize
+            )
+        else:
+            ax.set_yticklabels(
+                [""] * len(max_iter_list), fontsize=tick_fontsize
+            )
 
     # -----------------------------
     # 淡化 3D 墙面和网格
@@ -562,7 +621,7 @@ def plot_iou_surface(
     # -----------------------------
     plt.tight_layout()
     # pad_inches 在 tight 外留白，避免 z 轴标题被裁掉
-    plt.savefig(save_path, dpi=600, facecolor="white", bbox_inches="tight")
+    plt.savefig(save_path, dpi=int(dpi), facecolor="white", bbox_inches="tight")
     plt.close(fig)
 
 
@@ -1087,6 +1146,9 @@ def run_blockwise_sweep_and_plot(args):
                     Z=Z_iou,
                     save_path=out_iou_s,
                     zlabel="IoU",
+                    xlabel="init_threshold",
+                    ylabel="max_iter",
+                    title=f"tol={tol:.3f} (fixed per figure)",
                 )
                 plot_iou_surface(
                     threshold_list=threshold_list,
@@ -1094,6 +1156,9 @@ def run_blockwise_sweep_and_plot(args):
                     Z=Z_spd,
                     save_path=out_spd_s,
                     zlabel="Speedup (x)",
+                    xlabel="init_threshold",
+                    ylabel="max_iter",
+                    title=f"tol={tol:.3f} (fixed per figure)",
                 )
                 print(f"[sweep] wrote {out_iou_s}")
                 print(f"[sweep] wrote {out_spd_s}")

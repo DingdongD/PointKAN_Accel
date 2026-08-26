@@ -45,7 +45,12 @@ from .base_operator import (
 )
 from ..configs.hw_config import CircuitModule, MinDistanceTableConfig
 from ..simulator.event import Event
-from .distance_ops import gen_distance_events_one_batch
+from .distance_ops import (
+    gen_distance_events_one_batch,
+    gen_rram_dist_write_events,
+    gen_rram_dist_self_k2_events,
+)
+from ..integration.memory_model_adapter import query_sram_cycles_energy
 
 if TYPE_CHECKING:
     from ..configs.hw_config import HardwareConfig
@@ -111,6 +116,46 @@ class FPSOperator(BaseOperator):
     def _get_per_batch_cycles(self) -> int:
         """Total cycles per batch (stages 1-4)."""
         return 2 * self._get_dist_compute_cycles() + 1 + 1
+
+    def _get_sort_cycles(self, candidate_points: int) -> int:
+        """
+        计算排序周期，考虑 sorter_depth 多 pass + merge 开销。
+
+        当 candidate_points <= sorter_depth 时退化为基准 bitonic_sort_cycles；
+        超出时需 ceil(candidate_points/sorter_depth) 趟局部排序 + log2 阶 merge。
+        """
+        p = self.fps_params
+        hw = self.hw_config
+        base_cycles = p.bitonic_sort_cycles
+        if hw is None:
+            return base_cycles
+        sort_cfg = getattr(getattr(hw, "sorting_circuit", None), "bitonic_sort", None)
+        if sort_cfg is None:
+            return base_cycles
+        depth = int(getattr(sort_cfg, "sorter_depth", 0) or 0)
+        if depth <= 0 or depth >= candidate_points:
+            return base_cycles
+        num_passes = math.ceil(candidate_points / depth)
+        merge_stages = max(0, int(math.ceil(math.log2(num_passes))))
+        # 每 pass 基准排序 + merge 每阶取半个基准排序周期
+        return num_passes * base_cycles + merge_stages * max(1, base_cycles // 2)
+
+    # --- Pipeline helpers (供 dispatcher 做 FPS→KNN 流水线重叠) ---
+
+    def get_per_iteration_cycles_list(self) -> 'List[int]':
+        """
+        返回每轮 FPS 迭代的周期数列表（含距离计算 + 排序），
+        用于 dispatcher 计算 producer-consumer 流水线调度。
+        """
+        p = self.fps_params
+        per_batch = self._get_per_batch_cycles()
+        result: 'List[int]' = []
+        for i in range(p.sampled_points_num):
+            candidate_points = p.input_points - i
+            batches = math.ceil(candidate_points / p.cim_parallelism)
+            sort_cycles = self._get_sort_cycles(candidate_points)
+            result.append(batches * per_batch + sort_cycles)
+        return result
 
     # --- Stage definition ---
 
@@ -223,7 +268,8 @@ class FPSOperator(BaseOperator):
         for i in range(p.sampled_points_num):
             candidate_points = p.input_points - i
             batches = math.ceil(candidate_points / p.cim_parallelism)
-            total_cycles += batches * per_batch + p.bitonic_sort_cycles
+            sort_cycles = self._get_sort_cycles(candidate_points)
+            total_cycles += batches * per_batch + sort_cycles
 
         return total_cycles
 
@@ -271,6 +317,30 @@ class FPSOperator(BaseOperator):
         cycle = 0
         for b in range(batches):
             if ms is not None:
+                batch_bytes = int(p.cim_parallelism) * 4
+                read_duration, read_energy_nj = query_sram_cycles_energy(
+                    batch_bytes,
+                    is_read=True,
+                    hw_config=hw,
+                    clock_period_ns=hw.clock_period,
+                    buffer_name="sort_cache_sram",
+                )
+                read_power = (read_energy_nj * 1000.0 / (max(1, read_duration) * hw.clock_period)) if read_duration > 0 and hw.clock_period > 0 else 0.0
+                events.append(Event(
+                    event_id=event_id,
+                    cycle=cycle,
+                    operator="SRAM",
+                    stage="merge_sort",
+                    sub_stage="sort_input_read",
+                    circuit_module="sort_cache_sram",
+                    operation="merge_sort_input_read",
+                    power=read_power,
+                    duration=read_duration,
+                    clock_period_ns=hw.clock_period,
+                    metadata={"batch": b, "buffer_name": "sort_cache_sram", "buffer_phase": "sort_read", "bytes": batch_bytes, "resource_id": "sort_cache_shared", "exclusive": True, "reset_scope": "batch_boundary"},
+                ))
+                event_id += 1
+                cycle += read_duration
                 events.append(Event(
                     event_id=event_id,
                     cycle=cycle,
@@ -310,19 +380,28 @@ class FPSOperator(BaseOperator):
         reg = getattr(ms, "reg_file", None) if ms is not None else None
         if reg is None:
             return None
-        duration = num_reads * getattr(reg, "cycles_per_read", 1)
+        clock_period = hw.clock_period
+        num_bytes = int(num_reads) * 4
+        duration, energy_nj = query_sram_cycles_energy(
+            num_bytes,
+            is_read=True,
+            hw_config=hw,
+            clock_period_ns=clock_period,
+            buffer_name="sort_cache_sram",
+        )
+        power = (energy_nj * 1000.0 / (max(1, duration) * clock_period)) if duration > 0 and clock_period > 0 else 0.0
         return Event(
             event_id=event_id,
             cycle=cycle,
-            operator="FPS",
+            operator="SRAM",
             stage="merge_sort_reg_file",
             sub_stage="reg_file_read_max",
-            circuit_module="merge_sort_reg_file",
+            circuit_module="sort_cache_sram",
             operation="reg_file_read",
-            power=reg.power_mw,
+            power=power,
             duration=duration,
-            clock_period_ns=hw.clock_period,
-            metadata={"num_reads": num_reads, "buffer_name": "sort_cache_sram", "buffer_phase": "read", "bytes": int(num_reads) * 4, "resource_id": "sort_cache_shared", "exclusive": True, "reset_scope": "batch_boundary"},
+            clock_period_ns=clock_period,
+            metadata={"num_reads": num_reads, "buffer_name": "sort_cache_sram", "buffer_phase": "read", "bytes": num_bytes, "resource_id": "sort_cache_shared", "exclusive": True, "reset_scope": "batch_boundary"},
         )
 
     def _generate_merge_sort_reg_file_event(
@@ -337,19 +416,28 @@ class FPSOperator(BaseOperator):
         reg = getattr(ms, "reg_file", None) if ms is not None else None
         if reg is None:
             return None
-        duration = num_writes * reg.cycles_per_write
+        clock_period = hw.clock_period
+        num_bytes = int(num_writes) * 4
+        duration, energy_nj = query_sram_cycles_energy(
+            num_bytes,
+            is_read=False,
+            hw_config=hw,
+            clock_period_ns=clock_period,
+            buffer_name="sort_cache_sram",
+        )
+        power = (energy_nj * 1000.0 / (max(1, duration) * clock_period)) if duration > 0 and clock_period > 0 else 0.0
         ev = Event(
             event_id=event_id,
             cycle=cycle,
-            operator="FPS",
+            operator="SRAM",
             stage="merge_sort_reg_file",
             sub_stage="reg_file_write_max",
-            circuit_module="merge_sort_reg_file",
+            circuit_module="sort_cache_sram",
             operation="reg_file_write",
-            power=reg.power_mw,
+            power=power,
             duration=duration,
-            clock_period_ns=hw.clock_period,
-            metadata={"num_writes": num_writes, "buffer_name": "sort_cache_sram", "buffer_phase": "write", "bytes": int(num_writes) * 4, "resource_id": "sort_cache_shared", "exclusive": True, "reset_scope": "batch_boundary"},
+            clock_period_ns=clock_period,
+            metadata={"num_writes": num_writes, "buffer_name": "sort_cache_sram", "buffer_phase": "write", "bytes": num_bytes, "resource_id": "sort_cache_shared", "exclusive": True, "reset_scope": "batch_boundary"},
         )
         ev.overlapped = overlapped
         return ev
@@ -476,34 +564,99 @@ class FPSOperator(BaseOperator):
         event_id = 0
         cycle = 0
 
+        # PointCIM: one-time initialization（rram_write → rram_self_k2）
+        # Producer-Consumer: write 产生 rram_content，self_k2 消耗 rram_content 产生 k2_sram_cache
+        if getattr(hw, "use_rram_dist", False) and getattr(hw, "rram_dist", None) is not None:
+            init_meta = {"input_points": p.input_points, "operator": "FPS", "phase": "init"}
+            write_evs, event_id, cycle = gen_rram_dist_write_events(
+                "FPS", hw, event_id, cycle, p.input_points, init_meta,
+            )
+            events.extend(write_evs)
+            k2_evs, event_id, cycle = gen_rram_dist_self_k2_events(
+                "FPS", hw, event_id, cycle, p.input_points, init_meta,
+            )
+            events.extend(k2_evs)
+
         for i in range(p.sampled_points_num):
             candidate_points = p.input_points - i
             batches = math.ceil(candidate_points / p.cim_parallelism)
 
             for b in range(batches):
-                # Stage 1–3：共用距离计算（baseline=dist2_engine 脉动，acc=SRAM-CIM k²/-2qk/shift_add）
+                # Stage 1–3（distance）：
+                #   baseline → dist2_engine 脉动阵列
+                #   acc      → SRAM-CIM k²/-2qk/shift_add
+                #   pointcim → rram_vmm(cross)/rram_self_q/rram_sum，input_points 注入 metadata
                 batch_m = min(p.cim_parallelism, candidate_points - b * p.cim_parallelism)
+                dist_meta = {"iteration": i, "batch": b, "input_points": p.input_points}
                 dist_events, event_id, cycle = gen_distance_events_one_batch(
-                    "FPS", hw, event_id, cycle, {"iteration": i, "batch": b},
+                    "FPS", hw, event_id, cycle, dist_meta,
                     dist_cycles=dist_cycles, batch_size_m=batch_m,
                 )
                 events.extend(dist_events)
                 # Stage 4：FPS 专属 — 最小距离表更新
+                table_bytes = int(batch_m) * 4
+                if i != 0:
+                    table_read_cycles, table_read_energy = query_sram_cycles_energy(
+                        table_bytes,
+                        is_read=True,
+                        hw_config=hw,
+                        clock_period_ns=clock_period,
+                        buffer_name="fps_min_distance_table_sram",
+                    )
+                    table_read_power = (table_read_energy * 1000.0 / (max(1, table_read_cycles) * clock_period)) if table_read_cycles > 0 and clock_period > 0 else 0.0
+                    events.append(Event(
+                        event_id=event_id,
+                        cycle=cycle,
+                        operator="SRAM",
+                        stage="min_distance_update",
+                        sub_stage="table_read",
+                        circuit_module="fps_min_distance_table_sram",
+                        operation="fps_min_distance_table_read",
+                        power=table_read_power,
+                        duration=table_read_cycles,
+                        clock_period_ns=clock_period,
+                        metadata={"iteration": i, "batch": b, "buffer_name": "fps_min_distance_table_sram", "buffer_phase": "read", "bytes": table_bytes, "resource_id": "fps_min_table_shared", "exclusive": True, "reset_scope": "fps_iteration"},
+                    ))
+                    event_id += 1
+                    cycle += table_read_cycles
+                    events.append(Event(
+                        event_id=event_id,
+                        cycle=cycle,
+                        operator="FPS",
+                        stage="min_distance_update",
+                        sub_stage="table_update",
+                        circuit_module="min_distance_table",
+                        operation="min_distance_compare",
+                        power=mdt_power,
+                        duration=1,
+                        clock_period_ns=clock_period,
+                        metadata={"iteration": i, "batch": b, "buffer_name": "fps_min_distance_table_sram", "buffer_phase": "update", "bytes": table_bytes, "resource_id": "fps_min_table_shared", "exclusive": True, "reset_scope": "fps_iteration"},
+                    ))
+                    event_id += 1
+                    cycle += 1
+                sram_cycles, sram_energy = query_sram_cycles_energy(
+                    table_bytes,
+                    is_read=False,
+                    hw_config=hw,
+                    clock_period_ns=clock_period,
+                    buffer_name="fps_min_distance_table_sram",
+                )
+                sram_power = (sram_energy * 1000.0 / (max(1, sram_cycles) * clock_period)) if sram_cycles > 0 and clock_period > 0 else 0.0
                 events.append(Event(
                     event_id=event_id,
                     cycle=cycle,
-                    operator="FPS",
+                    operator="SRAM",
                     stage="min_distance_update",
-                    sub_stage="table_update",
-                    circuit_module="min_distance_table",
-                    operation="min_distance_compare",
-                    power=mdt_power,
-                    duration=1,
+                    sub_stage="table_write",
+                    circuit_module="fps_min_distance_table_sram",
+                    operation="fps_min_distance_table_write",
+                    power=sram_power,
+                    duration=sram_cycles,
                     clock_period_ns=clock_period,
-                    metadata={"iteration": i, "batch": b, "buffer_name": "fps_min_distance_table_sram", "buffer_phase": "update", "bytes": int(batch_m) * 8, "resource_id": "fps_min_table_shared", "exclusive": True, "reset_scope": "fps_iteration"},
+                    metadata={"iteration": i, "batch": b, "buffer_name": "fps_min_distance_table_sram", "buffer_phase": "update", "bytes": table_bytes, "resource_id": "fps_min_table_shared", "exclusive": True, "reset_scope": "fps_iteration"},
                 ))
                 event_id += 1
-                cycle += 1
+                cycle += sram_cycles
 
                 # base_v2：每批 64选1(merge_sort 22cy) + reg 读 1 + reg 写 1（写与下一批重叠）
                 if getattr(hw, "is_baseline_v2", False) and getattr(hw.sorting_circuit, "merge_sort", None) is not None:
@@ -538,6 +691,30 @@ class FPSOperator(BaseOperator):
 
             # Stage 5：排序（仅 base_v1 每迭代一次 Bitonic；base_v2 已在每批内 merge_sort+reg）
             if not (getattr(hw, "is_baseline_v2", False) and getattr(hw.sorting_circuit, "merge_sort", None) is not None):
+                iter_sort_cycles = self._get_sort_cycles(candidate_points)
+                sort_read_cycles, sort_read_energy = query_sram_cycles_energy(
+                    int(candidate_points) * 4,
+                    is_read=True,
+                    hw_config=hw,
+                    clock_period_ns=clock_period,
+                    buffer_name="fps_min_distance_table_sram",
+                )
+                sort_read_power = (sort_read_energy * 1000.0 / (max(1, sort_read_cycles) * clock_period)) if sort_read_cycles > 0 and clock_period > 0 else 0.0
+                events.append(Event(
+                    event_id=event_id,
+                    cycle=cycle,
+                    operator="SRAM",
+                    stage="bitonic_sort",
+                    sub_stage="sort_input_read",
+                    circuit_module="fps_min_distance_table_sram",
+                    operation="fps_min_distance_table_sort_read",
+                    power=sort_read_power,
+                    duration=sort_read_cycles,
+                    clock_period_ns=clock_period,
+                    metadata={"iteration": i, "buffer_name": "fps_min_distance_table_sram", "buffer_phase": "sort_read", "bytes": int(candidate_points) * 4, "resource_id": "fps_min_table_shared", "exclusive": True, "reset_scope": "fps_iteration"},
+                ))
+                event_id += 1
+                cycle += sort_read_cycles
                 events.append(Event(
                     event_id=event_id,
                     cycle=cycle,
@@ -547,12 +724,12 @@ class FPSOperator(BaseOperator):
                     circuit_module=sort_circuit,
                     operation="bitonic_sort_max",
                     power=sort_power,
-                    duration=sort_cycles,
+                    duration=iter_sort_cycles,
                     clock_period_ns=clock_period,
                     metadata={"iteration": i},
                 ))
                 event_id += 1
-                cycle += sort_cycles
+                cycle += iter_sort_cycles
 
         return events
 
@@ -572,12 +749,14 @@ class FPSOperator(BaseOperator):
         # First iteration (most candidates)
         first_candidates = p.input_points
         first_batches = math.ceil(first_candidates / p.cim_parallelism)
-        first_iter = first_batches * per_batch + p.bitonic_sort_cycles
+        first_sort = self._get_sort_cycles(first_candidates)
+        first_iter = first_batches * per_batch + first_sort
 
         # Last iteration (fewest candidates)
         last_candidates = p.input_points - (p.sampled_points_num - 1)
         last_batches = math.ceil(last_candidates / p.cim_parallelism)
-        last_iter = last_batches * per_batch + p.bitonic_sort_cycles
+        last_sort = self._get_sort_cycles(last_candidates)
+        last_iter = last_batches * per_batch + last_sort
 
         total = self.calculate_cycles()
 
@@ -600,14 +779,14 @@ class FPSOperator(BaseOperator):
                 'candidate_points': first_candidates,
                 'batches': first_batches,
                 'stages_1_4': first_batches * per_batch,
-                'bitonic_sort': p.bitonic_sort_cycles,
+                'bitonic_sort': first_sort,
                 'total': first_iter,
             },
             'last_iteration': {
                 'candidate_points': last_candidates,
                 'batches': last_batches,
                 'stages_1_4': last_batches * per_batch,
-                'bitonic_sort': p.bitonic_sort_cycles,
+                'bitonic_sort': last_sort,
                 'total': last_iter,
             },
             'total': {

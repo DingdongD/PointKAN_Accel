@@ -73,6 +73,8 @@ def _module_to_level(module: str) -> MemoryLevel:
         return MemoryLevel.SRAM_II
     if m == "buffer":
         return MemoryLevel.SRAM
+    if "sram" in m or m.endswith("_buffer") or "cache" in m:
+        return MemoryLevel.SRAM
     return MemoryLevel.UNKNOWN
 
 
@@ -119,13 +121,21 @@ def infer_memory_transaction(item: Dict[str, Any]) -> Optional[MemoryTransaction
         src, dst, kind = MemoryLevel.STREAM, MemoryLevel.LAYER_BUFFER, MemoryTxnKind.WRITE
     elif "distance_compute" in operation:
         src, dst, kind = MemoryLevel.SRAM_II, MemoryLevel.STREAM, MemoryTxnKind.COMPUTE_SCAN
-    elif "dram_read" in operation or operation.endswith("_read"):
+    elif "dram_read" in operation:
         src = MemoryLevel.DRAM
         dst = cm_level if cm_level != MemoryLevel.UNKNOWN else MemoryLevel.STREAM
         kind = MemoryTxnKind.READ
-    elif "dram_write" in operation or operation.endswith("_write"):
+    elif "dram_write" in operation:
         src = cm_level if cm_level != MemoryLevel.UNKNOWN else MemoryLevel.STREAM
         dst = MemoryLevel.DRAM
+        kind = MemoryTxnKind.WRITE
+    elif operation.endswith("_read"):
+        src = cm_level if cm_level != MemoryLevel.UNKNOWN else MemoryLevel.DRAM
+        dst = MemoryLevel.STREAM
+        kind = MemoryTxnKind.READ
+    elif operation.endswith("_write"):
+        src = MemoryLevel.STREAM
+        dst = cm_level if cm_level != MemoryLevel.UNKNOWN else MemoryLevel.DRAM
         kind = MemoryTxnKind.WRITE
 
     return MemoryTransaction(

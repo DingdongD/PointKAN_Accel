@@ -1,0 +1,119 @@
+# FPS + KNN 量化召回率实验：各数据集默认路径
+# 来源：FPS_KNN_Ablation/*.sh、PointKAN-elite/classification_* / inference.sh
+#
+# S3DIS：indoor3d_hdf5=true 时使用 pc_data 下 indoor3d_sem_seg_hdf5_data*（与 ISEDA26/data_config.load_data_semseg 一致）。
+#        HDF5 每点 9 维：0:3=块内中心化 xy + 房间尺度 z；6:9=相对整房 max 的归一化 xyz。基准与统计仅用 0:3（见 s3dis_indoor3d_h5.py 头注释）。
+#        indoor3d_partition: all=训练+测试目录全部块（全局统计）；train/test 按 test_area 划分。
+#        旧版整房 npy：indoor3d_hdf5: false，data_root 指向 s3dis_trainval。
+#
+# 全局坐标上下界请先统计（与基准相同 DataLoader）：
+#   python stats_dataset_xyz_bounds.py --out_json dataset_xyz_bounds.json
+#
+# global_per_axis + bounds_from_stats: true 时从 dataset_xyz_bounds.json 读 xyz_min/max；
+# 默认文件名由 defaults.quant.stats_json 指定。
+# quant.bits_list：该数据集单独扫的 bit 档位（覆盖命令行 --bits）。
+
+defaults:
+  num_points: 2048
+  fps_steps: 512
+  k_neighbors: 24
+  batch_size: 4
+  seed: 42
+  max_samples: 0
+  fast_max_batches: 20
+  outdoor_num_points: 50000
+  outdoor_batch_size: 1
+  quant:
+    scheme: per_cloud_minmax
+    stats_json: dataset_xyz_bounds.json
+
+datasets:
+  modelnet40:
+    type: modelnet40
+    description: ModelNet40；统计为 [-1,1] 立方，centered 对称与 INT8 习惯一致
+    data_root: /workspace/VoxelNet/pc_data
+    num_points: 1024
+    batch_size: 8
+    quant:
+      scheme: global_per_axis
+      centered: true
+      bounds_from_stats: true
+      bits_list: [6, 8, 10, 12, 14, 16]
+
+  shapenet_part:
+    type: shapenet_part
+    description: ShapeNet Part；统计约为 ±0.5 有界盒
+    data_root: /workspace/VoxelNet/pc_data/shapenetcore_partanno_segmentation_benchmark_v0_normal
+    num_points: 2048
+    partseg_normalize: false
+    quant:
+      scheme: global_per_axis
+      centered: false
+      bounds_from_stats: true
+      bits_list: [6, 8, 10, 12, 14, 16]
+
+  s3dis:
+    type: s3dis
+    description: S3DIS PointNet++ Indoor3D HDF5 块（4096 点/块）；data_root 为 pc_data（含 indoor3d_sem_seg_hdf5_data*）
+    data_root: /workspace/VoxelNet/pc_data
+    indoor3d_hdf5: true
+    indoor3d_partition: all
+    test_area: "5"
+    num_points: 4096
+    batch_size: 8
+    quant:
+      scheme: global_per_axis
+      centered: false
+      bounds_from_stats: true
+      bits_list: [8, 10, 12, 14, 16]
+
+  scanobjectnn:
+    type: scanobjectnn
+    description: ScanObjectNN 物体坐标
+    data_root: /workspace/VoxelNet/scannet_kan/main_split
+    num_points: 1024
+    batch_size: 8
+    quant:
+      scheme: global_per_axis
+      centered: false
+      bounds_from_stats: true
+      bits_list: [8, 10, 12, 14, 16]
+
+  kitti:
+    type: kitti
+    description: KITTI ROI 后点云；统计应与检测 ROI 一致
+    data_root: /workspace/VoxelNet/KITTI_Mini/training/velodyne
+    num_points: 50000
+    batch_size: 1
+    use_roi: true
+    quant:
+      scheme: global_per_axis
+      centered: false
+      bounds_from_stats: true
+      bits_list: [8, 10, 12, 14, 16]
+
+  waymo:
+    type: waymo
+    description: Waymo kitti_format + ROI
+    data_root: /workspace/VoxelNet/Waymo_Mini/Waymo_mini/kitti_format/training/velodyne
+    num_points: 50000
+    batch_size: 1
+    use_roi: true
+    quant:
+      scheme: global_per_axis
+      centered: false
+      bounds_from_stats: true
+      bits_list: [8, 10, 12, 14, 16]
+
+  nuscenes:
+    type: nuscenes
+    description: NuScenes LIDAR_TOP + ROI；范围与 KITTI 接近但勿手抄，以统计 JSON 为准
+    data_root: /workspace/VoxelNet/Nuscenes_Mini/sweeps/LIDAR_TOP
+    num_points: 50000
+    batch_size: 1
+    use_roi: true
+    quant:
+      scheme: global_per_axis
+      centered: false
+      bounds_from_stats: true
+      bits_list: [8, 10, 12, 14, 16]

@@ -129,13 +129,41 @@ def _build_gam_operators(
     k: int,
     out_channels: int,
     in_channels: int,
+    use_xyz: bool = False,
+    dist_matrix_dram_write: bool = False,
+    distance_reuse: bool = False,
 ) -> List[OperatorRef]:
     """
     Build operator list for a GAM (Geometric Affine Module) layer.
 
     GAM pipeline: FPS → KNN → (Gather → AffineNorm → Concat) → S-Pool
     AffineNorm: (x-mean)/(std+eps) then alpha*x+beta (fixed at inference).
+
+    Args:
+        use_xyz: If True, xyz coordinates are appended to grouped features before
+                 AffineNorm and S-Pool (adds 3 to the channel dimension).
+                 Affects affine_norm num_features and s-pool in_channels.
+        dist_matrix_dram_write: If True, KNN will additionally write the full
+                 distance matrix to DRAM for reuse by FP layers.
+        distance_reuse: If True, KNN skips distance computation and reads
+                 sub-matrix from DRAM-stored global distance matrix.
     """
+    affine_norm_features = in_channels + (3 if use_xyz else 0)
+    spool_in_channels = 2 * in_channels + (3 if use_xyz else 0)
+    knn_params: Dict[str, Any] = {
+        "input_points": ref_points,
+        "query_points": output_points,
+        "k": k,
+    }
+    if dist_matrix_dram_write:
+        knn_params["dist_matrix_dram_write"] = True
+    if distance_reuse:
+        knn_params["distance_reuse"] = True
+    _flags = []
+    if dist_matrix_dram_write:
+        _flags.append("dist_matrix_dram_write")
+    if distance_reuse:
+        _flags.append("distance_reuse")
     return [
         OperatorRef(
             op_type="fps",
@@ -144,32 +172,45 @@ def _build_gam_operators(
         ),
         OperatorRef(
             op_type="knn",
-            params={
-                "input_points": ref_points,
-                "query_points": output_points,
-                "k": k,
-            },
-            description=f"KNN: query={output_points}, ref={ref_points}, K={k}",
+            params=knn_params,
+            description=(
+                f"KNN: query={output_points}, ref={ref_points}, K={k}"
+                + (f" [{','.join(_flags)}]" if _flags else "")
+            ),
         ),
         OperatorRef(
             op_type="affine_norm",
             params={
-                "num_features": in_channels,
+                "num_features": affine_norm_features,
                 "num_points": output_points,
                 "k_neighbors": k,
                 "normalize": "anchor",
-                "use_xyz": False,
+                "use_xyz": use_xyz,
+                "channel_semantics": {
+                    "base_features": in_channels,
+                    "xyz_appended": 3 if use_xyz else 0,
+                    "total": affine_norm_features,
+                    "has_gather": True,
+                    "source": "gam_affine_norm",
+                },
             },
-            description=f"GAM AffineNorm (inference fixed): norm then alpha*x+beta, dim={in_channels}",
+            description=f"GAM AffineNorm (inference fixed): norm then alpha*x+beta, dim={affine_norm_features}",
         ),
         OperatorRef(
             op_type="s-pool",
             params={
-                "in_channels": out_channels,
+                "in_channels": spool_in_channels,
                 "num_points": output_points,
                 "k_neighbors": k,
+                "channel_semantics": {
+                    "anchor_features": in_channels,
+                    "neighbor_features": in_channels,
+                    "xyz_appended": 3 if use_xyz else 0,
+                    "total": spool_in_channels,
+                    "source": "gam_spool",
+                },
             },
-            description=f"S-Pool: [{output_points},{k},{out_channels}]→[{out_channels},{output_points}]",
+            description=f"S-Pool: [{output_points},{k},{spool_in_channels}]→[{spool_in_channels},{output_points}]",
         ),
     ]
 

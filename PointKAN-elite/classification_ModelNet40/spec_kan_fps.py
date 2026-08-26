@@ -6,7 +6,7 @@ import random
 import argparse
 import logging
 from dataclasses import dataclass
-from typing import Tuple, Optional, List
+from typing import Tuple, List, Optional
 
 import numpy as np
 
@@ -217,6 +217,367 @@ def fps_with_knn_coarse_fine(
 
     return idx, radii, knn_idx, distances_matrix, knn_radii, thresholds
 
+
+
+import torch
+from typing import Tuple
+
+@torch.no_grad()
+def fps_with_knn_coarse_fine_fused_blockwise(
+    X: torch.Tensor,
+    K: int,
+    k_neighbors: int = 24,
+    init_threshold: float = 0.1,
+    max_iter: int = 10,
+    min_candidates_ratio: float = 1.2,
+    seed: str = "first",
+    return_distances_matrix: bool = True,
+    exclude_self: bool = False,
+    block_size: int = 256,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    融合版 FPS + blockwise coarse-fine KNN
+
+    相比基础 fused 版本，这里对每个 center 的 KNN 搜索引入：
+      1. block_size 分块扫描 d_knn
+      2. 每个 block 内按 threshold 做粗筛
+      3. 将命中的候选“追加”到 buffer（这里用 candidate_mask 表示逻辑 buffer）
+      4. 若 buffer 中候选数 >= min_candidates，则停止阈值迭代
+      5. 否则放大 threshold，重新分块扫描
+      6. 对最终 buffer 内候选做 topk 精筛
+
+    返回：
+      idx, radii, knn_idx, distances_matrix, knn_radii, thresholds
+    """
+    assert X.ndim == 3
+    assert block_size > 0
+
+    B, N, D = X.shape
+    device, dtype = X.device, X.dtype
+
+    K = min(K, N)
+    k_actual = min(k_neighbors, N)
+    min_candidates = max(k_actual + 1, int(k_actual * min_candidates_ratio))
+
+    x2 = (X * X).sum(dim=-1)  # [B, N]
+
+    idx = torch.zeros((B, K), dtype=torch.long, device=device)
+    radii = torch.zeros((B, K), dtype=dtype, device=device)
+    thresholds = torch.zeros((B, K), dtype=dtype, device=device)
+    knn_idx = torch.zeros((B, K, k_actual), dtype=torch.long, device=device)
+    knn_radii = torch.zeros((B, K), dtype=dtype, device=device)
+
+    if return_distances_matrix:
+        distances_matrix = torch.empty((B, K, N), dtype=dtype, device=device)
+    else:
+        distances_matrix = torch.empty((0,), dtype=dtype, device=device)
+
+    # FPS state
+    min_dist = torch.full((B, N), float("inf"), dtype=dtype, device=device)
+    batch_arange = torch.arange(B, device=device)
+
+    # seed
+    if seed == "first":
+        farthest = torch.zeros(B, dtype=torch.long, device=device)
+    elif seed == "random":
+        farthest = torch.randint(0, N, (B,), device=device)
+    elif seed == "max_norm":
+        farthest = torch.argmax(x2, dim=1)
+    else:
+        raise ValueError(f"Unknown seed: {seed}")
+
+    for t in range(K):
+        idx[:, t] = farthest
+
+        # --------------------------------------------------
+        # 1) compute distance from current center to all points
+        # --------------------------------------------------
+        C = X[batch_arange, farthest]                          # [B, D]
+        c2 = (C * C).sum(dim=-1, keepdim=True)                # [B, 1]
+        dot = (X @ C.unsqueeze(-1)).squeeze(-1)               # [B, N]
+        d = (x2 + c2 - 2.0 * dot).clamp_min_(0.0).sqrt()      # [B, N]
+
+        if return_distances_matrix:
+            distances_matrix[:, t, :] = d
+
+        # --------------------------------------------------
+        # 2) prepare d_knn
+        # --------------------------------------------------
+        if exclude_self:
+            d_knn = d.clone()
+            d_knn[batch_arange, farthest] = float("inf")
+        else:
+            d_knn = d
+
+        # --------------------------------------------------
+        # 3) blockwise coarse screening with logical buffer
+        # --------------------------------------------------
+        threshold = torch.full((B,), init_threshold, dtype=dtype, device=device)
+
+        # 记录最终一次迭代的 buffer mask
+        final_candidate_mask = None
+
+        for _ in range(max_iter):
+            # logical buffer: [B, N], 表示哪些点被追加进入 buffer
+            candidate_mask = torch.zeros((B, N), dtype=torch.bool, device=device)
+
+            # 分块扫描，每块内初筛并增量追加到 buffer
+            for start in range(0, N, block_size):
+                end = min(start + block_size, N)
+
+                d_blk = d_knn[:, start:end]                                  # [B, bs]
+                blk_mask = d_blk < threshold.unsqueeze(-1)                   # [B, bs]
+
+                # 增量追加到全局 buffer
+                candidate_mask[:, start:end] |= blk_mask
+
+            count = candidate_mask.sum(dim=1)                                # [B]
+            final_candidate_mask = candidate_mask
+
+            done = count >= min_candidates
+            if done.all():
+                break
+
+            threshold = torch.where(done, threshold, threshold * 1.1)
+
+        thresholds[:, t] = threshold
+
+        # --------------------------------------------------
+        # 4) fine screening on buffer
+        # --------------------------------------------------
+        # 若 buffer 外元素不参与精筛，直接置 inf
+        masked_d = d_knn.masked_fill(~final_candidate_mask, float("inf"))
+
+        knn_vals, knn_idx_t = torch.topk(
+            masked_d, k=k_actual, dim=1, largest=False
+        )
+
+        knn_idx[:, t, :] = knn_idx_t
+        knn_radii[:, t] = knn_vals[:, -1]
+
+        # --------------------------------------------------
+        # 5) FPS update
+        # --------------------------------------------------
+        torch.minimum(min_dist, d, out=min_dist)
+        min_dist[batch_arange, farthest] = 0.0
+        radii[:, t], _ = torch.max(min_dist, dim=1)
+
+        if t < K - 1:
+            farthest = torch.argmax(min_dist, dim=1)
+
+    return idx, radii, knn_idx, distances_matrix, knn_radii, thresholds
+
+
+def _knn_coarse_mult_bisect_alpha(
+    min_candidates_ratio: float, mult_alpha_clip: float
+) -> float:
+    """
+    Phase-1 乘性步长：``alpha_up = alpha_dn = alpha``。
+    ``mult_alpha_clip > 0`` 时用 ``min(τ, clip)``，否则 ``α = τ``（``τ = ratio - 1``）。
+    """
+    tau = float(min_candidates_ratio) - 1.0
+    tau = max(0.0, tau)
+    if mult_alpha_clip > 0.0:
+        a = min(tau, float(mult_alpha_clip))
+    else:
+        a = tau
+    fi = np.finfo(np.float64)
+    return max(float(fi.eps) ** 0.5, a)
+
+
+def _knn_coarse_hi_full_per_row(d_max: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
+    """
+    严格包含该 center 下所有有限距离的上界：``h > d_max``，用相对增量而非 ``d_max+1``，
+    避免坐标尺度小时二分区间过宽。
+    """
+    device = d_max.device
+    fi = torch.finfo(dtype)
+    base = d_max.clamp_min(torch.as_tensor(fi.tiny * 1024, dtype=dtype, device=device))
+    rel = math.sqrt(float(fi.eps)) * 256.0
+    bump = torch.as_tensor(rel, dtype=dtype, device=device)
+    tiny = torch.as_tensor(fi.tiny * 8.0, dtype=dtype, device=device)
+    return base * (1.0 + bump) + tiny
+
+
+@torch.no_grad()
+def knn_coarse_fine_ball_mask(
+    d_knn: torch.Tensor,
+    init_threshold: float,
+    max_iter: int,
+    pool_min: int,
+    dtype: torch.dtype,
+    min_candidates_ratio: float = 1.2,
+    distance_hi_cap: Optional[float] = None,
+    coarse_schedule: str = "bisect",
+    mult_alpha_clip: float = 0.25,
+    pool_shortage: str = "keep_mid",
+    sync_early_exit: bool = True,
+) -> Tuple[torch.Tensor, torch.Tensor, int]:
+    """
+    粗筛：对欧氏球 ``{j : d_j < h}`` 的半径 ``h`` 搜索，使候选数落在目标带内。
+
+    ``coarse_schedule``:
+      - ``"bisect"``：首步 ``init_threshold``，之后在 ``(lo,hi)`` 上标准二分（原行为）。
+      - ``"mult_then_bisect"``：先围绕 ``init_threshold`` 乘性扩缩（``too_few → h(1+α)``，
+        ``too_many → h/(1+α)``，``α`` 由 ``τ=ratio-1`` 与 ``mult_alpha_clip`` 决定），
+        形成 ``(bl,bh)`` 括号后改在括号内二分。主段步用尽仍未形成括号时，仅将括号设为 ``[lo+ε,hi]``，
+        再以中点作为最终 ``h``（无单独尾循环）。
+
+    ``hi_full``：由 ``_knn_coarse_hi_full_per_row(d_max)`` 从当前 center 的距离行 **自动算出**
+    （``d_max`` 为该行最大有限距离），**不是**手工超参。
+
+    二分上界 ``hi`` 为 ``min(hi_full, cap)``（若给定 cap）；否则 ``hi = hi_full``。
+
+    ``pool_shortage``（最终 ``h=(lo+hi)/2`` 后若 ``cnt < pool_lo``）仅两档：
+      - ``"keep_mid"``（默认）：**不**再改 ``h``；候选可少于 ``pool_lo`` / 不足 k。
+      - ``"search_hi"``：将 ``h`` 提至 ``hi``（即 ``min(hi_full,cap)`` 或 ``hi_full``），**永不**为突破 cap 而改用未 cap 的 ``hi_full``。
+    主循环步数 ``steps = max(1, max_iter)``（可提前结束）。
+
+    ``sync_early_exit``（默认 True）：全 batch 收敛时在主机上 ``.item()`` 提前跳出（旧行为）。
+    设为 False 时始终跑满 ``steps``、仅用掩码冻结已收敛行，**无 CPU 同步**，利于 GPU 大批量扫参。
+    """
+    if d_knn.ndim != 2:
+        raise ValueError(f"d_knn 应为 [B,N]，当前 {tuple(d_knn.shape)}")
+    B, N = d_knn.shape
+    device = d_knn.device
+    k = int(pool_min)
+    if k < 1:
+        raise ValueError(f"pool_min（topk）须 >= 1，当前 {k}")
+    if k > N:
+        raise ValueError(f"pool_min={k} > N={N}")
+    ratio = float(min_candidates_ratio)
+    if ratio < 1.0:
+        raise ValueError(f"min_candidates_ratio（即 1+τ）须 >= 1，当前 {ratio}")
+
+    ps = str(pool_shortage).strip().lower()
+    if ps == "hi_full":
+        raise ValueError(
+            "pool_shortage='hi_full' 已移除（旧行为会突破 distance_hi_cap 并常等价全图 topk）。"
+            "请用 'keep_mid'（默认，短缺不扩半径）或 'search_hi'（短缺时扩到 min(hi_full,cap)）。"
+        )
+    if ps not in ("search_hi", "keep_mid"):
+        raise ValueError(
+            f"pool_shortage 须为 'search_hi' | 'keep_mid'，当前 {pool_shortage!r}"
+        )
+
+    pool_hi = int(math.floor(k * ratio))
+    pool_hi = max(pool_hi, k)
+    pool_lo = k + 1
+    if pool_lo > pool_hi:
+        pool_lo = k
+
+    steps = max(1, int(max_iter))
+    d_max = d_knn.max(dim=1).values.clamp_min(1e-8)
+    hi_full = _knn_coarse_hi_full_per_row(d_max, dtype)
+    hi = hi_full
+    if distance_hi_cap is not None and float(distance_hi_cap) > 0.0:
+        cap = torch.full((B,), float(distance_hi_cap), dtype=dtype, device=device)
+        hi = torch.minimum(hi_full, cap)
+    lo = torch.zeros(B, dtype=dtype, device=device)
+    eps = hi_full.clamp_min(torch.tensor(1e-8, dtype=dtype, device=device)) * (
+        torch.finfo(dtype).eps ** 0.5
+    )
+    init_h = torch.full((B,), float(init_threshold), dtype=dtype, device=device)
+    init_h = torch.clamp(init_h, lo + eps, hi - eps)
+
+    if coarse_schedule == "bisect":
+        inner_used = 0
+        lo_b0, hi_b0 = lo, hi
+        converged = torch.zeros(B, dtype=torch.bool, device=device)
+        for it in range(steps):
+            mid = (lo_b0 + hi_b0) / 2
+            if it == 0:
+                mid = init_h
+            cnt = (d_knn < mid.unsqueeze(-1)).sum(dim=1)
+            ok = (cnt >= pool_lo) & (cnt <= pool_hi)
+            too_few = cnt < pool_lo
+            too_many = cnt > pool_hi
+            upd = ~converged
+            lo_b0 = torch.where(upd & (ok | too_few), mid, lo_b0)
+            hi_b0 = torch.where(upd & (ok | too_many), mid, hi_b0)
+            converged = converged | ok
+            inner_used = it + 1
+            if sync_early_exit and bool(ok.all().item()):
+                break
+
+        h = (lo_b0 + hi_b0) / 2
+        cnt = (d_knn < h.unsqueeze(-1)).sum(dim=1)
+        if ps == "search_hi":
+            h = torch.where(cnt < pool_lo, hi, h)
+        mask = d_knn < h.unsqueeze(-1)
+        return mask, h, inner_used
+
+    if coarse_schedule != "mult_then_bisect":
+        raise ValueError(
+            f"coarse_schedule 须为 'bisect' 或 'mult_then_bisect'，当前 {coarse_schedule!r}"
+        )
+
+    alpha = _knn_coarse_mult_bisect_alpha(min_candidates_ratio, float(mult_alpha_clip))
+    one_pa = torch.tensor(1.0 + alpha, dtype=dtype, device=device)
+
+    done_ok = torch.zeros(B, dtype=torch.bool, device=device)
+    use_bisect = torch.zeros(B, dtype=torch.bool, device=device)
+    h_cur = init_h.clone()
+    bl = torch.zeros(B, dtype=dtype, device=device)
+    bh = torch.full((B,), float("inf"), dtype=dtype, device=device)
+    hl = torch.zeros(B, dtype=torch.bool, device=device)
+    hh = torch.zeros(B, dtype=torch.bool, device=device)
+    lo_b = torch.zeros(B, dtype=dtype, device=device)
+    hi_b = torch.zeros(B, dtype=dtype, device=device)
+    ans_h = torch.zeros(B, dtype=dtype, device=device)
+
+    inner_used = 0
+    for it in range(steps):
+        h_probe = torch.zeros(B, dtype=dtype, device=device)
+        h_probe = torch.where(~done_ok & ~use_bisect, h_cur, h_probe)
+        h_probe = torch.where(~done_ok & use_bisect, (lo_b + hi_b) * 0.5, h_probe)
+
+        cnt = (d_knn < h_probe.unsqueeze(-1)).sum(dim=1)
+        ok = (cnt >= pool_lo) & (cnt <= pool_hi)
+        not_done_before = ~done_ok
+        newly_ok = ok & not_done_before
+        done_ok = done_ok | ok
+        ans_h = torch.where(newly_ok, h_probe, ans_h)
+
+        active_m = ~done_ok & ~use_bisect
+        tf = active_m & (cnt < pool_lo)
+        tm = active_m & (cnt > pool_hi)
+        bl = torch.where(tf & ~hl, h_probe, torch.where(tf & hl, torch.maximum(bl, h_probe), bl))
+        hl = hl | tf
+        bh = torch.where(tm & ~hh, h_probe, torch.where(tm & hh, torch.minimum(bh, h_probe), bh))
+        hh = hh | tm
+
+        ready = active_m & hl & hh & (bl < bh)
+        use_bisect = use_bisect | ready
+        lo_b = torch.where(ready, bl, lo_b)
+        hi_b = torch.where(ready, bh, hi_b)
+
+        mul_upd = active_m & ~ready
+        h_cur = torch.where(mul_upd & tf, h_cur * one_pa, h_cur)
+        h_cur = torch.where(mul_upd & tm, h_cur / one_pa, h_cur)
+        h_cur = torch.clamp(h_cur, lo + eps, hi - eps)
+
+        active_b = ~done_ok & use_bisect
+        lo_b = torch.where(active_b & (cnt < pool_lo), h_probe, lo_b)
+        hi_b = torch.where(active_b & (cnt > pool_hi), h_probe, hi_b)
+
+        inner_used = it + 1
+        if sync_early_exit and bool(done_ok.all().item()):
+            break
+
+    stuck = ~done_ok & ~use_bisect
+    if bool(stuck.any().item()):
+        lo_b = torch.where(stuck, lo + eps, lo_b)
+        hi_b = torch.where(stuck, hi, hi_b)
+
+    h = torch.where(done_ok, ans_h, (lo_b + hi_b) * 0.5)
+    cnt = (d_knn < h.unsqueeze(-1)).sum(dim=1)
+    if ps == "search_hi":
+        h = torch.where(cnt < pool_lo, hi, h)
+    mask = d_knn < h.unsqueeze(-1)
+    return mask, h, inner_used
+
+
 @torch.no_grad()
 def fps_with_knn_coarse_fine_fused(
     X: torch.Tensor,
@@ -228,6 +589,10 @@ def fps_with_knn_coarse_fine_fused(
     seed: str = "first",
     return_distances_matrix: bool = True,
     exclude_self: bool = False,
+    distance_hi_cap: Optional[float] = None,
+    coarse_schedule: str = "bisect",
+    mult_alpha_clip: float = 0.25,
+    knn_coarse_pool_shortage: str = "keep_mid",
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     融合版 FPS + coarse-fine KNN
@@ -248,6 +613,12 @@ def fps_with_knn_coarse_fine_fused(
       exclude_self:
           True  -> KNN 时排除 center 自身
           False -> 保持原行为，自身可能进入邻居集合
+      min_candidates_ratio:
+          即 ``1+τ``；粗筛候选数目标区间为 ``(k, ⌊k·(1+τ)⌋]``（见 ``knn_coarse_fine_ball_mask``）。
+      distance_hi_cap:
+          可选；二分上界 ``min(hi_full, cap)``，``hi_full`` 由当前 center 的 ``d_max`` 相对放大得到。
+      coarse_schedule / mult_alpha_clip / knn_coarse_pool_shortage:
+          传给 ``knn_coarse_fine_ball_mask``（见该函数）。
     """
     assert X.ndim == 3
     B, N, D = X.shape
@@ -255,7 +626,6 @@ def fps_with_knn_coarse_fine_fused(
 
     K = min(K, N)
     k_actual = min(k_neighbors, N)
-    min_candidates = max(k_actual + 1, int(k_actual * min_candidates_ratio))
 
     x2 = (X * X).sum(dim=-1)  # [B, N]
 
@@ -299,8 +669,6 @@ def fps_with_knn_coarse_fine_fused(
         # -----------------------------
         # coarse-fine KNN for current center
         # -----------------------------
-        threshold = torch.full((B,), init_threshold, dtype=dtype, device=device)
-
         # 可选：排除自身
         if exclude_self:
             d_knn = d.clone()
@@ -308,13 +676,18 @@ def fps_with_knn_coarse_fine_fused(
         else:
             d_knn = d
 
-        for _ in range(max_iter):
-            mask = d_knn < threshold.unsqueeze(-1)          # [B, N]
-            count = mask.sum(dim=1)                         # [B]
-            done = count >= min_candidates
-            if done.all():
-                break
-            threshold = torch.where(done, threshold, threshold * 1.1)
+        mask, threshold, _inner = knn_coarse_fine_ball_mask(
+            d_knn,
+            init_threshold,
+            max_iter,
+            k_actual,
+            dtype,
+            min_candidates_ratio=min_candidates_ratio,
+            distance_hi_cap=distance_hi_cap,
+            coarse_schedule=coarse_schedule,
+            mult_alpha_clip=mult_alpha_clip,
+            pool_shortage=knn_coarse_pool_shortage,
+        )
 
         thresholds[:, t] = threshold
 
@@ -359,28 +732,32 @@ def fps_with_knn_vanilla(
     knn_radii = knn_vals[:, :, -1]
     return idx, radii, knn_idx, distances_matrix, knn_radii
 
-
 def knn_neighbor_set_iou(
     idx_a: torch.Tensor, idx_b: torch.Tensor, batch_dims: int = 2
 ) -> torch.Tensor:
     """
     计算两组 KNN 邻居索引的 IoU（交并比）。
     idx_a, idx_b: (B, K, k)，每元素为点索引。返回 (B, K) float32。
+
+    在 GPU 上向量化（无 Python 双重循环、无 .cpu()）；邻居行内应互异（``torch.topk`` 通常如此）。
+    若存在重复下标，本实现按「A 中每个位置是否在 B 中出现」计数，与 ``set`` 语义可能略有差别。
     """
+    del batch_dims  # 保留签名兼容旧调用
     if idx_a.dim() == 2:
         idx_a = idx_a.unsqueeze(1)
         idx_b = idx_b.unsqueeze(1)
-    B, K, k = idx_a.shape
-    device = idx_a.device
-    iou_list = []
-    for b in range(B):
-        for t in range(K):
-            set_a = set(idx_a[b, t].cpu().tolist())
-            set_b = set(idx_b[b, t].cpu().tolist())
-            inter = len(set_a & set_b)
-            union = len(set_a | set_b)
-            iou_list.append(inter / union if union > 0 else 1.0)
-    return torch.tensor(iou_list, device=device, dtype=torch.float32).view(B, K)
+    if idx_a.shape[:2] != idx_b.shape[:2]:
+        raise ValueError(
+            f"idx_a / idx_b 前两维须一致，{tuple(idx_a.shape)} vs {tuple(idx_b.shape)}"
+        )
+    ka = idx_a.shape[-1]
+    kb = idx_b.shape[-1]
+    # (B,K,ka,1) == (B,K,1,kb) -> A 中每个下标是否在 B 中出现；无重复时 sum → |A∩B|
+    eq = idx_a.unsqueeze(-1) == idx_b.unsqueeze(-2)
+    inter = eq.any(dim=-1).sum(dim=-1).to(torch.float32)
+    union = torch.full_like(inter, float(ka + kb)) - inter
+    union = torch.clamp(union, min=1.0)
+    return inter / union
 
 
 @torch.no_grad()
@@ -622,9 +999,23 @@ def set_seed(seed: int):
 
 
 @torch.no_grad()
+def extract_radii_from_dataloader(cfg: Config, loader: DataLoader, desc: str = "Extract radii") -> np.ndarray:
+    """
+    对任意输出 (pts [B,N,3], _) 的 DataLoader 批量算 FPS radii，返回 [N_samples, K]。
+    """
+    all_radii = []
+    pbar = tqdm(loader, desc=desc, ncols=110)
+    for pts, _ in pbar:
+        pts = pts.to(cfg.device, dtype=torch.float32)
+        radii = compute_fps_radii_batch(pts, cfg.fps_steps, seed="first")
+        all_radii.append(radii.cpu().numpy())
+    return np.concatenate(all_radii, axis=0)
+
+
+@torch.no_grad()
 def extract_radii_for_split(cfg: Config, partition: str) -> np.ndarray:
     """
-    返回 all_radii: [N_samples, K]
+    返回 all_radii: [N_samples, K]（ModelNet40）
     """
     ds = ModelNet40Wrapper(partition=partition, num_points=cfg.num_points, root=cfg.root)
     loader = DataLoader(
@@ -635,16 +1026,7 @@ def extract_radii_for_split(cfg: Config, partition: str) -> np.ndarray:
         drop_last=False,
         collate_fn=collate_points,
     )
-
-    all_radii = []
-    pbar = tqdm(loader, desc=f"Extract radii [{partition}]", ncols=110)
-    for pts, _ in pbar:
-        pts = pts.to(cfg.device, dtype=torch.float32)   # [B,N,3]
-        radii = compute_fps_radii_batch(pts, cfg.fps_steps, seed="first")  # [B,K]
-        all_radii.append(radii.cpu().numpy())
-
-    all_radii = np.concatenate(all_radii, axis=0)  # [N,K]
-    return all_radii
+    return extract_radii_from_dataloader(cfg, loader, desc=f"Extract radii [{partition}]")
 
 
 class RadiiIOTensorDataset(Dataset):

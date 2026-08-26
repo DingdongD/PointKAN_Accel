@@ -4,23 +4,21 @@
 """
 profile.py
 
-统一的 CPU / GPU 推理性能分析器（命令级）
+围绕 model(x) 前向的 CPU / GPU 指标采集
 --------------------------------------------------
-功能：
-1. 执行用户给定的推理命令
-2. 统计 wall time / latency
-3. GPU 侧优先使用 NVML 采样功耗、利用率、显存占用
-4. 若 NVML 不可用，则自动回退到 nvidia-smi dmon
-5. CPU 侧使用 psutil 采样 CPU 利用率、RSS 内存
-6. 可选启用 perf stat，并自动解析 cycles / instructions / cache misses / RAPL energy
-7. 可选从 /sys/class/powercap 读取 RAPL，作为 CPU energy 的回退源
-8. 对 GPU 功率-时间曲线做梯形积分，得到 energy (J)
-9. 输出每次运行的 JSON / CSV 汇总结果
+你要的「推理 latency / energy / power」指 **一次或多次 model(x) 前向**，不是 import、建网、数据搬运
+（除非你的脚本把这些也算进 forward，本工具默认以推理脚本写回的计时为准）。
 
-说明：
-- 这是“命令级” profiler，适合：
-    python profile.py --cmd "python infer.py --batch 1" --mode gpu
-- 如果你后面要直接适配你自己的 network + dataset，建议另外再加一个 profile_torch_infer.py
+实现方式：通过 shell 执行一条 benchmark 命令，在命令运行期间用 NVML（或 dmon）采 GPU 功率曲线、
+用 psutil 采 CPU/RSS；推理脚本在 PROFILE_RUN_DIR 下写出 {tag}_inference_only.json（前向累计时长、
+批次数、可选 pyRAPL 前向 CPU 能），本模块据此把 **latency_s、gpu_energy_j、gpu_avg_power_w**
+与 **model(x) 前向**对齐（GPU 侧为时间比例归因，见 RunSummary）。
+
+其它字段（如 wall_time_s、perf 的整段 RAPL）仅作环境/诊断参考；只写论文里的推理数字时请用
+latency_s、gpu_energy_j、cpu_energy_inference_* 等前向字段。
+
+命令行示例：
+    python profiler.py --cmd "python run_infer_random.py ..." --mode gpu
 """
 
 import argparse
@@ -249,8 +247,7 @@ def diff_rapl_j(before: Dict[str, int], after: Dict[str, int]) -> Dict[str, floa
 
 def start_dmon_logger(out_path: Path, gpu_index: int, interval_s: int = 1):
     """
-    启动 nvidia-smi dmon 采样子进程
-    输出写入 out_path
+    启动 nvidia-smi dmon 后台采样，功率写入 out_path（NVML 不可用时的回退）。
     """
     if not command_exists("nvidia-smi"):
         return None, None
@@ -272,7 +269,7 @@ def start_dmon_logger(out_path: Path, gpu_index: int, interval_s: int = 1):
 
 
 def stop_dmon_logger(proc, file_obj):
-    """停止 dmon 子进程"""
+    """停止 dmon 采样。"""
     if proc is not None:
         try:
             proc.terminate()
@@ -354,7 +351,23 @@ def parse_dmon_file(dmon_path: Path, interval_s: float = 1.0) -> List[Dict[str, 
 
 @dataclass
 class RunSummary:
-    """单次运行的摘要结果"""
+    """单次 profile 的摘要。**主指标均应对齐 model(x) 前向**（见下）。
+
+    - latency_s：单次 model(x) 前向耗时（秒）。由 {tag}_inference_only.json 中的
+      inference_only_per_forward_s 或 inference_only_s/num_batches 得到；若推理脚本未写该文件，
+      则无法从墙钟中剥离前向，此时 latency_s 退化为 wall_time_s（仅表示「整条命令跑多久」，勿当作推理延迟）。
+    - inference_only_s：本 run 内全部 model(x) 调用的前向时间之和（秒）。
+    - gpu_energy_j：对采样到的功率曲线积分并扣除空闲基线后，按 (inference_only_s / wall_time_s)
+      将 **增量 GPU 能量** 归因到前向时段（启发式；无 inference json 时不做归因）。
+    - gpu_avg_power_w：在有 inference_only_s 且 >0 时取 gpu_energy_j / inference_only_s，与上式能量一致；
+      否则为采样区间内的算术平均功率（可能含建网阶段，仅作参考）。
+    - gpu_peak_power_w：采样窗口内的功率峰值（可能出现在建网或前向，非严格「仅前向峰值」）。
+    - wall_time_s：本次执行的 benchmark 命令从启动到结束的墙钟（含 Python 启动、import、建网等）。
+      **不是** model(x) 延迟；若你只关心推理，分析时以 latency_s / inference_only_* 为准即可忽略此项。
+    - cpu_energy_inference_*：推理脚本内 pyRAPL 仅包住 model(x) 循环测得的 CPU 能量（J）。
+    - cpu_energy_pkg_j / ram_j / total_j：perf 或 sysfs 的整段计数，**不等同**于纯前向；未做时间缩放。
+    """
+
     mode: str
     command: str
     returncode: int
@@ -382,9 +395,9 @@ class RunSummary:
     cpu_csv_path: Optional[str]
     dmon_path: Optional[str]
     perf_path: Optional[str]
-    inference_only_s: Optional[float] = None  # 仅 model 前向时间总和（子进程写 inference_only.json 时填入）
-    inference_only_per_forward_s: Optional[float] = None  # 单次前向时间 = inference_only_s / num_batches
-    # 仅推理阶段 CPU 能耗（子进程内 pyRAPL Measurement 包住推理循环写入 inference_only.json）
+    inference_only_s: Optional[float] = None  # 本 run 内 model(x) 前向时间总和（秒），来自 inference_only.json
+    inference_only_per_forward_s: Optional[float] = None  # 单次前向 = inference_only_s / num_batches
+    # model(x) 前向段 CPU 能耗（推理脚本内 pyRAPL 写入 inference_only.json）
     cpu_energy_inference_pkg_j: Optional[float] = None
     cpu_energy_inference_ram_j: Optional[float] = None
     cpu_energy_inference_total_j: Optional[float] = None
@@ -533,7 +546,7 @@ class CPUSampler(threading.Thread):
 
 
 def aggregate(summaries: List[RunSummary]) -> Dict[str, Any]:
-    """对多次 repeat 的结果做聚合统计"""
+    """对多次 repeat 聚合。latency_s_* / gpu_energy_j_* 等与 RunSummary 一致：优先为 model(x) 前向语义。"""
 
     def avg(vals):
         vals = [v for v in vals if v is not None]
@@ -602,8 +615,7 @@ def aggregate(summaries: List[RunSummary]) -> Dict[str, Any]:
 
 def sample_gpu_idle_power(gpu_index: int, duration_s: float = 2.0, interval_s: float = 0.1) -> Optional[float]:
     """
-    在启动子进程前采样 GPU 空闲功率（瓦），用于后续从总能耗中扣减空闲分量。
-    采样 duration_s 秒，每 interval_s 秒取一次 NVML 功率，返回平均值。
+    在启动 benchmark 命令之前采样 GPU 空闲功率（瓦），用于从功率曲线积分中扣减空闲分量。
     """
     if pynvml is None:
         return None
@@ -638,8 +650,8 @@ def run_command(
     enable_perf: bool = False,
 ) -> RunSummary:
     """
-    执行一次目标命令，并在运行期间进行 CPU/GPU 采样。
-    GPU 能耗会扣减「空闲功率 × 运行时间」得到增量能耗。
+    执行一条 benchmark 命令，运行期间采 CPU/GPU。
+    GPU 能量：积分 → 按整段墙钟扣 P_idle → 若有前向累计时长则按比例归因到 model(x)（与 latency_s 一致）。
     """
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -755,7 +767,7 @@ def run_command(
                 num_batches = int(num_b) if num_b else None
                 if num_b and inference_only_s is not None and inference_only_s >= 0:
                     inference_only_per_forward_s = inference_only_s / num_b
-                # 推理阶段 CPU 能耗（pyRAPL 在进程内仅包住推理循环）
+                # model(x) 前向段 CPU 能耗（pyRAPL 只包住 forward 循环）
                 v = infer_data.get("cpu_energy_inference_pkg_j")
                 if v is not None:
                     cpu_energy_inference_pkg_j = float(v)
@@ -816,11 +828,24 @@ def run_command(
     else:
         gpu_csv_path = None
 
-    # GPU 能耗扣减空闲分量：用「推理时长」扣减避免 wall 内大量非推理时间导致扣成 0
-    # E_corrected = E_total - P_idle * T_subtract，T_subtract = inference_only_s 若有，否则 wall_s
-    subtract_s = inference_only_s if inference_only_s is not None and inference_only_s >= 0 else wall_s
-    if gpu_energy is not None and gpu_idle_power_w is not None and subtract_s is not None:
-        gpu_energy = max(0.0, float(gpu_energy) - gpu_idle_power_w * subtract_s)
+    # GPU：对「本次 profile 的采样墙钟」扣空闲基线，再按前向累计时长占比归因到 model(x)
+    if gpu_energy is not None and gpu_idle_power_w is not None:
+        gpu_energy = max(0.0, float(gpu_energy) - gpu_idle_power_w * wall_s)
+    if (
+        gpu_energy is not None
+        and inference_only_s is not None
+        and inference_only_s >= 0
+        and wall_s > 0
+    ):
+        gpu_energy = float(gpu_energy) * (float(inference_only_s) / wall_s)
+
+    # 与归因后的 gpu_energy_j 一致：前向段平均功率 ≈ E / T（T 为本 run 内全部 forward 合计时长）
+    if (
+        gpu_energy is not None
+        and inference_only_s is not None
+        and float(inference_only_s) > 0
+    ):
+        gpu_avg_power = float(gpu_energy) / float(inference_only_s)
 
     # 汇总 CPU
     if cpu_sampler and cpu_sampler.samples:
@@ -883,12 +908,22 @@ def run_command(
     if vals:
         cpu_energy_total_j = sum(vals)
 
+    latency_s = wall_s
+    if inference_only_per_forward_s is not None:
+        latency_s = float(inference_only_per_forward_s)
+    elif (
+        inference_only_s is not None
+        and num_batches is not None
+        and num_batches > 0
+    ):
+        latency_s = float(inference_only_s) / float(num_batches)
+
     return RunSummary(
         mode="gpu" if sample_gpu else "cpu",
         command=cmd,
         returncode=ret,
         wall_time_s=wall_s,
-        latency_s=wall_s,
+        latency_s=latency_s,
         inference_only_s=inference_only_s,
         inference_only_per_forward_s=inference_only_per_forward_s,
 
@@ -923,7 +958,9 @@ def run_command(
 
 def main():
     """命令行入口"""
-    ap = argparse.ArgumentParser(description="统一 CPU/GPU 推理分析器")
+    ap = argparse.ArgumentParser(
+        description="采集 model(x) 前向相关的 latency / GPU 能量与功率（需推理脚本写 inference_only.json）"
+    )
     ap.add_argument("--cmd", required=True, help="要执行的 shell 命令")
     ap.add_argument("--out-dir", default="outputs", help="输出目录")
     ap.add_argument("--mode", choices=["cpu", "gpu"], default="gpu", help="分析模式")
@@ -933,7 +970,11 @@ def main():
     ap.add_argument("--gpu-sample-ms", type=int, default=50, help="GPU 采样周期 ms")
     ap.add_argument("--cpu-sample-ms", type=int, default=50, help="CPU 采样周期 ms")
     ap.add_argument("--enable-perf", action="store_true", help="是否启用 perf stat")
-    ap.add_argument("--print-inference-only", action="store_true", help="仅打印 model 推理相关指标，不打印进程级 latency_s 等")
+    ap.add_argument(
+        "--print-inference-only",
+        action="store_true",
+        help="仅打印与 model(x) 前向对齐的聚合指标（latency、GPU 能量/功率已归因前向）",
+    )
     args = ap.parse_args()
 
     out_dir = Path(args.out_dir)
@@ -989,6 +1030,9 @@ def main():
         out = {
             "aggregate": {
                 "num_runs": agg.get("num_runs"),
+                "latency_s_mean": agg.get("latency_s_mean"),
+                "latency_s_min": agg.get("latency_s_min"),
+                "latency_s_max": agg.get("latency_s_max"),
                 "inference_only_per_forward_s_mean": agg.get("inference_only_per_forward_s_mean"),
                 "inference_only_s_mean": agg.get("inference_only_s_mean"),
                 "gpu_energy_j_mean": agg.get("gpu_energy_j_mean"),

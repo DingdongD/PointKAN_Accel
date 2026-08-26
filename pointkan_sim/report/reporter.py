@@ -350,39 +350,3 @@ def create_ppa_result(
         area_breakdown=area_breakdown or {},
         energy_breakdown=energy_breakdown or {},
     )
-
-
-def create_report_from_simulation(
-    sim_result: 'SimulationResult',
-    area_mm2: float,
-    title: str = "Simulation Report"
-) -> Reporter:
-    """
-    Create report from simulation result.
-    
-    Args:
-        sim_result: Simulation result
-        area_mm2: Chip area
-        title: Report title
-        
-    Returns:
-        Reporter instance with results.
-    """
-    reporter = Reporter(title=title)
-    
-    ppa_result = create_ppa_result(
-        latency_cycles=sim_result.total_cycles,
-        power_mW=sim_result.total_power,
-        area_mm2=area_mm2,
-    )
-    ppa_result.energy_nJ = sim_result.total_energy
-    ppa_result.energy_uJ = sim_result.total_energy / 1000
-    
-    reporter.set_results(ppa_result)
-    reporter.add_metadata('simulation_status', sim_result.status.name)
-    
-    # Add statistics section
-    if sim_result.statistics:
-        reporter.add_section('Statistics', sim_result.statistics)
-    
-    return reporter

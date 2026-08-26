@@ -1,2 +1,3 @@
 from __future__ import absolute_import
 from .pointKANElite import pointKANElite
+from .pointKANElite_fps_opt import pointKANEliteFPSOptimized

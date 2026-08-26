@@ -452,12 +452,11 @@ class Model(nn.Module):
         x = self.classifier(x)
         return x 
     
-    
-
 
 def pointKANElite(num_classes=40, **kwargs) -> Model:
-    return Model(points=1024, class_num=num_classes, embed_dim=32, groups=1, res_expansion=1.0,
-                   activation="relu", bias=False, use_xyz = False, normalize="anchor",
+    points = int(kwargs.pop("points", 1024))
+    return Model(points=points, class_num=num_classes, embed_dim=32, groups=1, res_expansion=1.0,
+                   activation="relu", bias=False, use_xyz=False, normalize="anchor",
                    dim_expansion=[2, 2, 2, 2], LFP_blocks=[1, 1, 1, 1], GFP_blocks=[1, 1, 1, 1],
                    k_neighbors=[24, 24, 24, 24], reducers=[2, 2, 2, 2], **kwargs)
 

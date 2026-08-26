@@ -392,21 +392,34 @@ class PointNetFeaturePropagation(nn.Module):
         # xyz1 = xyz1.permute(0, 2, 1)
         # xyz2 = xyz2.permute(0, 2, 1)
 
-        points2 = points2.permute(0, 2, 1)
+        points2 = points2.permute(0, 2, 1)  # B, S, D2
         B, N, C = xyz1.shape
         _, S, _ = xyz2.shape
+        """
+        第1次：N=32, S=8
+        第2次：N=128, S=32
+        第3次：N=512, S=128
+        第4次：N=2048, S=512
 
+        """
+
+
+        # 这里的核心是 对每个query 找到xyz2距离最近的三个点 
         if S == 1:
             interpolated_points = points2.repeat(1, N, 1)
-        else:
+        else: # 插值 【B,8,3】 [B,32,3] [B, 128,3] [B, 512, 3]
+            # 若把 NUM_POINTS 改成别的值，只要仍满足每层 anchor_points = anchor_points // reduce，S 会随最粗到较粗各层点数变化，但始终是 (B, 该层点数, 3)。
             dists = square_distance(xyz1, xyz2) # [B, N, S]
-            dists, idx = dists.sort(dim=-1)
+            dists, idx = dists.sort(dim=-1)  # 对xyz1里的每个点在xyz2找到距离最近的S个点 用距离倒数加权 将points2特征插值到密层 再和points1已有特征拼接
             dists, idx = dists[:, :, :3], idx[:, :, :3]  # [B, N, 3] 选择xyz2中距离最近的三个点
 
-            dist_recip = 1.0 / (dists + 1e-8)
-            norm = torch.sum(dist_recip, dim=2, keepdim=True)
-            weight = dist_recip / norm  # 距离越近，权重越大，所以取距离的倒数
-            interpolated_points = torch.sum(index_points(points2, idx) * weight.view(B, N, 3, 1), dim=2)
+            dist_recip = 1.0 / (dists + 1e-8)  # 【B,N,3]
+            norm = torch.sum(dist_recip, dim=2, keepdim=True)  # [B,N,1]
+            weight = dist_recip / norm  # 距离越近，权重越大，所以取距离的倒数 【B,N,3]
+
+            interpolated_points = torch.sum(index_points(points2, idx) * weight.view(B, N, 3, 1), dim=2)  # [B,N,D2]    
+            # index_points: [B, S, D2] [B, N, 3] -> [B, N, 3, D2]  weight [B,N,3] -> [B,N,3,1]
+            #  -> [B,N, 3, D2] -> [B,N,D2]
 
         if points1 is not None:
             points1 = points1.permute(0, 2, 1)

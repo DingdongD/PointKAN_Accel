@@ -8,6 +8,9 @@ spec_kan_fps_opt_kan.py：增强版 seg_filter FPS IOU 评估，支持「KAN 预
     同时保留「用 exact radii 作 radii_ref」的 seg_filter 得到 idx_seg_exact_ref。
   - 评估：对比 IOU(vanilla, seg_exact_ref) 与 IOU(vanilla, seg_kan_ref)，看 KAN 预测的 radii 是否造成 FPS IOU 损失。
 
+另见 ``predict_full_radii_squared_from_fps_prefix_points``：用 **FPS 前缀采样点的 3D 坐标**（展平→in_dim）预测 **全长 K** 阈值曲线，
+与「半径序列前缀→后缀」的训练数据不同，需单独训练。
+
 依赖：run_fps_radii_prefix_sweep.sh / run_eval_prefix_ratio.sh 训练得到的 KAN 权重（如 runs/fps_radii_kan_K512_pr0.10/best.pt）。
 """
 import os
@@ -103,6 +106,56 @@ def predict_full_radii_squared_from_exact(
     full_eucl = torch.cat([prefix_eucl, suffix_pred_eucl], dim=1)
     full_sq = full_eucl ** 2
     return full_sq
+
+
+def kan_prefix_len_from_K(K: int, prefix_ratio: float) -> int:
+    """与 radii 版 prefix 一致：前若干 FPS 步数（含起点），用于取前缀点或推迟 seg_filter。"""
+    return max(2, min(int(round(K * prefix_ratio)), K - 2))
+
+
+@torch.no_grad()
+def predict_full_radii_squared_from_fps_prefix_points(
+    X: torch.Tensor,
+    idx_exact: torch.Tensor,
+    K: int,
+    model: torch.nn.Module,
+    cfg: Config,
+    device: torch.device,
+) -> Tuple[torch.Tensor, int]:
+    """
+    用 **exact FPS 前若干采样点的 3D 坐标** 构造 KAN 输入（前缀展平后线性重采样到 in_dim），
+    网络输出 out_dim，再上采样到长度 K 的 **欧氏** 最小距离阈值曲线，最后平方后与 seg_filter 的 min_dist_sq 一致。
+
+    与 ``predict_full_radii_squared_from_exact``（半径序列作前缀）不同：本函数整段 K 步阈值均由
+    「前缀点 → KAN → 上采样到 K」得到，**不**再拼接 exact 半径前缀；需用匹配的数据与权重训练。
+
+    参数:
+        X: [B, N, 3]
+        idx_exact: [B, K] exact FPS 索引（用于取前 prefix_len 列）
+        K: FPS 总步数（输出 radii 长度）
+
+    返回:
+        full_sq: [B, K] 平方阈值曲线
+        prefix_len: 实际使用的前缀 FPS 点数
+    """
+    prefix_ratio = getattr(cfg, "prefix_ratio", 0.10)
+    in_dim = getattr(cfg, "in_dim", 32)
+    out_dim = getattr(cfg, "out_dim", 64)
+    prefix_len = kan_prefix_len_from_K(K, prefix_ratio)
+
+    X = X.to(device, dtype=torch.float32)
+    idx_exact = idx_exact.to(device, dtype=torch.long)
+    B = X.size(0)
+    batch_arange = torch.arange(B, device=device)
+    idx_p = idx_exact[:, :prefix_len]
+    prefix_pts = X[batch_arange.unsqueeze(1), idx_p]
+    flat = prefix_pts.reshape(B, -1)
+    x = lin_resample_1d(flat, in_dim)
+    yhat = model(x)
+    full_eucl = lin_resample_1d(yhat, K)
+    full_eucl = full_eucl.clamp(min=0.0)
+    full_sq = full_eucl ** 2
+    return full_sq, prefix_len
 
 
 # =========================================================

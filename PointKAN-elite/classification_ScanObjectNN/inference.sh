@@ -70,6 +70,7 @@ _run_inference_kan() {
     python inference_and_kan_analysis.py "${args[@]}" "${EXTRA_ARGS[@]}"
 }
 
+
 _run_stats() {
     local args=(--data_root "$DATA_ROOT")
     [[ -n "$STATS_CSV" ]] && args+=(--csv "$STATS_CSV")

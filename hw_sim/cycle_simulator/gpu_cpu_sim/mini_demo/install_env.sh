@@ -16,11 +16,12 @@ python3 -c "import torch; print('    PyTorch', torch.__version__, 'CUDA:', torch
 echo ">>> 2. 安装 requirements.txt"
 pip install -r requirements.txt
 
-echo ">>> 3. 安装 pointnet2_ops（本目录 pointnet2_ops_lib，含 CPU FPS）"
+echo ">>> 3. 安装 pointnet2_ops（CUDA 扩展，供 PointKAN-elite 等；亦可单独执行 ./build_pointnet2_ops.sh）"
 if [[ -d "$DEMO_ROOT/pointnet2_ops_lib" ]]; then
   pip install -e "$DEMO_ROOT/pointnet2_ops_lib"
 else
   echo "    未找到 pointnet2_ops_lib 目录，请确保已拷贝到 mini_demo 下或另行安装 pointnet2_ops"
 fi
 
-echo ">>> 安装完成。运行: ./run.sh"
+echo ">>> 安装完成。统一推理入口: python3 run_infer_random.py --task <...>（PointKAN / isda_* / openpoints_*）"
+echo ">>> 批量脚本: ./run.sh（PointKAN）  ./run_isda.sh（isda_*）"

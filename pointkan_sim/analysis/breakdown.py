@@ -248,10 +248,15 @@ def analyze_simulation_events_breakdown(
     """
     从仿真事件列表按层/算子/电路模块三维度聚合周期与能耗。
     要求事件在入队时已设置 metadata['layer_name']（如 main.simulate_network 中 _add_events_to_scheduler）。
+
+    cycles 字段采用「关键路径 makespan」：对每个 (分组维度, layer_name) 区间
+    取 [min_cycle, max_end_cycle] 跨度，再按分组维度汇总。
+    这比 sum(duration) 准确——后者在并行距离链中会把并行 CIM 读全部累加，高估墙钟延迟。
+
     Returns:
-        by_layer: 层名 -> { cycles, energy_nj, event_count }
-        by_operator: 算子名 -> { cycles, energy_nj, event_count }
-        by_module: 电路模块名 -> { cycles, energy_nj, event_count }
+        by_layer: 层名 -> { cycles(makespan), energy_nj, event_count }
+        by_operator: 算子名 -> { cycles(makespan), energy_nj, event_count }
+        by_module: 电路模块名 -> { cycles(makespan), energy_nj, event_count }
         total_cycles: 墙钟总周期（max(end_cycle)-min(cycle)+1）
         total_energy_nj: 事件能耗之和
     """
@@ -261,34 +266,60 @@ def analyze_simulation_events_breakdown(
     by_operator: Dict[str, Dict[str, Any]] = defaultdict(lambda: {"cycles": 0, "energy_nj": 0.0, "event_count": 0})
     by_module: Dict[str, Dict[str, Any]] = defaultdict(lambda: {"cycles": 0, "energy_nj": 0.0, "event_count": 0})
 
+    # Makespan spans: (group_key, layer_name) → (min_cycle, max_end_cycle)
+    _layer_spans: Dict[tuple, tuple] = {}     # (layer_name,) → (min, max)
+    _op_spans: Dict[tuple, tuple] = {}        # (op_name, layer_name) → (min, max)
+    _mod_spans: Dict[tuple, tuple] = {}       # (mod_name, layer_name) → (min, max)
+
     total_energy_nj = 0.0
     min_cycle = float("inf")
     max_end_cycle = -1
 
     for e in events:
-        layer_name = (e.metadata or {}).get("layer_name", "unknown")
-        op_name = e.operator or "unknown"
-        mod_name = e.circuit_module or "unknown"
+        layer_name = str((e.metadata or {}).get("layer_name", "unknown") or "unknown")
+        op_name = str(e.operator or "unknown")
+        mod_name = str(e.circuit_module or "unknown")
 
         dur = getattr(e, "duration", 1)
         en = getattr(e, "energy", 0.0)
+        overlapped = getattr(e, "overlapped", False)
+        ec = int(getattr(e, "cycle", 0))
+        ee = int(getattr(e, "end_cycle", ec + dur - 1))
 
-        by_layer[layer_name]["cycles"] += dur
+        if not overlapped:
+            # Track spans for makespan-based cycle counts
+            for spans, key in (
+                (_layer_spans, (layer_name,)),
+                (_op_spans, (op_name, layer_name)),
+                (_mod_spans, (mod_name, layer_name)),
+            ):
+                if key not in spans:
+                    spans[key] = (ec, ee)
+                else:
+                    prev_min, prev_max = spans[key]
+                    spans[key] = (min(prev_min, ec), max(prev_max, ee))
+
         by_layer[layer_name]["energy_nj"] += en
         by_layer[layer_name]["event_count"] += 1
 
-        by_operator[op_name]["cycles"] += dur
         by_operator[op_name]["energy_nj"] += en
         by_operator[op_name]["event_count"] += 1
 
-        by_module[mod_name]["cycles"] += dur
         by_module[mod_name]["energy_nj"] += en
         by_module[mod_name]["event_count"] += 1
 
         total_energy_nj += en
-        min_cycle = min(min_cycle, e.cycle)
-        if not getattr(e, "overlapped", False):
-            max_end_cycle = max(max_end_cycle, e.cycle + dur - 1)
+        min_cycle = min(min_cycle, ec)
+        if not overlapped:
+            max_end_cycle = max(max_end_cycle, ee)
+
+    # Apply makespan-based cycles
+    for (layer_name,), (mn, mx) in _layer_spans.items():
+        by_layer[layer_name]["cycles"] += (mx - mn + 1)
+    for (op_name, _layer), (mn, mx) in _op_spans.items():
+        by_operator[op_name]["cycles"] += (mx - mn + 1)
+    for (mod_name, _layer), (mn, mx) in _mod_spans.items():
+        by_module[mod_name]["cycles"] += (mx - mn + 1)
 
     total_cycles = max(0, max_end_cycle - min_cycle + 1) if events else 0
 

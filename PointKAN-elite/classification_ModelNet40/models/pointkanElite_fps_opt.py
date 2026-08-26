@@ -168,8 +168,9 @@ class ModelFPSOptimized(Model):
 
 def pointKANEliteFPSOptimized(num_classes=40, **kwargs) -> ModelFPSOptimized:
     """与 pointKANElite() 相同配置，用于加载同一 checkpoint 的 FPS 优化推理。"""
+    points = int(kwargs.pop("points", 1024))
     return ModelFPSOptimized(
-        points=1024, class_num=num_classes, embed_dim=32, groups=1, res_expansion=1.0,
+        points=points, class_num=num_classes, embed_dim=32, groups=1, res_expansion=1.0,
         activation="relu", bias=False, use_xyz=False, normalize="anchor",
         dim_expansion=[2, 2, 2, 2], LFP_blocks=[1, 1, 1, 1], GFP_blocks=[1, 1, 1, 1],
         k_neighbors=[24, 24, 24, 24], reducers=[2, 2, 2, 2], **kwargs

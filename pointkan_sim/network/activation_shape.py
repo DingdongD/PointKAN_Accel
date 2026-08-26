@@ -61,7 +61,7 @@ def _infer_layer_output_shape(layer: LayerDef) -> Optional[Tuple[int, ...]]:
     从层内算子参数推断本层输出 shape，与 pointkanElite.py / pointkan.py 的 forward 一致。
 
     规则：
-    - conv1d：仅当 params 中有 num_points 时才更新 points，否则保留之前值（避免 LFP 内无 num_points 的 conv 把 points 写成 1）。
+    - conv1d/conv2d：仅当 params 中有 num_points 时才更新 points，否则保留之前值。
     - linear：输出 (out_features,)。
     - s-pool（GAM）：(num_points, in_channels)。
     - LFP：输出为 (G, C)，即 fusion add 的 num_points × num_features；adaptive_max_pool1d 只做局部池化，不改变整层输出的 points 维。
@@ -76,7 +76,7 @@ def _infer_layer_output_shape(layer: LayerDef) -> Optional[Tuple[int, ...]]:
 
     for op in layer.operators:
         p = op.params
-        if op.op_type == "conv1d":
+        if op.op_type in ("conv1d", "conv2d"):
             if "num_points" in p:
                 points = int(p["num_points"])
             channels = int(p.get("out_channels", 1))
@@ -85,11 +85,11 @@ def _infer_layer_output_shape(layer: LayerDef) -> Optional[Tuple[int, ...]]:
         elif op.op_type == "s-pool":
             points = int(p.get("num_points", 1))
             channels = int(p.get("in_channels", 1))
-        elif op.op_type == "adaptive_max_pool1d":
+        elif op.op_type in ("adaptive_max_pool1d", "sa_maxpool"):
             # 仅局部池化，整层输出仍为 (num_points, channels)，不把 output_size 当作层输出
             if channels is None:
                 channels = int(p.get("num_features", 1))
-        elif op.op_type in ("add", "relu", "bn", "batchnorm1d", "layernorm", "kan", "mul", "affine_norm"):
+        elif op.op_type in ("add", "relu", "bn", "batchnorm1d", "layernorm", "kan", "mul", "affine_norm", "ballquery"):
             if points is None and "num_points" in p:
                 points = int(p["num_points"])
             elif "num_points" in p:

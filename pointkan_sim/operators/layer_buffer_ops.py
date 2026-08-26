@@ -13,23 +13,13 @@ from __future__ import annotations
 from typing import Any, Dict, Iterator, List, Optional, Tuple, TYPE_CHECKING
 
 from ..simulator.event import Event
-from ..integration.memory_model_adapter import query_sram_cycles_energy, query_dram_cycles_energy
+from ..integration.memory_model_adapter import query_sram_cycles_energy, query_dram_batch_cycles_energy, query_dram_cycles_energy, query_dram_issue_cycles
 from ..integration.memory_runtime import MemoryRuntimeContext
 from ..memory.feature_residency import get_effective_feature_buffer_bytes
+from ..utils.shared_helpers import split_bytes as _split_bytes
 
 if TYPE_CHECKING:
     from ..configs.hw_config import HardwareConfig
-
-
-def _split_bytes(total_bytes: int, chunk_bytes: int) -> List[int]:
-    total = max(0, int(total_bytes))
-    chunk = max(1, int(chunk_bytes))
-    out: List[int] = []
-    while total > 0:
-        take = min(total, chunk)
-        out.append(take)
-        total -= take
-    return out
 
 
 def _event(
@@ -84,12 +74,23 @@ def gen_layer_buffer_read_events(
         return []
 
     size = max(1, get_effective_feature_buffer_bytes(hw_config) or buf.size_bytes)
+    plan_map = getattr(hw_config, "feature_residency_plan_by_layer", {}) or {}
+    plan = plan_map.get(layer_name)
+    if plan is not None:
+        size = max(1, int(getattr(plan, "streaming_usable_bytes", size) or size))
+    plan_map = getattr(hw_config, "feature_residency_plan_by_layer", {}) or {}
+    plan = plan_map.get(layer_name)
+    if plan is not None:
+        size = max(1, int(getattr(plan, "streaming_usable_bytes", size) or size))
+    pipeline_mode = str(getattr(buf, "pipeline_mode", "without_pipeline") or "without_pipeline").strip().lower()
+    double_buffering = bool(getattr(buf, "double_buffering", False))
+    streaming_feature = pipeline_mode == "pipeline" and double_buffering
     events: List[Event] = []
     cycle = 0
     event_id = 0
     meta_base = {"layer_name": layer_name, "buffer_phase": "input_read"}
 
-    read_from_buf = min(input_bytes, size)
+    read_from_buf = input_bytes if streaming_feature else min(input_bytes, size)
     if read_from_buf > 0:
         sram_chunks = _split_bytes(read_from_buf, size)
         total_chunks = len(sram_chunks)
@@ -128,7 +129,9 @@ def gen_layer_buffer_read_events(
             "DRAM", "buffer_io", "dram_read",
             "dram", "inter_layer_spill_read",
             dur, energy_nj, clk,
-            {**meta_base, "bytes": spill_bytes, "source": "dram_spill"},
+            {**meta_base, "bytes": spill_bytes, "source": "dram_spill",
+             "resource_id": "dram_port", "dram_pipelined": True,
+             "dram_issue_cycles": query_dram_issue_cycles(spill_bytes, hw_config)},
         ))
         cycle += dur
 
@@ -155,12 +158,15 @@ def gen_layer_buffer_write_events(
         return []
 
     size = max(1, get_effective_feature_buffer_bytes(hw_config) or buf.size_bytes)
+    pipeline_mode = str(getattr(buf, "pipeline_mode", "without_pipeline") or "without_pipeline").strip().lower()
+    double_buffering = bool(getattr(buf, "double_buffering", False))
+    streaming_feature = pipeline_mode == "pipeline" and double_buffering
     events: List[Event] = []
     cycle = 0
     event_id = 0
     meta_base = {"layer_name": layer_name, "buffer_phase": "output_write"}
 
-    write_to_buf = min(output_bytes, size)
+    write_to_buf = output_bytes if streaming_feature else min(output_bytes, size)
     if write_to_buf > 0:
         sram_chunks = _split_bytes(write_to_buf, size)
         total_chunks = len(sram_chunks)
@@ -199,7 +205,9 @@ def gen_layer_buffer_write_events(
             "DRAM", "buffer_io", "dram_write",
             "dram", "inter_layer_spill_write",
             dur, energy_nj, clk,
-            {**meta_base, "bytes": spill_bytes, "target": "dram_spill"},
+            {**meta_base, "bytes": spill_bytes, "target": "dram_spill",
+             "resource_id": "dram_port", "dram_pipelined": True,
+             "dram_issue_cycles": query_dram_issue_cycles(spill_bytes, hw_config)},
         ))
 
     return events
@@ -238,13 +246,20 @@ def gen_phase2_distance_events(
     per_query_cycles = (bits // slice_bits) * max(1, int(math.ceil(num_keys / active)))
     query_bytes = int(math.ceil(max(1, num_features) * max(1, bits_per_feature) / 8.0))
     dram_cycles, dram_energy_nj = 0, 0.0
+    dram_results: List[Tuple[int, float]] = []
     if include_query_dram_read and query_bytes > 0:
-        dram_cycles, dram_energy_nj = query_dram_cycles_energy(
-            query_bytes, is_read=True, hw_config=hw_config, clock_period_ns=clk,
+        dram_results = query_dram_batch_cycles_energy(
+            [{"num_bytes": query_bytes, "is_read": True, "start_cycle": 0} for _ in range(num_queries)],
+            hw_config,
+            clk,
         )
+        if dram_results:
+            dram_cycles, dram_energy_nj = dram_results[0]
 
     events: List[Event] = []
     for i in range(num_queries):
+        if include_query_dram_read and dram_results and i < len(dram_results):
+            dram_cycles, dram_energy_nj = dram_results[i]
         base_cycle = i * (per_query_cycles + (dram_cycles if include_query_dram_read else 0))
         event_id = i * (2 if include_query_dram_read else 1)
         if include_query_dram_read and dram_cycles > 0:
@@ -259,6 +274,9 @@ def gen_phase2_distance_events(
                         "bytes": query_bytes,
                         "phase": 2,
                         "kind": "query_fetch",
+                        "resource_id": "dram_port",
+                        "dram_pipelined": True,
+                        "dram_issue_cycles": query_dram_issue_cycles(query_bytes, hw_config),
                     },
                 )
             )
@@ -321,6 +339,8 @@ def gen_first_layer_input_load_events(
             "DRAM", "buffer_io", "dram_read",
             "dram", op_name,
             dur, energy_nj, clk,
-            {"layer_name": layer_name, "bytes": input_bytes, "source": "point_cloud_Nx3"},
+            {"layer_name": layer_name, "bytes": input_bytes, "source": "point_cloud_Nx3",
+             "resource_id": "dram_port", "dram_pipelined": True,
+             "dram_issue_cycles": query_dram_issue_cycles(input_bytes, hw_config)},
         )
     ]

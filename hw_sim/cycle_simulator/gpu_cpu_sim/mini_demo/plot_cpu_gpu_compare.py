@@ -25,6 +25,29 @@ TASK_NAMES = {
 }
 TASK_ORDER = ("modelnet40", "scanobjectnn", "part_seg")
 
+ISDA_TASK_NAMES = {
+    "dgcnn": "DGCNN cls",
+    "pn2_ssg": "PN++ SSG cls",
+    "pn2_msg": "PN++ MSG cls",
+    "dgcnn_partseg": "DGCNN part",
+    "dgcnn_semseg": "DGCNN sem",
+    "pn2_part_ssg": "PN++ part SSG",
+    "pn2_part_msg": "PN++ part MSG",
+    "pn2_sem_ssg": "PN++ sem SSG",
+    "pn2_sem_msg": "PN++ sem MSG",
+}
+ISDA_TASK_ORDER = (
+    "dgcnn",
+    "pn2_ssg",
+    "pn2_msg",
+    "dgcnn_partseg",
+    "dgcnn_semseg",
+    "pn2_part_ssg",
+    "pn2_part_msg",
+    "pn2_sem_ssg",
+    "pn2_sem_msg",
+)
+
 
 def find_latest_run_dir(base: Path, prefix: str) -> Optional[Path]:
     task_dir = base / prefix
@@ -50,9 +73,14 @@ def _infer_lat(agg) -> float:
     return float(v) if v is not None else 0.0
 
 
-def collect_cpu_gpu_pairs(outputs_dir: Path, prefix_gpu: str, prefix_cpu: str) -> dict:
+def collect_cpu_gpu_pairs(
+    outputs_dir: Path,
+    prefix_gpu: str,
+    prefix_cpu: str,
+    task_order: tuple = TASK_ORDER,
+) -> dict:
     result = {}
-    for task in TASK_ORDER:
+    for task in task_order:
         gpu_dir = find_latest_run_dir(outputs_dir, prefix_gpu + task)
         cpu_dir = find_latest_run_dir(outputs_dir, prefix_cpu + task)
         agg_gpu = load_aggregate(gpu_dir) if gpu_dir else None
@@ -82,7 +110,14 @@ def collect_cpu_gpu_pairs(outputs_dir: Path, prefix_gpu: str, prefix_cpu: str) -
     return result
 
 
-def plot_cpu_gpu_compare(data: dict, out_path: Path, title_suffix: str = "") -> None:
+def plot_cpu_gpu_compare(
+    data: dict,
+    out_path: Path,
+    title_suffix: str = "",
+    task_order: tuple = TASK_ORDER,
+    task_labels: Optional[dict] = None,
+    suptitle: str = "PointKAN: model(x) inference time & Energy (CPU vs GPU)",
+) -> None:
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -92,14 +127,15 @@ def plot_cpu_gpu_compare(data: dict, out_path: Path, title_suffix: str = "") -> 
         print("matplotlib not installed, skip plot")
         return
 
-    tasks = [TASK_NAMES.get(t, t) for t in TASK_ORDER]
+    labels = task_labels or TASK_NAMES
+    tasks = [labels.get(t, t) for t in task_order]
     x = np.arange(len(tasks))
     width = 0.35
 
-    latency_cpu = [data[t]["latency_cpu"] for t in TASK_ORDER]
-    latency_gpu = [data[t]["latency_gpu"] for t in TASK_ORDER]
-    energy_cpu = [data[t]["energy_cpu"] for t in TASK_ORDER]
-    energy_gpu = [data[t]["energy_gpu"] for t in TASK_ORDER]
+    latency_cpu = [data[t]["latency_cpu"] for t in task_order]
+    latency_gpu = [data[t]["latency_gpu"] for t in task_order]
+    energy_cpu = [data[t]["energy_cpu"] for t in task_order]
+    energy_gpu = [data[t]["energy_gpu"] for t in task_order]
 
     fig, (ax_lat, ax_eng) = plt.subplots(1, 2, figsize=(11, 4.5))
 
@@ -121,10 +157,8 @@ def plot_cpu_gpu_compare(data: dict, out_path: Path, title_suffix: str = "") -> 
     ax_eng.legend()
     ax_eng.grid(axis="y", alpha=0.3)
 
-    suptitle = "PointKAN: model(x) inference time & Energy (CPU vs GPU)"
-    if title_suffix:
-        suptitle += f" ({title_suffix})"
-    fig.suptitle(suptitle, fontsize=12)
+    fig_suptitle = f"{suptitle} ({title_suffix})" if title_suffix else suptitle
+    fig.suptitle(fig_suptitle, fontsize=12)
     fig.tight_layout()
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
@@ -137,9 +171,9 @@ def main():
     ap.add_argument(
         "--source",
         type=str,
-        choices=["random", "checkpoint"],
+        choices=["random", "checkpoint", "isda"],
         default="random",
-        help="数据来源：random=random_gpu_*/random_cpu_*",
+        help="数据来源：random / checkpoint / isda（isda_gpu_<model>）",
     )
     ap.add_argument("--out", type=str, default=None, help="输出图片路径，默认 out-dir/cpu_gpu_compare.png")
     args = ap.parse_args()
@@ -149,21 +183,42 @@ def main():
     if args.source == "random":
         prefix_gpu, prefix_cpu = "random_gpu_", "random_cpu_"
         title_suffix = "random data"
+        task_order = TASK_ORDER
+        task_labels = TASK_NAMES
+        suptitle = "PointKAN: model(x) inference time & Energy (CPU vs GPU)"
+    elif args.source == "isda":
+        prefix_gpu, prefix_cpu = "isda_gpu_", "isda_cpu_"
+        title_suffix = "ISEDA models (DGCNN / PointNet++)"
+        task_order = ISDA_TASK_ORDER
+        task_labels = ISDA_TASK_NAMES
+        suptitle = "ISEDA 移植网络: inference time & Energy (CPU vs GPU)"
     else:
         prefix_gpu, prefix_cpu = "gpu_", "cpu_"
         title_suffix = "checkpoint"
+        task_order = TASK_ORDER
+        task_labels = TASK_NAMES
+        suptitle = "PointKAN: model(x) inference time & Energy (CPU vs GPU)"
 
-    data = collect_cpu_gpu_pairs(out_dir, prefix_gpu, prefix_cpu)
-    if all(data[t]["latency_gpu"] == 0 and data[t]["latency_cpu"] == 0 for t in TASK_ORDER):
-        print(f"No summary.json found under {prefix_gpu}*/ and {prefix_cpu}*/. Run ./run.sh first.")
+    data = collect_cpu_gpu_pairs(out_dir, prefix_gpu, prefix_cpu, task_order=task_order)
+    if all(data[t]["latency_gpu"] == 0 and data[t]["latency_cpu"] == 0 for t in task_order):
+        print(f"No summary.json found under {prefix_gpu}*/ and {prefix_cpu}*/. Run ./run.sh or ./run_isda.sh first.")
         return
-    if all(data[t]["latency_gpu"] == 0 for t in TASK_ORDER):
+    if all(data[t]["latency_gpu"] == 0 for t in task_order):
         print("Warning: GPU latency is 0 for all tasks. Check that GPU runs succeeded.")
-    if all(data[t]["latency_cpu"] == 0 for t in TASK_ORDER):
+    if all(data[t]["latency_cpu"] == 0 for t in task_order):
         print("Warning: CPU latency is 0 for all tasks. Check that CPU runs succeeded.")
 
     out_path = Path(args.out) if args.out else out_dir / "cpu_gpu_compare.png"
-    plot_cpu_gpu_compare(data, out_path, title_suffix=title_suffix)
+    if args.source == "isda":
+        out_path = Path(args.out) if args.out else out_dir / "cpu_gpu_compare_isda.png"
+    plot_cpu_gpu_compare(
+        data,
+        out_path,
+        title_suffix=title_suffix,
+        task_order=task_order,
+        task_labels=task_labels,
+        suptitle=suptitle,
+    )
 
 
 if __name__ == "__main__":

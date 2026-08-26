@@ -47,6 +47,7 @@ class SimulationResult:
     peak_power: float = 0.0
     events: List[Event] = field(default_factory=list)
     statistics: Dict[str, Any] = field(default_factory=dict)
+    block_intervals: Dict[str, List[Tuple[int, int]]] = field(default_factory=dict)
     status: SchedulerStatus = SchedulerStatus.COMPLETED
     error_message: str = ""
 
@@ -206,7 +207,7 @@ class Scheduler:
                 result.status = SchedulerStatus.COMPLETED
                 return result
 
-            # 增量改造：在进入事件驱动仿真前，先做一次“共享资源互斥”时序修正。
+            # 增量改造：在进入事件驱动仿真前，先做一次"共享资源互斥"时序修正。
             # 约定：event.metadata 中可携带
             #   - resource_id: 资源名（如 bitonic_shared）
             #   - exclusive: 是否互斥占用（True 时同资源不可重叠）
@@ -233,32 +234,120 @@ class Scheduler:
 
     def _apply_exclusive_resource_constraints(self, events: List[Event]) -> None:
         """
-        对带 resource_id+exclusive 的事件做互斥仲裁。
+        对带 resource_id 的事件做资源仲裁，支持两种模式：
 
-        调度规则（简单确定性策略）：
-        1) 先按原始起始 cycle/event_id 排序；
-        2) 对同一 resource_id，若新事件与上一个占用区间重叠，则顺延到资源空闲周期；
+        1) **exclusive**（互斥）：resource_id + exclusive=True。
+           同资源上一事件「完成」后下一事件才能开始。
+           next_free = cycle + duration。
+           适用于片上共享单元（bitonic 比较器、SRAM port 等）。
+
+        2) **dram_pipelined**（DRAM 流水线化）：resource_id + dram_pipelined=True。
+           仅命令总线互斥：上一事件的 issue window 结束后，下一事件即可开始发射请求，
+           无需等待前一事件的响应返回。
+           next_free = cycle + dram_issue_cycles（metadata 中携带）。
+           与 DRAMSim3 trace 模型一致：每 burst 事务占用命令总线 issue_gap 周期，
+           多个传输可有 in-flight 请求重叠。
+           事件 duration 仍为 issue + response 全程（数据可用时间），
+           下游依赖应看 cycle + duration。
+
+        调度规则：
+        1) 按原始 cycle/event_id 排序；
+        2) 对同一 resource_id，若新事件在资源 busy 期间到达，顺延到 next_free；
         3) 仅修改事件 cycle，不改变 duration/power。
-
-        该实现用于把 baseline 的“共享 bitonic 比较器不能并行”显式化。
         """
         if not events:
             return
 
-        # resource_id -> 下一可用 cycle
-        next_free_cycle: Dict[str, int] = {}
+        def _apply_resource_only(ev_list: List[Event]) -> None:
+            next_free_cycle: Dict[str, int] = {}
+            def _prio(ev: Event) -> int:
+                try:
+                    return int((ev.metadata or {}).get("resource_priority", 100))
+                except Exception:
+                    return 100
+            for ev in sorted(ev_list, key=lambda x: (x.cycle, _prio(x), x.event_id)):
+                meta = ev.metadata or {}
+                rid = meta.get("resource_id")
+                exclusive = bool(meta.get("exclusive", False))
+                pipelined = bool(meta.get("dram_pipelined", False))
+                if not rid or (not exclusive and not pipelined):
+                    continue
+                avail = int(next_free_cycle.get(str(rid), 0))
+                if ev.cycle < avail:
+                    ev.cycle = avail
+                if pipelined:
+                    issue_cycles = int(meta.get("dram_issue_cycles", ev.duration))
+                    next_free_cycle[str(rid)] = ev.cycle + issue_cycles
+                else:
+                    next_free_cycle[str(rid)] = ev.cycle + ev.duration
 
-        for e in sorted(events, key=lambda x: (x.cycle, x.event_id)):
-            meta = e.metadata or {}
-            rid = meta.get("resource_id")
-            exclusive = bool(meta.get("exclusive", False))
-            if not rid or not exclusive:
-                continue
+        # 资源仲裁与依赖约束需要看彼此修正后的真实结束时刻。
+        # 这里做固定点迭代，避免像 ACC 里 coarse/fine 依赖仍然拿到上游旧 cycle。
+        event_by_id: Dict[int, Event] = {int(getattr(ev, "event_id", -1)): ev for ev in events}
 
-            avail = int(next_free_cycle.get(str(rid), 0))
-            if e.cycle < avail:
-                e.cycle = avail
-            next_free_cycle[str(rid)] = e.cycle + e.duration
+        def _apply_dependencies_once(evts: List[Event]) -> bool:
+            changed = False
+            tag_end_cycle: Dict[str, int] = {}
+            for ev in evts:
+                meta = ev.metadata or {}
+                tag = meta.get("dependency_tag")
+                if tag not in (None, ""):
+                    tag_end_cycle[str(tag)] = max(tag_end_cycle.get(str(tag), 0), int(ev.end_cycle) + 1)
+
+            for e in sorted(evts, key=lambda x: getattr(x, "event_id", 0)):
+                meta = e.metadata or {}
+                dep_end = 0
+
+                dep_one = meta.get("depends_on_event_id")
+                dep_many = meta.get("depends_on_event_ids")
+                dep_ids = []
+                if dep_one not in (None, ""):
+                    try:
+                        dep_ids.append(int(dep_one))
+                    except Exception:
+                        pass
+                if isinstance(dep_many, (list, tuple)):
+                    for item in dep_many:
+                        try:
+                            dep_ids.append(int(item))
+                        except Exception:
+                            pass
+                elif isinstance(dep_many, str) and dep_many.strip():
+                    for item in dep_many.split(','):
+                        try:
+                            dep_ids.append(int(item.strip()))
+                        except Exception:
+                            pass
+                for dep_id in dep_ids:
+                    dep_ev = event_by_id.get(dep_id)
+                    if dep_ev is not None:
+                        dep_end = max(dep_end, int(dep_ev.end_cycle) + 1)
+
+                dep_tag = meta.get("depends_on_tag")
+                dep_tags = meta.get("depends_on_tags")
+                tag_list = []
+                if dep_tag not in (None, ""):
+                    tag_list.append(str(dep_tag))
+                if isinstance(dep_tags, (list, tuple)):
+                    tag_list.extend(str(t) for t in dep_tags if t not in (None, ""))
+                elif isinstance(dep_tags, str) and dep_tags.strip():
+                    tag_list.extend(t.strip() for t in dep_tags.split(',') if t.strip())
+                for tag in tag_list:
+                    dep_end = max(dep_end, int(tag_end_cycle.get(tag, 0)))
+
+                if dep_end and e.cycle < dep_end:
+                    e.cycle = dep_end
+                    changed = True
+            return changed
+
+        for _ in range(6):
+            prev = [(int(ev.cycle), int(ev.end_cycle)) for ev in events]
+            _apply_resource_only(events)
+            dep_changed = _apply_dependencies_once(events)
+            _apply_resource_only(events)
+            curr = [(int(ev.cycle), int(ev.end_cycle)) for ev in events]
+            if not dep_changed and curr == prev:
+                break
 
     def _run_event_driven_simulation(
         self,
@@ -373,6 +462,7 @@ class Scheduler:
 
         # Calculate statistics
         result.statistics = self._calculate_statistics_fast(events, peak_power, min_power)
+        result.block_intervals = self._build_block_intervals(events)
         result.status = SchedulerStatus.COMPLETED
 
         print(f"    Simulation complete: {end_cycle + 1:,} cycles, {len(events):,} events")
@@ -434,6 +524,44 @@ class Scheduler:
 
         return stats
 
+    def _event_block_name(self, event: Event) -> str:
+        meta = event.metadata or {}
+        rid = str(meta.get("resource_id", "") or "").strip()
+        if rid:
+            return rid
+        module = str(getattr(event, "circuit_module", "") or "").strip()
+        if module:
+            return module
+        op = str(getattr(event, "operator", "") or "").strip()
+        if op:
+            return op
+        return "unknown"
+
+    def _build_block_intervals(self, events: List[Event]) -> Dict[str, List[Tuple[int, int]]]:
+        raw: Dict[str, List[Tuple[int, int]]] = {}
+        for event in events:
+            start = int(getattr(event, "cycle", 0) or 0)
+            end = int(getattr(event, "end_cycle", start) or start)
+            if end < start:
+                continue
+            name = self._event_block_name(event)
+            raw.setdefault(name, []).append((start, end))
+
+        merged: Dict[str, List[Tuple[int, int]]] = {}
+        for name, spans in raw.items():
+            if not spans:
+                continue
+            spans = sorted(spans, key=lambda item: (item[0], item[1]))
+            compact: List[Tuple[int, int]] = [spans[0]]
+            for start, end in spans[1:]:
+                last_start, last_end = compact[-1]
+                if start <= last_end:
+                    compact[-1] = (last_start, max(last_end, end))
+                else:
+                    compact.append((start, end))
+            merged[name] = compact
+        return merged
+
     def run_simulation_fast(
         self,
         max_cycles: Optional[int] = None
@@ -482,6 +610,7 @@ class Scheduler:
 
             result.events = events
             result.statistics = self._calculate_statistics_fast(events, result.peak_power, 0)
+            result.block_intervals = self._build_block_intervals(events)
             result.status = SchedulerStatus.COMPLETED
 
             # Mark all events as completed

@@ -59,7 +59,10 @@ def calibrate(model, calib_loader, calib_num, device, verbose=True, get_logits_f
     logger.info("Stage 1: Calibrating Activations")
     enable_calibration_woquantization(model, quantizer_type="act_fake_quant")
     sample_count = 0
-    for batch in tqdm(calib_loader, total=min(len(calib_loader), (calib_num // (batch[0].size(0) if batch[0] is not None else 1)) + 1), desc="Calibrating Activations"):
+    # NOTE:
+    # 这里不要在 tqdm 的 total 计算里引用 batch（会导致 UnboundLocalError）。
+    # 我们依靠 sample_count + break 来控制校准样本数。
+    for batch in tqdm(calib_loader, desc="Calibrating Activations"):
         if batch[0] is None:
             continue
         get_logits_fn(model, batch, device)
@@ -89,11 +92,14 @@ def calibrate_partseg(model, calib_loader, calib_num, device, num_classes=16, ve
     import numpy as np
     st = time.time()
 
-    def to_categorical(y, num_classes):
+    def to_categorical(y, num_classes, device):
+        # y can be either torch.Tensor or numpy.ndarray
+        if hasattr(y, "detach"):
+            y = y.detach().cpu().numpy()
         o = np.zeros((y.shape[0], num_classes), dtype=np.float32)
         for i in range(y.shape[0]):
             o[i, y[i]] = 1.0
-        return torch.from_numpy(o).to(y.device)
+        return torch.from_numpy(o).to(device)
 
     logger.info("Stage 1: Calibrating Activations (PartSeg)")
     enable_calibration_woquantization(model, quantizer_type="act_fake_quant")
@@ -103,7 +109,7 @@ def calibrate_partseg(model, calib_loader, calib_num, device, num_classes=16, ve
         if data is None:
             continue
         data = data.to(device)
-        label_one_hot = to_categorical(label.cpu().numpy(), num_classes).to(device)
+        label_one_hot = to_categorical(label, num_classes, device)
         data = data.permute(0, 2, 1)
         # PartSeg model often takes (points, norm_plt, label_one_hot); norm_plt may be same as points or a second tensor
         if len(batch) >= 4:
@@ -122,7 +128,7 @@ def calibrate_partseg(model, calib_loader, calib_num, device, num_classes=16, ve
     for batch in calib_loader:
         data, label, seg = batch[0], batch[1], batch[2]
         data = data.to(device)
-        label_one_hot = to_categorical(label.cpu().numpy(), num_classes).to(device)
+        label_one_hot = to_categorical(label, num_classes, device)
         data = data.permute(0, 2, 1)
         norm_plt = batch[3].to(device).permute(0, 2, 1) if len(batch) >= 4 else data
         model(data, norm_plt, label_one_hot)

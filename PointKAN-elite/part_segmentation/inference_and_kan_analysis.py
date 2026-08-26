@@ -19,6 +19,7 @@ import json
 import os
 import sys
 import time
+from typing import Optional
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -101,6 +102,12 @@ def parse_args():
     parser.add_argument("--calibration_margin", type=float, default=0.05, help="f(x) 绘制范围扩展比例")
     parser.add_argument("--json_output", type=str, default=None, help="激活范围与相似性结果 JSON 路径")
     parser.add_argument(
+        "--export_grf_json",
+        type=str,
+        default=None,
+        help="导出 GRF 系数 JSON，供 GQA-LUT grf_pwl_trainer_v2 生成 pwl_v2.json（需校准或见 export_grf_coefficients_only.py）",
+    )
+    parser.add_argument(
         "--eval_fps_opt",
         action="store_true",
         help="（Part Segmentation 暂未实现 FPS 优化版，此选项仅打印提示）",
@@ -110,8 +117,10 @@ def parse_args():
 
 def get_checkpoint_path(checkpoint_arg):
     path = os.path.abspath(checkpoint_arg)
-    if os.path.isfile(path) and path.endswith(".pth"):
-        return path
+    if os.path.isfile(path):
+        if path.endswith((".pth", ".pt")):
+            return path
+        raise FileNotFoundError(f"检查点需为 .pth 或 .pt 文件: {path}")
     if os.path.isdir(path):
         for name in ("best_insiou_model.pth", "best_checkpoint.pth"):
             candidate = os.path.join(path, name)
@@ -123,7 +132,16 @@ def get_checkpoint_path(checkpoint_arg):
 
 def load_state_dict_for_model(checkpoint_path, device):
     ckpt = torch.load(checkpoint_path, map_location=device)
-    state = ckpt.get("model", ckpt)
+    if isinstance(ckpt, dict):
+        state = None
+        for key in ("net", "model", "state_dict"):
+            if key in ckpt and isinstance(ckpt[key], dict) and ckpt[key]:
+                state = ckpt[key]
+                break
+        if state is None:
+            state = ckpt
+    else:
+        state = ckpt
     if next(iter(state.keys())).startswith("module."):
         state = {k.replace("module.", "", 1): v for k, v in state.items()}
     return state
@@ -138,7 +156,7 @@ def build_model_and_load_checkpoint(checkpoint_path, device):
     return net
 
 
-def run_evaluation(net, test_loader, device):
+def run_evaluation(net, test_loader, device, max_batches: Optional[int] = None):
     """Part Segmentation 测试集评估：loss、accuracy、instance mIoU。"""
     net.eval()
     test_loss = 0.0
@@ -147,6 +165,8 @@ def run_evaluation(net, test_loader, device):
     shape_ious_sum = 0.0
     with torch.no_grad():
         for batch_id, (points, label, target, norm_plt) in enumerate(test_loader):
+            if max_batches is not None and batch_id >= max_batches:
+                break
             batch_size, num_point, _ = points.size()
             points = points.float().to(device).transpose(2, 1)
             norm_plt = norm_plt.float().to(device).transpose(2, 1)
@@ -430,7 +450,10 @@ def main():
         print(f"  - {w['name']}: numerator shape {w['weight_numerator'].shape}, denominator shape {w['weight_denominator'].shape}")
 
     activation_ranges = {}
-    need_calibration = (not args.no_vis or args.json_output) and len(kan_weights_list) > 0
+    need_calibration = (
+        (not args.no_vis or args.json_output or getattr(args, "export_grf_json", None))
+        and len(kan_weights_list) > 0
+    )
     if need_calibration:
         cal_split = "trainval" if args.calibration_partition == "train" else "test"
         cal_dataset = PartNormalDataset(npoints=args.num_points, split=cal_split, normalize=False)
@@ -471,6 +494,17 @@ def main():
         build_and_save_kan_analysis_json(
             kan_weights_list, activation_ranges, args, out_dir, similarity_per_layer=similarity_per_layer
         )
+
+    if getattr(args, "export_grf_json", None) and len(kan_weights_list) > 0:
+        try:
+            from grf_kan_json_and_residual import export_grf_coefficients_to_json
+
+            export_grf_coefficients_to_json(
+                kan_weights_list, activation_ranges or {}, args.export_grf_json
+            )
+            print(f"GRF 系数已导出到: {args.export_grf_json}")
+        except Exception as e:
+            print(f"导出 GRF JSON 失败: {e}")
 
 
 if __name__ == "__main__":

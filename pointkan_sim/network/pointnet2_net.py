@@ -42,12 +42,12 @@ PointNet2SemSSG:
     → Head: Conv1d(128→128)→BN→ReLU → Conv1d(128→num_classes)
 
 Operator mapping:
-  SA Conv2d(k=1) layers → conv1d with num_points = npoint * nsample
+  SA Conv2d(k=1) layers → conv2d with num_points = npoint * nsample
     (Conv2d kernel=1 on [B, C, nsample, npoint] maps to C_in * C_out MACs
      at each of npoint*nsample spatial locations)
-  SA MaxPool (over nsample) → adaptive_max_pool1d(output_size=1, num_points=npoint*nsample)
+  SA MaxPool (over nsample) → sa_maxpool(output_size=1, num_points=npoint*nsample)
   SA3 GroupAll Conv2d → conv1d with num_points = N_in (all points as one group)
-  FP interpolation (3-NN) → knn(k=3, query_points=N_target, input_points=N_src)
+  FP interpolation (3-NN) → knn(k=3, query_points=N_target, input_points=N_src) + interp_n3
   FP Conv1d MLP → conv1d with num_points = N_target
 """
 
@@ -69,6 +69,8 @@ def _build_sa_operators(
     in_channel: int,
     mlp: List[int],
     group_all: bool = False,
+    dist_matrix_dram_write: bool = False,
+    distance_reuse: bool = False,
 ) -> List[OperatorRef]:
     """
     Build operators for one PointNetSetAbstraction layer.
@@ -82,32 +84,44 @@ def _build_sa_operators(
         mlp:        Per-layer output channel list for the shared MLP.
         group_all:  When True, groups all in_points into one super-group
                     (SA3 GlobalAbstraction); no FPS/KNN emitted.
+        dist_matrix_dram_write: If True, KNN writes distance matrix to DRAM for FP reuse.
+        distance_reuse: If True, KNN skips distance computation and reads
+                 sub-matrix from DRAM-stored global distance matrix.
     Returns:
         Ordered list of OperatorRef for one SA stage.
     """
     ops: List[OperatorRef] = []
 
     if group_all:
-        # GroupAll: all in_points treated as one group → no FPS, no KNN
-        # Conv2d effective: each of in_points spatial positions processed once.
-        npoints_mlp = in_points  # [B, C, in_points, 1] → nsample=1
-        nq = 1                   # one output point
+        npoints_mlp = in_points
+        nq = 1
     else:
-        # FPS: subsample in_points → out_points
         ops.append(OperatorRef(
             op_type="fps",
             params={"input_points": in_points, "output_points": out_points},
             description=f"SA{sa_index} FPS: {in_points}→{out_points} points",
         ))
-        # Ball query / KNN grouping: find nsample neighbours per query point
+        knn_params: Dict[str, Any] = {
+            "input_points": in_points,
+            "query_points": out_points,
+            "k": nsample,
+        }
+        if dist_matrix_dram_write:
+            knn_params["dist_matrix_dram_write"] = True
+        if distance_reuse:
+            knn_params["distance_reuse"] = True
+        _flags = []
+        if dist_matrix_dram_write:
+            _flags.append("dist_matrix_dram_write")
+        if distance_reuse:
+            _flags.append("distance_reuse")
         ops.append(OperatorRef(
-            op_type="knn",
-            params={
-                "input_points": in_points,
-                "query_points": out_points,
-                "k": nsample,
-            },
-            description=f"SA{sa_index} BallQuery/KNN: query={out_points}, ref={in_points}, k={nsample}",
+            op_type="ballquery",
+            params=knn_params,
+            description=(
+                f"SA{sa_index} BallQuery: query={out_points}, ref={in_points}, k={nsample}"
+                + (f" [{','.join(_flags)}]" if _flags else "")
+            ),
         ))
         npoints_mlp = out_points * nsample  # total (query, neighbour) pairs
         nq = out_points
@@ -116,37 +130,52 @@ def _build_sa_operators(
     # → represented as Conv1d with num_points = nq * nsample
     prev_ch = in_channel
     for j, out_ch in enumerate(mlp):
+        conv_params: Dict[str, Any] = {
+            "in_channels": prev_ch,
+            "out_channels": out_ch,
+            "kernel_size": 1,
+            "num_points": npoints_mlp,
+        }
+        if j == 0:
+            _xyz_ch = 3
+            _feat_ch = max(0, prev_ch - _xyz_ch)
+            conv_params["channel_semantics"] = {
+                "relative_xyz": _xyz_ch,
+                "grouped_features": _feat_ch,
+                "has_relative_xyz": True,
+                "has_concat": _feat_ch > 0,
+                "source": "sample_and_group",
+            }
         ops.append(OperatorRef(
-            op_type="conv1d",
-            params={
-                "in_channels": prev_ch,
-                "out_channels": out_ch,
-                "kernel_size": 1,
-                "num_points": npoints_mlp,
-            },
-            description=f"SA{sa_index} MLP[{j}]: Conv1d({prev_ch}→{out_ch}), {npoints_mlp} pts",
+            op_type="conv2d",
+            params=conv_params,
+            description=f"SA{sa_index} MLP[{j}]: Conv2d(k=1, {prev_ch}→{out_ch}), {npoints_mlp} elems",
         ))
         ops.append(OperatorRef(
             op_type="bn",
-            params={"num_features": out_ch},
+            params={"num_features": out_ch, "num_points": npoints_mlp},
             description=f"SA{sa_index} MLP[{j}]: BN({out_ch})",
         ))
         ops.append(OperatorRef(
             op_type="relu",
-            params={"num_features": out_ch},
+            params={"num_features": out_ch, "num_points": npoints_mlp},
             description=f"SA{sa_index} MLP[{j}]: ReLU",
         ))
         prev_ch = out_ch
 
     # MaxPool over nsample dimension: [B, C, nsample, nq] → [B, C, nq]
+    # group_all 时 nq=1，有效 nsample 为全部 in_points
+    _nsample_eff = in_points if group_all else nsample
     ops.append(OperatorRef(
-        op_type="adaptive_max_pool1d",
+        op_type="sa_maxpool",
         params={
             "output_size": 1,
             "num_features": mlp[-1],
-            "num_points": npoints_mlp,
+            "num_points": npoints_mlp,   # 保留用于向后兼容
+            "nq": nq,                    # query 点数（输出点数）
+            "nsample": _nsample_eff,     # 每 query 的邻居数
         },
-        description=f"SA{sa_index} MaxPool(nsample={nsample}→1): {mlp[-1]}ch, {nq} pts",
+        description=f"SA{sa_index} MaxPool(nsample={_nsample_eff}→1): {mlp[-1]}ch, {nq} pts",
     ))
 
     return ops
@@ -162,41 +191,68 @@ def _build_fp_operators(
     n_src: int,
     in_channel: int,
     mlp: List[int],
+    distance_reuse: bool = False,
+    src_channels: int = 0,
 ) -> List[OperatorRef]:
     """
     Build operators for one PointNetFeaturePropagation layer.
 
     Feature propagation:
-      1. 3-NN distance-weighted interpolation from n_src → n_target points.
-      2. Concatenate with skip features (done outside; no explicit op).
-      3. Shared Conv1d MLP on [B, in_channel, n_target].
+      - n_src > 1:
+        1. 3-NN distance-weighted interpolation from n_src → n_target points.
+           - distance_reuse=True: 跳过距离计算，从 DRAM 读取已存储的距离矩阵 + sort top-3
+        2. InterpN3: gather + div/mul/add interpolation engine
+      - n_src <= 1:
+        1. Repeat/broadcast the lone source feature to all targets (no KNN / InterpN3 cost).
+      3. Concatenate with skip features (done outside; no explicit op).
+      4. Shared Conv1d MLP on [B, in_channel, n_target].
 
     Args:
-        fp_index:   Stage index (0-based), for description labels.
-        n_target:   Number of upsampled (high-resolution) output points.
-        n_src:      Number of source (low-resolution) input points.
-        in_channel: Input channels after concatenation (interp + skip).
-        mlp:        Per-layer output channel list for the MLP.
+        fp_index:       Stage index (0-based), for description labels.
+        n_target:       Number of upsampled (high-resolution) output points.
+        n_src:          Number of source (low-resolution) input points.
+        in_channel:     Input channels after concatenation (interp + skip).
+        mlp:            Per-layer output channel list for the MLP.
+        distance_reuse: Whether to reuse stored distance matrix from SA layers.
+        src_channels:   Channels of the coarser feature tensor for InterpN3 gather.
     Returns:
         Ordered list of OperatorRef for one FP stage.
     """
     ops: List[OperatorRef] = []
 
-    # 3-NN interpolation (n_src → n_target)
-    # When n_src == 1 the implementation just repeats; KNN with k=min(3, n_src).
-    k_interp = min(3, n_src)
-    ops.append(OperatorRef(
-        op_type="knn",
-        params={
+    if n_src > 1:
+        # Standard FP path: 3-NN interpolation (n_src -> n_target).
+        k_interp = min(3, n_src)
+        knn_params = {
             "input_points": n_src,
             "query_points": n_target,
             "k": k_interp,
-        },
-        description=(
-            f"FP{fp_index} Interpolation KNN: "
-            f"query={n_target}, ref={n_src}, k={k_interp}"
-        ),
-    ))
+            "distance_reuse": distance_reuse,
+        }
+        ops.append(OperatorRef(
+            op_type="knn",
+            params=knn_params,
+            description=(
+                f"FP{fp_index} Interpolation KNN: "
+                f"query={n_target}, ref={n_src}, k={k_interp}"
+                + (" [distance_reuse]" if distance_reuse else "")
+            ),
+        ))
+
+        # InterpN3: gather + div/mul/add interpolation engine.
+        interp_src_ch = max(1, src_channels)
+        ops.append(OperatorRef(
+            op_type="interp_n3",
+            params={
+                "num_output_points": n_target,
+                "src_channels": interp_src_ch,
+                "k": k_interp,
+            },
+            description=(
+                f"FP{fp_index} InterpN3: gather+interp "
+                f"{interp_src_ch}ch@{n_target}pts, k={k_interp}"
+            ),
+        ))
 
     # Shared Conv1d MLP on upsampled features
     prev_ch = in_channel
@@ -213,12 +269,12 @@ def _build_fp_operators(
         ))
         ops.append(OperatorRef(
             op_type="bn",
-            params={"num_features": out_ch},
+            params={"num_features": out_ch, "num_points": n_target},
             description=f"FP{fp_index} MLP[{j}]: BN({out_ch})",
         ))
         ops.append(OperatorRef(
             op_type="relu",
-            params={"num_features": out_ch},
+            params={"num_features": out_ch, "num_points": n_target},
             description=f"FP{fp_index} MLP[{j}]: ReLU",
         ))
         prev_ch = out_ch
@@ -250,12 +306,12 @@ def _build_seg_head_operators(
         ),
         OperatorRef(
             op_type="bn",
-            params={"num_features": mid_channels},
+            params={"num_features": mid_channels, "num_points": num_points},
             description=f"Head BN({mid_channels})",
         ),
         OperatorRef(
             op_type="relu",
-            params={"num_features": mid_channels},
+            params={"num_features": mid_channels, "num_points": num_points},
             description="Head ReLU",
         ),
         OperatorRef(
@@ -432,6 +488,7 @@ def create_pointnet2_partseg_ssg(
     input_points: int = 2048,
     num_classes: int = 50,
     normal: bool = False,
+    enable_distance_reuse: bool = False,
 ) -> List[LayerDef]:
     """
     Create PointNet2PartSegSSG part-segmentation network layer sequence.
@@ -470,6 +527,7 @@ def create_pointnet2_partseg_ssg(
         in_channel=sa1_in_ch,
         mlp=[64, 64, 128],
         group_all=False,
+        dist_matrix_dram_write=enable_distance_reuse,
     )
     layers.append(LayerDef(
         name="SA1",
@@ -478,6 +536,7 @@ def create_pointnet2_partseg_ssg(
         description=(
             f"SA1: FPS({input_points}→512) + BallQuery(k=32) + "
             f"MLP({sa1_in_ch}→64→64→128) + MaxPool → [B,128,512]"
+            + (" [dist_matrix_dram_write]" if enable_distance_reuse else "")
         ),
     ))
 
@@ -493,6 +552,7 @@ def create_pointnet2_partseg_ssg(
         in_channel=sa2_in_ch,
         mlp=[128, 128, 256],
         group_all=False,
+        distance_reuse=enable_distance_reuse,
     )
     layers.append(LayerDef(
         name="SA2",
@@ -537,6 +597,8 @@ def create_pointnet2_partseg_ssg(
         n_src=1,
         in_channel=1280,
         mlp=[256, 256],
+        distance_reuse=False,
+        src_channels=1024,
     )
     layers.append(LayerDef(
         name="FP1",
@@ -549,7 +611,6 @@ def create_pointnet2_partseg_ssg(
 
     # ------------------------------------------------------------------
     # FP2 (fc2): upsample 128 → 512
-    # in_channel = FP1_out(256) + l1_points(128) = 384
     # ------------------------------------------------------------------
     fp2_ops = _build_fp_operators(
         fp_index=1,
@@ -557,6 +618,8 @@ def create_pointnet2_partseg_ssg(
         n_src=128,
         in_channel=384,
         mlp=[256, 128],
+        distance_reuse=enable_distance_reuse,
+        src_channels=256,
     )
     layers.append(LayerDef(
         name="FP2",
@@ -564,13 +627,12 @@ def create_pointnet2_partseg_ssg(
         operators=fp2_ops,
         description=(
             "FP2: interp(128→512) + MLP(384→256→128) → [B,128,512]"
+            + (" [distance_reuse]" if enable_distance_reuse else "")
         ),
     ))
 
     # ------------------------------------------------------------------
     # FP3 (fc3): upsample 512 → N
-    # in_channel = 128 (FP2) + 16 (cls_label) + 6 (xyz + l0_points) + addition_ch
-    # = 128 + 16 + 6 + addition_ch = 150 (no normal)
     # ------------------------------------------------------------------
     fp3_in_ch = 128 + 16 + 6 + addition_ch
     fp3_ops = _build_fp_operators(
@@ -579,6 +641,8 @@ def create_pointnet2_partseg_ssg(
         n_src=512,
         in_channel=fp3_in_ch,
         mlp=[128, 128, 128],
+        distance_reuse=enable_distance_reuse,
+        src_channels=128,
     )
     layers.append(LayerDef(
         name="FP3",
@@ -587,6 +651,7 @@ def create_pointnet2_partseg_ssg(
         description=(
             f"FP3: interp(512→{input_points}) + "
             f"MLP({fp3_in_ch}→128→128→128) → [B,128,{input_points}]"
+            + (" [distance_reuse]" if enable_distance_reuse else "")
         ),
     ))
 
@@ -620,6 +685,7 @@ def create_pointnet2_sem_ssg(
     input_points: int = 4096,
     num_classes: int = 13,
     input_channels: int = 12,
+    enable_distance_reuse: bool = False,
 ) -> List[LayerDef]:
     """
     Create PointNet2SemSSG semantic-segmentation network layer sequence.
@@ -670,7 +736,14 @@ def create_pointnet2_sem_ssg(
             in_channel=in_ch,
             mlp=mlp,
             group_all=False,
+            dist_matrix_dram_write=(enable_distance_reuse and sa_idx == 0),
+            distance_reuse=(enable_distance_reuse and sa_idx > 0),
         )
+        _flags = []
+        if enable_distance_reuse and sa_idx == 0:
+            _flags.append("dist_matrix_dram_write")
+        if enable_distance_reuse and sa_idx > 0:
+            _flags.append("distance_reuse")
         layers.append(LayerDef(
             name=f"SA{sa_idx + 1}",
             layer_type="SA",
@@ -679,28 +752,26 @@ def create_pointnet2_sem_ssg(
                 f"SA{sa_idx + 1}: FPS({in_pts}→{out_pts}) + BallQuery(k={nsample}) + "
                 f"MLP({in_ch}→{'→'.join(str(c) for c in mlp)}) + MaxPool "
                 f"→ [B,{mlp[-1]},{out_pts}]"
+                + (f" [{','.join(_flags)}]" if _flags else "")
             ),
         ))
 
-    # FP layers:
-    #   FP1 (fc1): 16→64,   in_ch = sa4_out(512) + sa3_out(256) = 768
-    #   FP2 (fc2): 64→256,  in_ch = FP1_out(256) + sa2_out(128) = 384
-    #   FP3 (fc3): 256→1024,in_ch = FP2_out(256) + sa1_out(64)  = 320
-    #   FP4 (fc4): 1024→N,  in_ch = FP3_out(128) only (points1=None) = 128
     fp_configs = [
-        # (fp_index, n_target, n_src, in_ch, mlp)
-        (0, 64,          16,   512 + 256, [256, 256]),
-        (1, 256,         64,   256 + 128, [256, 256]),
-        (2, 1024,        256,  256 + 64,  [256, 128]),
-        (3, input_points, 1024, 128,      [128, 128, 128]),
+        # (fp_index, n_target, n_src, in_ch, mlp, src_channels)
+        (0, 64,          16,   512 + 256, [256, 256], 512),
+        (1, 256,         64,   256 + 128, [256, 256], 256),
+        (2, 1024,        256,  256 + 64,  [256, 128], 256),
+        (3, input_points, 1024, 128,      [128, 128, 128], 128),
     ]
-    for (fp_idx, n_tgt, n_src, in_ch, mlp) in fp_configs:
+    for (fp_idx, n_tgt, n_src, in_ch, mlp, src_ch) in fp_configs:
         fp_ops = _build_fp_operators(
             fp_index=fp_idx,
             n_target=n_tgt,
             n_src=n_src,
             in_channel=in_ch,
             mlp=mlp,
+            distance_reuse=enable_distance_reuse,
+            src_channels=src_ch,
         )
         layers.append(LayerDef(
             name=f"FP{fp_idx + 1}",
@@ -710,6 +781,7 @@ def create_pointnet2_sem_ssg(
                 f"FP{fp_idx + 1}: interp({n_src}→{n_tgt}) + "
                 f"MLP({in_ch}→{'→'.join(str(c) for c in mlp)}) "
                 f"→ [B,{mlp[-1]},{n_tgt}]"
+                + (" [distance_reuse]" if enable_distance_reuse else "")
             ),
         ))
 

@@ -1,10 +1,14 @@
 # Ported from ISEDA26/iseda_quant for PointKAN-Elite (RTN: Linear/Conv1d/Conv2d + MinMax + FixedFakeQuantize)
 from __future__ import absolute_import
 from torch import nn
-from .observer import MinMaxObserver
+from .observer import MinMaxObserver, PercentileObserver, HistogramObserver
 from .fake_quant import FixedFakeQuantize
 
-ObserverDict = {"MinMaxObserver": MinMaxObserver}
+ObserverDict = {
+    "MinMaxObserver": MinMaxObserver,
+    "PercentileObserver": PercentileObserver,
+    "HistogramObserver": HistogramObserver,
+}
 FakeQuantizeDict = {"FixedFakeQuantize": FixedFakeQuantize}
 
 
@@ -14,6 +18,7 @@ def ActivationQuantizer(a_qconfig):
         bit=a_qconfig.bit,
         symmetric=a_qconfig.symmetric,
         ch_axis=a_qconfig.ch_axis,
+        observer_kwargs=getattr(a_qconfig, "observer_kwargs", {}) or {},
     )
 
 
@@ -23,6 +28,7 @@ def WeightQuantizer(w_qconfig):
         bit=w_qconfig.bit,
         symmetric=w_qconfig.symmetric,
         ch_axis=w_qconfig.ch_axis,
+        observer_kwargs=getattr(w_qconfig, "observer_kwargs", {}) or {},
     )
 
 

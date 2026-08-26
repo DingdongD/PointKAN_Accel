@@ -158,7 +158,7 @@ class Geometric_Affine_Module(nn.Module):
         B, N, C = xyz.shape
         S = self.groups
         xyz = xyz.contiguous()  # xyz [batch, points, xyz]
-        fps_idx = pointnet2_utils.furthest_point_sample(xyz, self.groups).long()  # [B, npoint]
+        fps_idx = pointnet2_utils.furthest_point_sample(xyz.contiguous().float(), self.groups).long()  # [B, npoint]
         new_xyz = index_points(xyz, fps_idx)  # [B, npoint, 3]
         new_points = index_points(points, fps_idx)  # [B, npoint, d]
         idx = knn_point(self.kneighbors, xyz, new_xyz)
@@ -440,8 +440,10 @@ class Model(nn.Module):
 
 
 def pointKANElite(num_classes=40, **kwargs) -> Model:
-    return Model(points=1024, class_num=num_classes, embed_dim=32, groups=1, res_expansion=1.0,
-                   activation="relu", bias=False, use_xyz = False, normalize="anchor",
+    # Allow overriding points for inference sweeps (default 1024).
+    points = int(kwargs.pop("points", 1024))
+    return Model(points=points, class_num=num_classes, embed_dim=32, groups=1, res_expansion=1.0,
+                   activation="relu", bias=False, use_xyz=False, normalize="anchor",
                    dim_expansion=[2, 2, 2, 2], LFP_blocks=[1, 1, 1, 1], GFP_blocks=[1, 1, 1, 1],
                    k_neighbors=[24, 24, 24, 24], reducers=[2, 2, 2, 2], **kwargs)
 

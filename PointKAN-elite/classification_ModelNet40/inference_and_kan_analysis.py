@@ -20,6 +20,7 @@ import json
 import os
 import sys
 import time
+from typing import Optional
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
@@ -143,11 +144,13 @@ def get_checkpoint_path(checkpoint_arg):
     """
     根据传入的 checkpoint 参数，解析出 best_checkpoint.pth 的绝对路径。
     若传入的是目录，则取目录下的 best_checkpoint.pth；
-    若传入的是 .pth 文件路径，则直接使用。
+    若传入的是 .pth / .pt 文件路径，则直接使用。
     """
     path = os.path.abspath(checkpoint_arg)
-    if os.path.isfile(path) and path.endswith(".pth"):
-        return path
+    if os.path.isfile(path):
+        if path.endswith((".pth", ".pt")):
+            return path
+        raise FileNotFoundError(f"检查点需为 .pth 或 .pt 文件: {path}")
     if os.path.isdir(path):
         candidate = os.path.join(path, "best_checkpoint.pth")
         if os.path.isfile(candidate):
@@ -163,7 +166,16 @@ def load_state_dict_for_model(checkpoint_path, device):
     本函数返回去掉 "module." 后的 state_dict，便于加载到单卡模型上。
     """
     ckpt = torch.load(checkpoint_path, map_location=device)
-    state = ckpt.get("net", ckpt)
+    if isinstance(ckpt, dict):
+        state = None
+        for key in ("net", "model", "state_dict"):
+            if key in ckpt and isinstance(ckpt[key], dict) and ckpt[key]:
+                state = ckpt[key]
+                break
+        if state is None:
+            state = ckpt
+    else:
+        state = ckpt
     # 若为 DataParallel 保存的，则去掉 "module." 前缀
     if next(iter(state.keys())).startswith("module."):
         state = {k.replace("module.", "", 1): v for k, v in state.items()}
@@ -299,7 +311,7 @@ def build_fps_optimized_model(checkpoint_path, device):
     return net
 
 
-def run_evaluation(net, test_loader, criterion, device):
+def run_evaluation(net, test_loader, criterion, device, max_batches: Optional[int] = None):
     """
     在测试集上做一次完整推理，计算 loss、accuracy、balanced accuracy。
     与 main.py 中 validate 逻辑一致。
@@ -311,6 +323,8 @@ def run_evaluation(net, test_loader, criterion, device):
     total = 0
     with torch.no_grad():
         for batch_idx, (data, label) in enumerate(test_loader):
+            if max_batches is not None and batch_idx >= max_batches:
+                break
             data = data.to(device)
             label = label.to(device).squeeze()
             data = data.permute(0, 2, 1)  # [B, 3, N]
@@ -906,7 +920,10 @@ def main():
 
     # 4) 校准集收集每层 KAT 输入激活范围（用于 f(x) 绘图与相似性分析的 x 轴；需校准时执行）
     activation_ranges = {}
-    need_calibration = (not args.no_vis or args.json_output) and len(kan_weights_list) > 0
+    need_calibration = (
+        (not args.no_vis or args.json_output or getattr(args, "export_grf_json", None))
+        and len(kan_weights_list) > 0
+    )
     if need_calibration:
         cal_dataset = ModelNet40(partition=args.calibration_partition, num_points=args.num_points)
         cal_loader = DataLoader(

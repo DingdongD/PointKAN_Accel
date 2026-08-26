@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-用 pyRAPL 在进程内测量「仅模型推理」阶段的 CPU 能耗（包住推理循环，不关心子进程/整进程）。
-并提供统一的 model(x) 推理计时：GPU 用 torch.cuda.Event，CPU 用 time.time() 前后打点。
+用 pyRAPL 在 Python 进程内测量「仅 model(x) 前向」的 CPU 能耗（Measurement 只包住 forward 循环）。
+并提供统一的 model(x) 计时：GPU 用 torch.cuda.Event，CPU 用 time.time() 前后打点。
 
-与 profiler 的 perf/sysfs 整进程 RAPL 不同：这里在 Python 里 Measurement.begin/end 只包住
-model forward 循环，得到纯推理对应的 CPU 能耗。可选做 baseline（空循环）扣除。
+与 profiler 通过 perf/sysfs 读到的整段 RAPL 不同：此处能量只对应 forward 段。可选 baseline（空循环）扣除。
 
 返回能耗单位：焦耳 (J)。若 pyRAPL 不可用则返回 None。
 """

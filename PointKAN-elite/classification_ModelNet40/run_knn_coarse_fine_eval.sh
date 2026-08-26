@@ -26,9 +26,9 @@ DEVICE="${DEVICE:-cuda}"
 BATCH_SIZE="${BATCH_SIZE:-64}"
 
 # blockwise coarse-fine（可选）
-RUN_BLOCKWISE="${RUN_BLOCKWISE:-0}"          # 1 开启 blockwise 评估
-BLOCK_SIZE="${BLOCK_SIZE:-256}"              # blockwise 分块大小
-COLLECT_BLOCK_STATS="${COLLECT_BLOCK_STATS:-0}"  # 1 统计每个 block 候选数/最终 masked 数（显存更大）
+RUN_BLOCKWISE="${RUN_BLOCKWISE:-1}"          # 1 开启 blockwise 评估
+BLOCK_SIZE="${BLOCK_SIZE:-128}"              # blockwise 分块大小
+COLLECT_BLOCK_STATS="${COLLECT_BLOCK_STATS:-1}"  # 1 统计每个 block 候选数/最终 masked 数（显存更大）
 
 EXTRA_ARGS=(
   --fps_steps "$FPS_STEPS"

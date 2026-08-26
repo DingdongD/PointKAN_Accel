@@ -9,9 +9,14 @@ from .quant_utils import (
 )
 
 class QuantizeBase(nn.Module):
-    def __init__(self, observer=ObserverBase, bit=8, symmetric=False, ch_axis=-1):
+    def __init__(self, observer=ObserverBase, bit=8, symmetric=False, ch_axis=-1, observer_kwargs=None):
         super().__init__()
-        self.observer = observer(bit=bit, symmetric=symmetric, ch_axis=ch_axis)
+        self.observer = observer(
+            bit=bit,
+            symmetric=symmetric,
+            ch_axis=ch_axis,
+            **(observer_kwargs or {}),
+        )
         self.bit = bit
         self.symmetric = symmetric
         self.ch_axis = ch_axis
@@ -52,8 +57,8 @@ class QuantizeBase(nn.Module):
 
 
 class FixedFakeQuantize(QuantizeBase):
-    def __init__(self, observer, bit=8, symmetric=False, ch_axis=-1):
-        super().__init__(observer, bit=bit, symmetric=symmetric, ch_axis=ch_axis)
+    def __init__(self, observer, bit=8, symmetric=False, ch_axis=-1, observer_kwargs=None):
+        super().__init__(observer, bit=bit, symmetric=symmetric, ch_axis=ch_axis, observer_kwargs=observer_kwargs)
         self.register_buffer("scale", torch.tensor([1.0], dtype=torch.float))
         self.register_buffer("zero_point", torch.tensor([0], dtype=torch.int))
         self.drop_prob = 1.0

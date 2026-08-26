@@ -11,6 +11,10 @@ from .hw_config import (
     CircuitModule,
     set_digital_clock_freq_hz,
     set_logic_parallelism,
+    BQLeafEngineConfig,
+    BQMergeEngineConfig,
+    BQEngineConfig,
+    select_bq_engine_pair,
 )
 
 __all__ = [
@@ -19,4 +23,8 @@ __all__ = [
     'CircuitModule',
     'set_digital_clock_freq_hz',
     'set_logic_parallelism',
+    'BQLeafEngineConfig',
+    'BQMergeEngineConfig',
+    'BQEngineConfig',
+    'select_bq_engine_pair',
 ]
